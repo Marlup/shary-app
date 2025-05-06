@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option java_package = "com.shary.app";
+option java_multiple_files = true;
+
+message Field {
+  string key = 1;
+  string value = 2;
+  string keyAlias = 3;
+  int64 dateAdded = 4;
+}
+
+message FieldList {
+  repeated Field fields = 1;
+}

@@ -1,0 +1,50 @@
+package com.shary.app.ui.screens.users
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.shary.app.User
+import com.shary.app.utils.DateUtils
+
+@Composable
+fun UserRowSelectable(
+    user: User,
+    index: Int,
+    isSelected: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    // +++++ Logic to alternate rows color +++++
+    val backgroundColor =  if (isSelected) {
+        MaterialTheme.colorScheme.secondary
+    } else if (index % 2 == 0){
+        MaterialTheme.colorScheme.surface // claro
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant // ligeramente más oscuro
+    }
+
+    // +++++ Row layout +++++
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .background(backgroundColor)
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = onCheckedChange
+        )
+        Text(user.username, Modifier.weight(1f))
+        Text(user.email, Modifier.weight(1f))
+        val formattedDate = DateUtils.formatTimeMillis(user.dateAdded)
+        Text(formattedDate, Modifier.weight(1f))
+    }
+}

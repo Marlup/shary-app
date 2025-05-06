@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+option java_package = "com.shary.app";
+option java_multiple_files = true;
+
+message User {
+  string username = 1;
+  string email = 2;
+  int64 dateAdded = 3;
+}
+
+message UserList {
+  repeated User users = 1;
+}

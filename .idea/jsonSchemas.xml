@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="JsonSchemaMappingsProjectConfiguration">
+    <state>
+      <map>
+        <entry key="No JSON schema">
+          <value>
+            <SchemaInfo>
+              <option name="name" value="No JSON schema" />
+              <option name="relativePathToSchema" value="." />
+              <option name="applicationDefined" value="true" />
+              <option name="patterns">
+                <list>
+                  <Item>
+                    <option name="path" value="file://$USER_HOME$/AppData/Local/Google/AndroidStudio2024.2/device-explorer/Pixel Fold API 35/_/data/data/com.shary.app/files/data/downloaded/download1.json" />
+                  </Item>
+                </list>
+              </option>
+            </SchemaInfo>
+          </value>
+        </entry>
+      </map>
+    </state>
+  </component>
+</project>
