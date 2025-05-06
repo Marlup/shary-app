@@ -6,11 +6,11 @@ object CloudServiceConstants {
 
     // En emuladores de Android, localhost no apunta al host (tu máquina). En su lugar debes usar:
     //10.0.2.2 (esto redirige localhost al host desde el emulador).
-    const val BACKEND_HOST = "10.0.2.2" //"localhost"
-    const val BACKEND_PORT = 5001
-    const val BACKEND_APP_ID = "shary-21b61"
-    const val NAME_GC_LOCATION_HOST = "us-central1"
-    const val BASE_ENDPOINT = "http://$BACKEND_HOST:$BACKEND_PORT/$BACKEND_APP_ID/$NAME_GC_LOCATION_HOST"
+    private const val BACKEND_HOST = "10.0.2.2" //"localhost"
+    private const val BACKEND_PORT = 5001
+    private const val BACKEND_APP_ID = "shary-21b61"
+    private const val NAME_GC_LOCATION_HOST = "us-central1"
+    private const val BASE_ENDPOINT = "http://$BACKEND_HOST:$BACKEND_PORT/$BACKEND_APP_ID/$NAME_GC_LOCATION_HOST"
     const val ENDPOINT_GET_PUB_KEY = "$BASE_ENDPOINT/get_pubkey"
     const val ENDPOINT_STORE_USER = "$BASE_ENDPOINT/store_user"
     const val ENDPOINT_DELETE_USER = "$BASE_ENDPOINT/delete_user"

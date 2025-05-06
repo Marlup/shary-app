@@ -6,7 +6,7 @@ import java.security.MessageDigest
 class DeterministicRNG(private val seed: ByteArray) {
     private var counter: Int = 0
 
-    fun getBytes(n: Int): ByteArray {
+    private fun getBytes(n: Int): ByteArray {
         val output = mutableListOf<Byte>()
         while (output.size < n) {
             val counterBytes = counter.toBigEndianBytes()
@@ -19,7 +19,7 @@ class DeterministicRNG(private val seed: ByteArray) {
         return output.take(n).toByteArray()
     }
 
-    fun getInt(bits: Int): BigInteger {
+    private fun getInt(bits: Int): BigInteger {
         val nbytes = (bits + 7) / 8
         return BigInteger(1, getBytes(nbytes))
     }

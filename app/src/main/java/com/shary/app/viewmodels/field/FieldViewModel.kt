@@ -50,4 +50,16 @@ class FieldViewModel(
             asyncDeleteField(key)
         }
     }
+
+    private suspend fun asyncUpdateFieldValue(key: String, value: String): Boolean {
+        val success = fieldRepository.updateFieldValue(key, value)
+        loadFields() // Recargar la lista
+        return success
+    }
+
+    fun updateFieldValue(key: String, value: String): Deferred<Boolean> {
+        return viewModelScope.async {
+            asyncUpdateFieldValue(key, value)
+        }
+    }
 }

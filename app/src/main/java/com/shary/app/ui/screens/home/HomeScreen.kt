@@ -43,7 +43,7 @@ fun HomeScreen(navController: NavHostController, session: Session) {
     val emailService: EmailService = DependencyContainer.get("email_service")
 
     var openSendDialog by remember { mutableStateOf(false) }
-    var sendOption by remember { mutableStateOf("Cloud") }
+    //var sendOption by remember { mutableStateOf("Cloud") }
 
     // Run at launch
     LaunchedEffect(Unit) {
@@ -120,17 +120,18 @@ fun HomeScreen(navController: NavHostController, session: Session) {
             }
 
             if (openSendDialog) {
+                var sendOption = ""
                 SendFieldsDialog(
                     selectedOption = sendOption,
                     onDismiss = { openSendDialog = false },
                     onOptionSelected = { sendOption = it },
                     onSend = {
                         when (sendOption) {
-                            "Cloud" -> TODO("Implement cloud sending")
                             "Email" -> emailService.sendEmailViaClient(
                                 session.selectedFields.value,
                                 session.selectedEmails.value
                             )
+                            "Cloud" -> TODO("Implement cloud sending")
                         }
                         openSendDialog = false
                     }

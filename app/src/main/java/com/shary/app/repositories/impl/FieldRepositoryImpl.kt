@@ -38,11 +38,36 @@ class FieldRepositoryImpl(
         }
     }
 
-
     override suspend fun deleteField(key: String): Boolean{
         dataStore.updateData { current ->
             val updatedFields = current.fieldsList.filter { it.key != key }
             current.toBuilder()
+                .clearFields()
+                .addAllFields(updatedFields)
+                .build()
+        }
+        return true
+    }
+
+    override suspend fun updateFieldValue(targetKey: String, newValue: String): Boolean {
+        dataStore.updateData { currentData ->
+            val updatedFields = buildList {
+                var updated = false
+                for (field in currentData.fieldsList) {
+                    if (!updated && field.key == targetKey) {
+                        add(
+                            field.toBuilder()
+                                .setValue(newValue)
+                                .build()
+                        )
+                        updated = true
+                    } else {
+                        add(field)
+                    }
+                }
+            }
+
+            currentData.toBuilder()
                 .clearFields()
                 .addAllFields(updatedFields)
                 .build()

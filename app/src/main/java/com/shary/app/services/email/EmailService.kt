@@ -20,8 +20,6 @@ class EmailService(
     private val session: Session
 ) {
 
-    private val emailPassword = "ugtt iggn nnni dchj" // Usa una estrategia segura en produccion
-
     fun sendEmailViaClient(
         records: List<Field>,
         recipients: List<String>,

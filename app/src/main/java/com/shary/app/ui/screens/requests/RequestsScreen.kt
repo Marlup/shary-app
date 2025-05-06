@@ -49,6 +49,8 @@ fun RequestsScreen(navController: NavHostController, requestFieldService: Reques
             if (event == Lifecycle.Event.ON_STOP) {
                 println("Saving selected emails on stop: $requestFields")
                 requestFieldService.cacheRequestFields(requestFields)
+
+                requestFields.clear()
             }
         }
 

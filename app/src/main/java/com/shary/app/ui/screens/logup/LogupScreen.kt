@@ -10,6 +10,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.Session
 import com.shary.app.services.cloud.CloudService
@@ -32,8 +35,34 @@ fun LogupScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var isPasswordVisible by remember { mutableStateOf(false) }
+    var isConfirmPasswordVisible by remember { mutableStateOf(false) }
+
+    fun clearStates() {
+        username = ""
+        email = ""
+        password = ""
+        confirmPassword = ""
+        isPasswordVisible = false
+        isConfirmPasswordVisible = false
+    }
+
+    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+
+    DisposableEffect(lifecycleOwner.value) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                clearStates()
+            }
+        }
+
+        val lifecycle = lifecycleOwner.value.lifecycle
+        lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -70,18 +99,18 @@ fun LogupScreen(
 
             PasswordOutlinedTextField(
                 password,
-                passwordVisible,
+                isPasswordVisible,
                 onValueChange = { password = it },
-                onClick = { passwordVisible = !passwordVisible }
+                onClick = { isPasswordVisible = !isPasswordVisible }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             PasswordOutlinedTextField(
                 confirmPassword,
-                confirmPasswordVisible,
+                isConfirmPasswordVisible,
                 onValueChange = { confirmPassword = it },
-                onClick = { confirmPasswordVisible = !confirmPasswordVisible }
+                onClick = { isConfirmPasswordVisible = !isConfirmPasswordVisible }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -101,7 +130,7 @@ fun LogupScreen(
                             val (success, token) = cloudService.uploadUser(email)
                             if (success) {
                                 // Set verification token
-                                session.setVerificationToken(token)
+                                session.setAuthToken(token)
                             } else {
                                 Toast.makeText(context,
                                     "The user couldn't be uploaded to the cloud",

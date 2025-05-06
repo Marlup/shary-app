@@ -7,4 +7,5 @@ interface FieldRepository {
     suspend fun saveField(field: Field)
     suspend fun saveFieldIfNotExists(field: Field): Boolean
     suspend fun deleteField(key: String): Boolean
+    suspend fun updateFieldValue(key: String, value: String): Boolean
 }

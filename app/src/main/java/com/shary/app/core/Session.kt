@@ -18,7 +18,8 @@ object Session {
     var email: String = ""
     var username: String = ""
     private var safePassword: String = ""
-    private var validationToken: String = ""
+    var authToken: String = ""
+    var isOnline: Boolean = false
 
     var cryptographyManager: CryptographyManager? = null
     private var checkedUsers: List<String>? = null
@@ -32,8 +33,8 @@ object Session {
                 selectedFields.value.isNotEmpty()
     }
 
-    fun setVerificationToken(token: String) {
-        validationToken = token
+    fun setAuthToken(token: String) {
+        authToken = token
     }
 
     fun initialize(cryptographyManager: CryptographyManager) {
@@ -60,7 +61,7 @@ object Session {
         email.let { e ->
             username.let { u ->
                 safePassword.let { p ->
-                    validationToken.let { v ->
+                    authToken.let { v ->
                         storeCredentials(context, e, u, p, v)
                     }
                 }
@@ -130,7 +131,7 @@ object Session {
             this.email = data.optString("user_email")
             this.username = data.optString("user_username")
             this.safePassword = data.optString("user_safe_password")
-            this.validationToken = data.optString("user_validation_token")
+            this.authToken = data.optString("user_validation_token")
         } catch (e: Exception) {
             Log.e("Session", "Error loading credentials: ${e.message}")
         }

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -19,6 +20,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.shary.app.Field
 import com.shary.app.User
 import com.shary.app.core.dependencyContainer.DependencyContainer
 import com.shary.app.services.user.UserService
@@ -57,6 +59,7 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
     // +++++ Checked rows +++++
     //val selectedEmails = remember { mutableStateListOf<String>() }
     val selectedEmails by viewModel.selectedEmails.collectAsState()
+
     // +++++ Search Users +++++
     // 👇 Search state
     var searchText by remember { mutableStateOf("") }
@@ -65,11 +68,23 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
     //val filteredUsers = userList.filter { it.email.contains(searchText, ignoreCase = true) }
     // 👇 Filtered list dynamically based on toggle
     val filteredUsers = userList.filter { user ->
-        if (searchByEmail) {
+        if (searchByEmail)
             user.email.contains(searchText, ignoreCase = true)
-        } else {
+        else
             user.username.contains(searchText, ignoreCase = true)
+    }
+        .toMutableList()
+
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            snackbarMessage = null
         }
+    }
+
+    fun clearStates() {
+        searchText = ""
+        filteredUsers.clear()
     }
 
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
@@ -78,7 +93,10 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 println("Saving selected emails on stop: $selectedEmails")
+
                 userService.cacheSelectedEmails(selectedEmails)
+                // Drop remembered screen states
+                clearStates()
             }
         }
 
@@ -87,13 +105,6 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
 
         onDispose {
             lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(snackbarMessage) {
-        snackbarMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            snackbarMessage = null
         }
     }
 
@@ -131,7 +142,7 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                             // Copy of selectedUsers
                             selectedEmails.toList().forEach { email ->
                                 viewModel.viewModelScope.launch {
-                                    val success = viewModel.deleteUser(email)
+                                    viewModel.deleteUser(email)
                                 }
                                 viewModel.clearSelectedEmails()
                             }
@@ -204,7 +215,7 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                 Spacer(modifier = Modifier.width(24.dp)) // For checkbox spacing
                 Text("Email", Modifier.weight(1f))
                 Text("Username", Modifier.weight(1f))
-                Text("Date Added", Modifier.weight(1f))
+                //Text("Date Added", Modifier.weight(1f))
             }
             HorizontalDivider(thickness = 1.dp, color = Color.Gray)
 
@@ -229,8 +240,8 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                         ) { userItem ->
                             Text(userItem.email, Modifier.weight(1f))
                             Text(userItem.username, Modifier.weight(1f))
-                            val formattedDate = DateUtils.formatTimeMillis(userItem.dateAdded )
-                            Text(formattedDate, Modifier.weight(1f))
+                            //val formattedDate = DateUtils.formatTimeMillis(userItem.dateAdded )
+                            //Text(formattedDate, Modifier.weight(1f))
                         }
                     }
                 }

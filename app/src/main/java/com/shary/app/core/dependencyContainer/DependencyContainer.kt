@@ -47,7 +47,7 @@ object DependencyContainer {
         val emailService = EmailService(context, session)
         register("email_service", emailService)
 
-        val cloudService = CloudService(cryptographyManager)
+        val cloudService = CloudService(session, cryptographyManager)
         register("cloud_service", cloudService)
 
         val userService = UserService(session)

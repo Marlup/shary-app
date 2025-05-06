@@ -15,6 +15,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.Session
 import com.shary.app.core.dependencyContainer.DependencyContainer
@@ -32,7 +35,7 @@ fun LoginScreen(
     cloudService: CloudService
 ) {
     val context = LocalContext.current
-    val activity = context as FragmentActivity // ✅ usas AppCompatActivity
+    val activity = context as FragmentActivity //
     //val executor = remember { ContextCompat.getMainExecutor(context) }
     val scope = rememberCoroutineScope()
     val errorMessage by remember { mutableStateOf<String?>(null) }
@@ -51,6 +54,28 @@ fun LoginScreen(
     // ⚠️ Clear dependencies when this screen loads
     LaunchedEffect(Unit) {
         DependencyContainer.initAll(context)
+    }
+
+    fun clearStates() {
+        username = ""
+        password = ""
+    }
+
+    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+
+    DisposableEffect(lifecycleOwner.value) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                clearStates()
+            }
+        }
+
+        val lifecycle = lifecycleOwner.value.lifecycle
+        lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycle.removeObserver(observer)
+        }
     }
 
     Scaffold(

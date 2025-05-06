@@ -2,6 +2,7 @@ package com.shary.app.services.cloud
 
 import android.util.Log
 import com.shary.app.Field
+import com.shary.app.core.Session
 import com.shary.app.core.enums.StatusDataSentDb
 import com.shary.app.security.CryptographyManager
 import com.shary.app.security.CryptographyManager.getPubKeyFromString
@@ -31,12 +32,11 @@ import okhttp3.*
 import java.io.IOException
 
 class CloudService(
+    private val session: Session,
     private val cryptographyManager: CryptographyManager
 ): ICloudService {
 
-    private val client = OkHttpClient()
-    private var token: String = ""
-    private var isOnline: Boolean? = null
+    //private val client = OkHttpClient()
 
     /*llamada de red en el hilo principal (Main/UI Thread), lo cual está prohibido en Android
     desde Android 3.0 (Honeycomb) porque puede bloquear la interfaz de usuario.
@@ -47,29 +47,33 @@ class CloudService(
             .get()
             .build()
 
-        return@withContext try {
+        //return@withContext try {
+        try {
+            val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
-                isOnline = response.isSuccessful
-                isOnline == true
+                session.isOnline = response.isSuccessful
             }
         } catch (e: IOException) {
             Log.e("CloudService", "Ping failed: ${e.message}")
-            isOnline = false
-            false
+            session.isOnline = false
         }
+        session.isOnline
     }
 
-    override suspend fun isUserRegistered(user: String): Boolean = withContext(Dispatchers.IO) {
-        val pubKey = getPubKey(hashMessageToString(user)) ?: ""
+    override suspend fun isUserRegistered(user: String):
+            Boolean = withContext(Dispatchers.IO) {
+        val pubKey = getPubKey(hashMessageToString(user))
         return@withContext pubKey != ""
     }
 
-    override suspend fun uploadUser(user: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+    override suspend fun uploadUser(user: String):
+            Pair<Boolean, String> = withContext(Dispatchers.IO) {
         return@withContext runUploadUser(user)
     }
 
-    private suspend fun runUploadUser(user: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        if (isOnline != true && !sendPing()) return@withContext Pair(false, "")
+    private suspend fun runUploadUser(user: String):
+            Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (!session.isOnline && !sendPing()) return@withContext Pair(false, "")
 
         val userHash = hashMessageToString(user)
         val pubKey = cryptographyManager.getPubKeyToString()
@@ -88,6 +92,8 @@ class CloudService(
 
         return@withContext try {
             Log.d("runUploadUser Endpoint: ", ENDPOINT_STORE_USER)
+
+            val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
                 val jsonBody = Json.parseToJsonElement(
                     response.body?.string() ?: "")
@@ -109,19 +115,25 @@ class CloudService(
             Pair(false, "")
         }
     }
-    override suspend fun deleteUser(user: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun deleteUser(user: String):
+            Boolean = withContext(Dispatchers.IO) {
         return@withContext runDeleteUser(user)
     }
 
     private suspend fun runDeleteUser(user: String): Boolean {
-        if (isOnline != true && !sendPing()) return false
+        if (!session.isOnline && !sendPing()) return false
 
         val userHash = hashMessageToString(user)
         val (signature, _) = makeCredentials(listOf(userHash))
         val payload = mapOf("user" to userHash, "signature" to signature)
-        val request = buildPostRequest(ENDPOINT_DELETE_USER, payload, authHeader(token))
+        val request = buildPostRequest(
+            ENDPOINT_DELETE_USER,
+            payload,
+            authHeader(session.authToken)
+        )
 
         return try {
+            val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
                 response.code == 200
             }
@@ -146,7 +158,7 @@ class CloudService(
         consumers: List<String>,
         onRequest: Boolean
     ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO){
-        if (isOnline != true && !sendPing()) return@withContext emptyMap()
+        if (!session.isOnline && !sendPing()) return@withContext emptyMap()
         if (fields.isEmpty() || consumers.isEmpty()) return@withContext emptyMap()
 
         val data = if (onRequest)
@@ -159,7 +171,7 @@ class CloudService(
 
         consumers.forEach { consumer ->
             val consumerHash: String = hashMessageToString(consumer)
-            val consumerPubKey: String = getPubKey(consumerHash) ?: ""
+            val consumerPubKey: String = getPubKey(consumerHash)
 
             if (consumerPubKey == "") {
                 results[consumer] = StatusDataSentDb.ERROR
@@ -183,10 +195,11 @@ class CloudService(
             val request = buildPostRequest(
                 ENDPOINT_SEND_DATA,
                 payload,
-                authHeader(token)
+                authHeader(session.authToken)
             )
 
             try {
+                val client = OkHttpClient()
                 client.newCall(request).execute().use { response ->
                     results[consumer] = evaluateStatusCode(response.code)
                 }
@@ -198,18 +211,21 @@ class CloudService(
         return@withContext results
     }
 
-    override suspend fun getPubKey(userHash: String): String? = withContext(Dispatchers.IO) {
+    override suspend fun getPubKey(userHash: String):
+            String = withContext(Dispatchers.IO) {
         return@withContext runGetPubKey(userHash)
     }
 
-    private suspend fun runGetPubKey(userHash: String): String? = withContext(Dispatchers.IO) {
+    private suspend fun runGetPubKey(userHash: String):
+            String = withContext(Dispatchers.IO) {
         Log.d("GetPubKey Endpoint: ", "$ENDPOINT_GET_PUB_KEY?user=$userHash")
         val request = Request.Builder()
             .url("$ENDPOINT_GET_PUB_KEY?user=$userHash")
-            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Authorization", "Bearer $session.authToken")
             .build()
 
         return@withContext try {
+            val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val bodyString = response.body?.string() ?: ""
@@ -229,7 +245,8 @@ class CloudService(
         }
     }
 
-    private fun makeCredentials(fields: List<String>): Pair<String, String> {
+    private fun makeCredentials(fields: List<String>):
+            Pair<String, String> {
         val (rawHash, verification) = hashMessageExtended(fields.joinToString("."))
         val signature = cryptographyManager.sign(rawHash)
         return Pair(base64Encode(signature), verification)

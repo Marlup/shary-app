@@ -13,8 +13,8 @@ fun AddFieldDialog(
     onAddField: (String, String, String) -> Unit
 ) {
     var key by remember { mutableStateOf("") }
-    var value by remember { mutableStateOf("") }
     var keyAlias by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -22,27 +22,27 @@ fun AddFieldDialog(
             tonalElevation = 8.dp
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Add New Field", style = MaterialTheme.typography.titleLarge)
+                Text("Add new field", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
-                    label = { Text("Key") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    label = { Text("Value") },
+                    label = { Text("key") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = keyAlias,
                     onValueChange = { keyAlias = it },
-                    label = { Text("Key Alias") },
+                    label = { Text("key alias (optional)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    label = { Text("value") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -53,14 +53,13 @@ fun AddFieldDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("CANCEL")
+                        Text("Cancel")
                     }
-                    TextButton(onClick = { onAddField(key, value, keyAlias) }) {
-                        Text("ADD")
+                    TextButton(onClick = { onAddField(key, keyAlias, value) }) {
+                        Text("Add")
                     }
                 }
             }
         }
     }
 }
-

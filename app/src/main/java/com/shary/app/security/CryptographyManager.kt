@@ -46,7 +46,7 @@ object CryptographyManager {
 
     // --- Key Management ---
 
-    fun generateKeys() {
+    private fun generateKeys() {
         val keyPairGenerator = KeyPairGenerator.getInstance("RSA")
         keyPairGenerator.initialize(keySize)
         val keyPair = keyPairGenerator.generateKeyPair()
@@ -54,7 +54,7 @@ object CryptographyManager {
         privateKey = keyPair.private
     }
 
-    fun storeKeys(context: Context) {
+    private fun storeKeys(context: Context) {
         val privPath = File(context.filesDir, SecurityConstants.PATH_PRIVATE_KEY)
         val pubPath = File(context.filesDir, SecurityConstants.PATH_PUBLIC_KEY)
         val secretPath = File(context.filesDir, SecurityConstants.PATH_SECRET_KEY)

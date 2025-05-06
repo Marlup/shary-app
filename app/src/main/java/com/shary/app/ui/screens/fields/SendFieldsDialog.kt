@@ -63,7 +63,7 @@ fun SendFieldsDialog(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
-                        listOf("Cloud", "Email").forEach { option ->
+                        listOf("Email", "Cloud").forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
                                 onClick = {
