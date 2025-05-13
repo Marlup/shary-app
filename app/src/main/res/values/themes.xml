@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Sharydemo" parent="Theme.AppCompat.Light.NoActionBar" />
+    <style name="Theme.Sharydemo" parent="Theme.MaterialComponents.DayNight.NoActionBar" >
+        <!-- Now you can use colorBackground, colorSurface, etc. -->
+        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorPrimaryVariant">@color/purple_700</item>
+        <item name="colorOnPrimary">@color/white</item>
+
+        <item name="android:windowBackground">@color/background_light_purple</item>
+        <item name="colorSurface">@color/background_light_purple</item>
+    </style>
+
 </resources>

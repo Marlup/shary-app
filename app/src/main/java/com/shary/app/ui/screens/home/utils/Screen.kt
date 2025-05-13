@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.home
+package com.shary.app.ui.screens.home.utils
 
 sealed class Screen(val route: String) {
     object Logup : Screen("logup")

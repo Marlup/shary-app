@@ -1,14 +1,11 @@
 package com.shary.app.ui.screens.fields
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,10 +20,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.shary.app.Field
-import com.shary.app.core.dependencyContainer.DependencyContainer
+import com.shary.app.core.Session
 import com.shary.app.services.field.FieldService
-import com.shary.app.ui.screens.ui_utils.FilterBox
-import com.shary.app.ui.screens.ui_utils.GoBackButton
+import com.shary.app.ui.screens.fields.utils.AddFieldDialog
+import com.shary.app.ui.screens.utils.GoBackButton
+import com.shary.app.ui.screens.utils.ItemRow
+import com.shary.app.ui.screens.utils.RowSearcher
+import com.shary.app.ui.screens.utils.SelectableRow
 import com.shary.app.utils.DateUtils
 import com.shary.app.viewmodels.ViewModelFactory
 import com.shary.app.viewmodels.field.FieldViewModel
@@ -35,29 +35,39 @@ import java.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FieldsScreen(navController: NavHostController, fieldService: FieldService) {
+fun FieldsScreen(
+    navController: NavHostController,
+    session: Session,
+    fieldViewModelFactory: ViewModelFactory<FieldViewModel>,
+    fieldService: FieldService
+) {
 
-    val viewModel: FieldViewModel = viewModel(
-        factory = ViewModelFactory {
-            FieldViewModel(
-                DependencyContainer.get("field_repository")
-            )
-        }
-    )
+    // ---- Create the ViewModel ----
+    val viewModel: FieldViewModel = viewModel(factory = fieldViewModelFactory)
 
+    // ---- Table and DB rows ----
     val fieldList by viewModel.fields.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // ---- Add dialog ----
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
+    // ---- Editing/Updating field ----
     var editingField by remember { mutableStateOf<Field?>(null) }
     var editedValue by remember { mutableStateOf("") }
+    var editedAlias by remember { mutableStateOf("") }
 
-    val selectedKeys = remember { mutableStateListOf<String>() }
+    // ---- Checked rows ----
+    //val selectedKeys = remember { mutableStateListOf<String>() }
+    val selectedKeys by viewModel.selectedKeys.collectAsState()
 
+    // ---- Search Fields ----
+    var showSearcher by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var searchByKey by remember { mutableStateOf(true) }
+
+
     val filteredFields = fieldList.filter { field ->
         if (searchByKey)
             field.key.contains(searchText, ignoreCase = true)
@@ -66,19 +76,21 @@ fun FieldsScreen(navController: NavHostController, fieldService: FieldService) {
     }
         .toMutableList()
 
-    fun clearStates() {
-        editingField = null
-        editedValue = ""
-        selectedKeys.clear() // = emptyList<String>() as SnapshotStateList<String>
-        searchText = ""
-        filteredFields.clear()
-    }
-
-    LaunchedEffect(snackbarMessage) {
+    LaunchedEffect(snackbarMessage, editingField) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
             snackbarMessage = null
         }
+        editedValue = editingField?.value ?: ""
+        editedAlias = editingField?.keyAlias ?: ""
+    }
+
+    fun clearStates() {
+        editingField = null
+        editedValue = ""
+        editedAlias = ""
+        searchText = ""
+        filteredFields.clear()
     }
 
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
@@ -91,7 +103,7 @@ fun FieldsScreen(navController: NavHostController, fieldService: FieldService) {
                     else it.keyAlias.contains(searchText, ignoreCase = true)
                 }.filter { it.key in selectedKeys }
 
-                fieldService.cacheSelectedFields(currentFilteredFields)
+                session.cacheSelectedFields(currentFilteredFields)
                 // Drop remembered screen states
                 clearStates()
             }
@@ -113,31 +125,37 @@ fun FieldsScreen(navController: NavHostController, fieldService: FieldService) {
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
+                expandedHeight = 30.dp
             )
-        },
+                 },
         floatingActionButton = {
-            Spacer(modifier = Modifier.height(16.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .padding(end = 8.dp, bottom = 8.dp)
             ) {
+
+                // Go back button
                 GoBackButton(navController)
 
+                // Add row button
                 FloatingActionButton(onClick = { openAddDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Add Field")
                 }
 
+                // Delete row button
                 val isEnabled = selectedKeys.isNotEmpty()
                 FloatingActionButton(
                     onClick = {
                         if (isEnabled) {
+                            // Copy of selectedUsers
                             selectedKeys.toList().forEach { key ->
                                 viewModel.viewModelScope.launch {
                                     viewModel.deleteField(key)
                                 }
-                                selectedKeys.clear()
+                                viewModel.clearSelectedKeys()
                             }
-                            snackbarMessage = "Deleted selected fields"
+                            snackbarMessage = "Deleted fields"
                         }
                     },
                     containerColor = if (isEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
@@ -148,149 +166,150 @@ fun FieldsScreen(navController: NavHostController, fieldService: FieldService) {
                 }
             }
         },
+
         snackbarHost = { SnackbarHost(snackbarHostState) }
+
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(8.dp)
                 .fillMaxWidth()
                 .fillMaxHeight(0.90f),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalAlignment =  Alignment.Start, //Alignment.CenterHorizontally
         ) {
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextField(
-                    value = searchText,
-                    onValueChange = { searchText = it },
-                    label = { Text(if (searchByKey) "Search by key" else "Search by alias") },
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .padding(vertical = 8.dp, horizontal = 8.dp),
-                    singleLine = true
-                )
-
-                FilterBox(
-                    "Key",
-                    isSelected = searchByKey,
-                    onClick = { searchByKey = true },
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                FilterBox(
-                    "Alias",
-                    isSelected = !searchByKey,
-                    onClick = { searchByKey = false }
-                )
-            }
-            Spacer(modifier = Modifier.width(64.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text("Key", Modifier.weight(1f))
-                Text("Alias", Modifier.weight(1f))
-            }
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
+            // Right: Search input
+            RowSearcher(
+                searchText,
+                onSearchTextChange = { searchText = it },
+                searchByFirstColumn = searchByKey,
+                onSearchByChange = { searchByKey = it },
+                Pair("key", "alias")
+            )
 
             if (filteredFields.isNotEmpty()) {
                 LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredFields) { field ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    if (selectedKeys.contains(field.key))
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                    else MaterialTheme.colorScheme.surface
-                                )
-                                .clickable { if (!selectedKeys.contains(field.key)) selectedKeys.add(field.key) else selectedKeys.remove(field.key) }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(field.key, style = MaterialTheme.typography.bodyLarge)
-                                Text(field.keyAlias, style = MaterialTheme.typography.bodySmall)
-                            }
-                            IconButton(onClick = {
-                                editingField = field
-                                editedValue = field.value
-                            }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    itemsIndexed(filteredFields) { index, field ->
+                        SelectableRow(
+                            item = field,
+                            index = index,
+                            isSelected = selectedKeys.contains(field.key),
+                            onCheckedChange = { checked ->
+                                viewModel.toggleFieldSelection(field.key, checked)
+                            },
+                        ) { _ ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.95f)
+                                .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Column with key + value
+                                ItemRow(
+                                    item = fieldService.fieldToTriple(field)
+                                ) { item ->
+                                    editingField = fieldService.valuesToField(
+                                        item.first,
+                                        item.second,
+                                        item.third
+                                    )
+                                    editedValue = field.value
+                                }
                             }
                         }
                     }
                 }
             } else {
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("No fields available", style = MaterialTheme.typography.bodyMedium)
                 }
             }
+
             HorizontalDivider(thickness = 1.dp, color = Color.Gray)
         }
+    }
 
-        if (openAddDialog) {
-            AddFieldDialog(
-                onDismiss = { openAddDialog = false },
-                onAddField = { key, keyAlias, value ->
-                    if (key.isNotBlank() && value.isNotBlank()) {
-                        val field = Field.newBuilder()
-                            .setKey(key)
-                            .setKeyAlias(keyAlias)
-                            .setValue(value)
-                            .setDateAdded(Instant.now().toEpochMilli())
-                            .build()
+    if (openAddDialog) {
+        AddFieldDialog(
+            onDismiss = { openAddDialog = false },
+            onAddField = { key, keyAlias, value ->
+                if (key.isNotBlank() && value.isNotBlank()) {
+                    val field = Field
+                        .newBuilder()
+                        .setKey(key)
+                        .setKeyAlias(keyAlias)
+                        .setValue(value)
+                        .setDateAdded(Instant.now().toEpochMilli())
+                        .build()
 
-                        viewModel.viewModelScope.launch {
-                            val success = viewModel.saveField(field).await()
-                            openAddDialog = !success
-                            val alterMessage = if (success) "added" else "already exists"
-                            snackbarMessage = "Field '$key' $alterMessage"
-                        }
-                    } else {
-                        snackbarMessage = "Key and value are required"
+                    viewModel.viewModelScope.launch {
+                        val success = viewModel.saveField(field).await()
+                        // Close dialog if successful field added
+                        openAddDialog = !success
+                        val alterMessage = if (success) "added" else "already exists"
+                        snackbarMessage = "Field '$key' $alterMessage"
                     }
+                } else {
+                    snackbarMessage = "Key and value are required"
                 }
-            )
-        }
+            }
+        )
+    }
 
-        editingField?.let { field ->
-            AlertDialog(
-                onDismissRequest = { editingField = null },
-                title = { Text("Update ${field.key}") },
-                text = {
+    editingField?.let { field ->
+        AlertDialog(
+            onDismissRequest = { editingField = null },
+            title = { Text("Update ${field.key}") },
+            text = {
+                Column {
+
+                    val formattedDate = DateUtils.formatTimeMillis(field.dateAdded)
+                    Text("Added at: $formattedDate")
+
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = editedValue,
                         onValueChange = { editedValue = it },
                         label = { Text("New Value") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        //fieldService.updateFieldValue(field, editedValue)
-                        viewModel.viewModelScope.launch {
-                            viewModel.updateFieldValue(field.key, editedValue)
-                        }
-                        editingField = null
-                        snackbarMessage = "Field '${field.key}' updated"
-                    }) { Text("Accept") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { editingField = null }) { Text("Cancel") }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = editedAlias,
+                        onValueChange = { editedAlias = it },
+                        label = { Text("Alias") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            )
-        }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.viewModelScope.launch {
+                        if (field.value != editedValue)
+                            viewModel.updateValue(field.key, editedValue)
+                        if (field.keyAlias != editedAlias)
+                            viewModel.updateAlias(field.key, editedAlias)
+                    }
+                    editingField = null
+                    snackbarMessage = "Field '${field.key}' updated"
+                }) { Text("Accept") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingField = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

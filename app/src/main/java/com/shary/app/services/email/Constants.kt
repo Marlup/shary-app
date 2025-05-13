@@ -1,6 +1,6 @@
 package com.shary.app.services.email
 
-object EmailConstants {
+object Constants {
 
     // Formats
     val FILE_FORMATS = arrayOf("json", "csv", "xml", "yaml")

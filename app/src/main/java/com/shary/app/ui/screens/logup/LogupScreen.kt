@@ -16,8 +16,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.Session
 import com.shary.app.services.cloud.CloudService
-import com.shary.app.ui.screens.home.Screen
-import com.shary.app.ui.screens.ui_utils.PasswordOutlinedTextField
+import com.shary.app.ui.screens.home.utils.Screen
+import com.shary.app.ui.screens.utils.PasswordOutlinedTextField
 import com.shary.app.utils.ValidationUtils.validateLogupCredentials
 import kotlinx.coroutines.launch
 
@@ -130,7 +130,7 @@ fun LogupScreen(
                             val (success, token) = cloudService.uploadUser(email)
                             if (success) {
                                 // Set verification token
-                                session.setAuthToken(token)
+                                session.authToken = token
                             } else {
                                 Toast.makeText(context,
                                     "The user couldn't be uploaded to the cloud",

@@ -1,6 +1,7 @@
-package com.shary.app.ui.screens.ui_utils
+package com.shary.app.ui.screens.utils
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -16,8 +17,8 @@ fun FilterBox(
     title: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    width: Int = 80,
-    height: Int = 50
+    width: Int = 75,
+    height: Int = 45
 ) {
     Surface(
         onClick = onClick,
@@ -25,7 +26,9 @@ fun FilterBox(
         contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
         shape = MaterialTheme.shapes.medium,
         shadowElevation = if (isSelected) 4.dp else 0.dp,
-        modifier = Modifier.size(width.dp, height.dp)
+        modifier = Modifier
+            .size(width.dp, height.dp)
+            .fillMaxWidth(0.2f)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(text = title, style = MaterialTheme.typography.bodyMedium)

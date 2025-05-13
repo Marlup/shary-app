@@ -25,16 +25,13 @@ object Session {
     private var checkedUsers: List<String>? = null
 
     var selectedEmails = MutableStateFlow<List<String>>(emptyList())
+    var selectedPhoneNumber = MutableStateFlow<String?>("")
     var selectedFields = MutableStateFlow<List<Field>>(emptyList())
     var selectedRequestFields = MutableStateFlow<List<Field>>(emptyList())
 
     fun canActivateSendingSummary(): Boolean{
         return selectedEmails.value.isNotEmpty() &&
                 selectedFields.value.isNotEmpty()
-    }
-
-    fun setAuthToken(token: String) {
-        authToken = token
     }
 
     fun initialize(cryptographyManager: CryptographyManager) {
@@ -168,4 +165,20 @@ object Session {
 
     fun isSignatureActive(context: Context): Boolean = authSignatureFile(context).exists()
     fun isCredentialsActive(context: Context): Boolean = credentialsFile(context).exists()
+
+    // Cache selected fields
+    fun cacheSelectedFields(fields: List<Field>) {
+        println("Saving selected keys on stop: $fields")
+        selectedFields.value = fields
+    }
+
+    fun cacheSelectedEmails(emails: List<String>) {
+        println("Saving selected emails on stop: $emails")
+        selectedEmails.value = emails
+    }
+
+    fun cacheSelectedPhoneNumbers(phoneNumber: String) {
+        println("Saving selected phone Numbers on stop: $phoneNumber")
+        selectedPhoneNumber.value = phoneNumber
+    }
 }

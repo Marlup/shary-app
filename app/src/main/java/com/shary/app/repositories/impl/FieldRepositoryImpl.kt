@@ -38,7 +38,7 @@ class FieldRepositoryImpl(
         }
     }
 
-    override suspend fun deleteField(key: String): Boolean{
+    override suspend fun deleteField(key: String){
         dataStore.updateData { current ->
             val updatedFields = current.fieldsList.filter { it.key != key }
             current.toBuilder()
@@ -46,18 +46,17 @@ class FieldRepositoryImpl(
                 .addAllFields(updatedFields)
                 .build()
         }
-        return true
     }
 
-    override suspend fun updateFieldValue(targetKey: String, newValue: String): Boolean {
+    override suspend fun updateValue(key: String, value: String) {
         dataStore.updateData { currentData ->
             val updatedFields = buildList {
                 var updated = false
                 for (field in currentData.fieldsList) {
-                    if (!updated && field.key == targetKey) {
+                    if (!updated && field.key == key) {
                         add(
                             field.toBuilder()
-                                .setValue(newValue)
+                                .setValue(value)
                                 .build()
                         )
                         updated = true
@@ -72,6 +71,30 @@ class FieldRepositoryImpl(
                 .addAllFields(updatedFields)
                 .build()
         }
-        return true
+    }
+
+    override suspend fun updateAlias(key: String, alias: String) {
+        dataStore.updateData { currentData ->
+            val updatedFields = buildList {
+                var updated = false
+                for (field in currentData.fieldsList) {
+                    if (!updated && field.key == key) {
+                        add(
+                            field.toBuilder()
+                                .setKeyAlias(alias)
+                                .build()
+                        )
+                        updated = true
+                    } else {
+                        add(field)
+                    }
+                }
+            }
+
+            currentData.toBuilder()
+                .clearFields()
+                .addAllFields(updatedFields)
+                .build()
+        }
     }
 }

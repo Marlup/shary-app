@@ -8,8 +8,8 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.shary.app.Field
 import com.shary.app.core.Session
-import com.shary.app.services.email.EmailConstants.FILE_FORMATS
-import com.shary.app.services.email.EmailConstants.MSG_DEFAULT_SEND_FILENAME
+import com.shary.app.services.email.Constants.FILE_FORMATS
+import com.shary.app.services.email.Constants.MSG_DEFAULT_SEND_FILENAME
 import com.shary.app.utils.UtilsFunctions.buildFileFromFields
 import com.shary.app.utils.UtilsFunctions.makeStringListFromFields
 import okio.ByteString.Companion.encodeUtf8
