@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.ui_utils
+package com.shary.app.ui.screens.utils
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -9,11 +9,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.shary.app.ui.screens.home.Screen
+import com.shary.app.ui.screens.home.utils.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

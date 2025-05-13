@@ -22,9 +22,15 @@ class UserViewModel(
 
     // Interno: mutable, solo para este ViewModel
     private val _selectedEmails = MutableStateFlow<List<String>>(emptyList())
+    private val _selectedPhoneNumber = MutableStateFlow<String>("")
 
     // Externo: inmutable para la UI
     val selectedEmails: StateFlow<List<String>> = _selectedEmails
+    val selectedPhoneNumber: StateFlow<String> = _selectedPhoneNumber
+
+    init {
+        loadUsers()
+    }
 
     fun toggleUserSelection(email: String, isSelected: Boolean) {
         _selectedEmails.update { current ->
@@ -34,10 +40,6 @@ class UserViewModel(
 
     fun clearSelectedEmails() {
         _selectedEmails.value = emptyList()
-    }
-
-    init {
-        loadUsers()
     }
 
     private fun loadUsers() {
@@ -58,13 +60,12 @@ class UserViewModel(
         }
     }
 
-    private suspend fun asyncDeleteUser(email: String): Boolean {
-        val success = userRepository.deleteUser(email)
+    private suspend fun asyncDeleteUser(email: String) {
+        userRepository.deleteUser(email)
         loadUsers() // Recargar la lista
-        return success
     }
 
-    fun deleteUser(email: String): Deferred<Boolean> {
+    fun deleteUser(email: String): Deferred<Unit> {
         return viewModelScope.async {
             asyncDeleteUser(email)
         }

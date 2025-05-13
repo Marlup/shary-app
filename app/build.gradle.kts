@@ -71,51 +71,60 @@ android {
 }
 
 dependencies {
-
+    // Core AndroidX
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.biometric)
+
+    // Jetpack Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    // Extra implementations
-    // Jetpack Compose
-    implementation(libs.ui) // o tu versión Compose actual
-    implementation(libs.androidx.lifecycle.viewmodel.compose) // 👈 ESTA ES LA CLAVE
-    implementation(libs.androidx.datastore.preferences)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.navigation.runtime.ktx) // or latest
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.foundation.layout.android)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.navigation.runtime.ktx)
+
+    // Data & Storage
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.datastore.core)
+    implementation(libs.androidx.datastore.v100)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    implementation(libs.androidx.datastore.v100)
-    implementation(libs.androidx.datastore.core)
-    implementation(libs.protobuf.javalite) // Ligero para Android
+    implementation(libs.protobuf.javalite)
+
+    // Networking & Security
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.serialization)
     implementation(libs.security.crypto)
-    implementation(libs.androidx.fragment.ktx)
-    // JavaMail (Jakarta Mail) compatible with Android
+    implementation(libs.kotlinx.serialization.json)
+
+    // Mail
     implementation(libs.android.mail)
     implementation(libs.android.activation)
-    // Ktor for HTTP requests
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp) // Use OkHttp engine on Android
-    implementation(libs.ktor.client.serialization)
-    implementation(libs.androidx.foundation.android)
-    implementation(libs.androidx.foundation.android) // (Optional) JSON parsing
-    implementation(libs.androidx.biometric)
-    implementation(libs.androidx.appcompat) // or latest stable
-    // AppCompact
+
+    // Material Design
     implementation(libs.material3)
-    //
+    implementation(libs.material)
+    implementation(libs.androidx.ui.test.junit4.android)
+
+    // Testing (unit + instrumented)
     testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
+    testImplementation(libs.mockk)
+
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.ui.test.junit4)
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+

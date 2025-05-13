@@ -1,6 +1,6 @@
 package com.shary.app.services.cloud
 
-object CloudServiceConstants {
+object Constants {
     // Time values
     const val TIME_ALIVE_DOCUMENT: Long = 24 * 60 * 60 // 3600s
 

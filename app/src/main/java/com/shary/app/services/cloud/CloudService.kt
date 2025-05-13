@@ -11,15 +11,15 @@ import com.shary.app.security.securityUtils.SecurityUtils.getCurrentUtcTimestamp
 import com.shary.app.security.securityUtils.SecurityUtils.getTimestampAfterExpiry
 import com.shary.app.security.securityUtils.SecurityUtils.hashMessageExtended
 import com.shary.app.security.securityUtils.SecurityUtils.hashMessageToString
-import com.shary.app.services.cloud.CloudServiceConstants.ENDPOINT_DELETE_USER
-import com.shary.app.services.cloud.CloudServiceConstants.ENDPOINT_GET_PUB_KEY
-import com.shary.app.services.cloud.CloudServiceConstants.ENDPOINT_PING
-import com.shary.app.services.cloud.CloudServiceConstants.ENDPOINT_SEND_DATA
-import com.shary.app.services.cloud.CloudServiceConstants.ENDPOINT_STORE_USER
-import com.shary.app.services.cloud.CloudServiceConstants.TIME_ALIVE_DOCUMENT
-import com.shary.app.services.cloud.CloudServiceUtils.authHeader
-import com.shary.app.services.cloud.CloudServiceUtils.buildPostRequest
-import com.shary.app.services.cloud.CloudServiceUtils.evaluateStatusCode
+import com.shary.app.services.cloud.Constants.ENDPOINT_DELETE_USER
+import com.shary.app.services.cloud.Constants.ENDPOINT_GET_PUB_KEY
+import com.shary.app.services.cloud.Constants.ENDPOINT_PING
+import com.shary.app.services.cloud.Constants.ENDPOINT_SEND_DATA
+import com.shary.app.services.cloud.Constants.ENDPOINT_STORE_USER
+import com.shary.app.services.cloud.Constants.TIME_ALIVE_DOCUMENT
+import com.shary.app.services.cloud.Utils.authHeader
+import com.shary.app.services.cloud.Utils.buildPostRequest
+import com.shary.app.services.cloud.Utils.evaluateStatusCode
 import com.shary.app.utils.UtilsFunctions.makeJsonStringFromFields
 import com.shary.app.utils.UtilsFunctions.makeJsonStringFromRequestKeys
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +61,8 @@ class CloudService(
     }
 
     override suspend fun isUserRegistered(user: String):
-            Boolean = withContext(Dispatchers.IO) {
+            Boolean = withContext(Dispatchers.IO)
+    {
         val pubKey = getPubKey(hashMessageToString(user))
         return@withContext pubKey != ""
     }
@@ -72,7 +73,8 @@ class CloudService(
     }
 
     private suspend fun runUploadUser(user: String):
-            Pair<Boolean, String> = withContext(Dispatchers.IO) {
+            Pair<Boolean, String> = withContext(Dispatchers.IO)
+    {
         if (!session.isOnline && !sendPing()) return@withContext Pair(false, "")
 
         val userHash = hashMessageToString(user)

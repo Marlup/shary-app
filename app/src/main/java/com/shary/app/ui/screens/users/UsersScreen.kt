@@ -8,7 +8,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -20,14 +19,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.shary.app.Field
 import com.shary.app.User
-import com.shary.app.core.dependencyContainer.DependencyContainer
+import com.shary.app.core.Session
 import com.shary.app.services.user.UserService
-import com.shary.app.ui.screens.ui_utils.FilterBox
-import com.shary.app.ui.screens.ui_utils.GoBackButton
-import com.shary.app.ui.screens.ui_utils.SelectableRow
-import com.shary.app.utils.DateUtils
+import com.shary.app.ui.screens.utils.GoBackButton
+import com.shary.app.ui.screens.utils.ItemRow
+import com.shary.app.ui.screens.utils.RowSearcher
+import com.shary.app.ui.screens.utils.SelectableRow
 import com.shary.app.viewmodels.ViewModelFactory
 import com.shary.app.viewmodels.user.UserViewModel
 import kotlinx.coroutines.launch
@@ -35,37 +33,42 @@ import java.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UsersScreen(navController: NavHostController, userService: UserService) {
+fun UsersScreen(
+    navController: NavHostController,
+    session: Session,
+    userViewModelFactory: ViewModelFactory<UserViewModel>,
+    userService: UserService
+) {
 
-    // Create the ViewModel
-    val viewModel: UserViewModel = viewModel(
-        factory = ViewModelFactory {
-            UserViewModel(
-                DependencyContainer.get("user_repository")
-            )
-        }
-    )
+    // ---- Create the ViewModel ----
+    val viewModel: UserViewModel = viewModel(factory = userViewModelFactory)
 
-    // +++++ Table and DB rows +++++
+    // ---- Table and DB rows ----
     val userList by viewModel.users.collectAsState()
 
-    // +++++ Host +++++
+    // ---- Host ----
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // +++++ Add dialog +++++
+    // ---- Add dialog ----
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
-    // +++++ Checked rows +++++
-    //val selectedEmails = remember { mutableStateListOf<String>() }
-    val selectedEmails by viewModel.selectedEmails.collectAsState()
+    // ---- Editing/Updating field ----
+    var editingUser by remember { mutableStateOf<User?>(null) }
+    var editedValue by remember { mutableStateOf("") }
 
-    // +++++ Search Users +++++
+    // ---- Checked rows ----
+    val selectedEmails by viewModel.selectedEmails.collectAsState()
+    val selectedPhoneNumber by viewModel.selectedPhoneNumber.collectAsState()
+
+    // ---- Search Users ----
     // 👇 Search state
     var searchText by remember { mutableStateOf("") }
     var searchByEmail by remember { mutableStateOf(true) } // true = search by Email, false = search by Username
+
     // 👇 Filtered list dynamically
     //val filteredUsers = userList.filter { it.email.contains(searchText, ignoreCase = true) }
+
     // 👇 Filtered list dynamically based on toggle
     val filteredUsers = userList.filter { user ->
         if (searchByEmail)
@@ -94,7 +97,8 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
             if (event == Lifecycle.Event.ON_STOP) {
                 println("Saving selected emails on stop: $selectedEmails")
 
-                userService.cacheSelectedEmails(selectedEmails)
+                session.cacheSelectedEmails(selectedEmails)
+                session.cacheSelectedPhoneNumbers(selectedPhoneNumber)
                 // Drop remembered screen states
                 clearStates()
             }
@@ -110,28 +114,28 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(title = { Text("Users") },
-                modifier = Modifier.fillMaxHeight(0.1f),
+            CenterAlignedTopAppBar(
+                title = { Text("Users") },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-                 },
-        floatingActionButton =
-        {
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
+                ),
+                expandedHeight = 30.dp
             )
-            {
+        },
+        floatingActionButton = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .padding(end = 8.dp, bottom = 8.dp)
+            ) {
 
                 // Go back button
                 GoBackButton(navController)
 
                 // Add row button
                 FloatingActionButton(onClick = { openAddDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add User")
+                    Icon(Icons.Default.Add, contentDescription = "Add Field")
                 }
 
                 // Delete row button
@@ -146,89 +150,45 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                                 }
                                 viewModel.clearSelectedEmails()
                             }
-                            snackbarMessage = "Deleted selected users"
+                            snackbarMessage = "Deleted users"
                         }
                     },
                     containerColor = if (isEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
                     contentColor = if (isEnabled) Color.White else Color.LightGray,
                     modifier = Modifier.alpha(if (isEnabled) 1f else 0.6f)
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                    Icon(Icons.Default.Delete, contentDescription = "Delete users")
                 }
             }
         },
+
         snackbarHost = { SnackbarHost(snackbarHostState) }
+
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(8.dp)
                 .fillMaxWidth()
-                .fillMaxHeight(0.9f),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxHeight(0.90f),
+            horizontalAlignment =  Alignment.Start, //Alignment.CenterHorizontally
         ) {
+            // Right: Search input
+            RowSearcher(
+                searchText,
+                onSearchTextChange = { searchText = it },
+                searchByFirstColumn = searchByEmail,
+                onSearchByChange = { searchByEmail = it },
+                Pair("username", "email")
+            )
 
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-
-                // 🔍 Search and Toggle Filter
-                TextField(
-                    value = searchText,
-                    onValueChange = { searchText = it },
-                    label = { Text(if (searchByEmail) "Search by Email" else "Search by Username") },
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .padding(vertical = 8.dp, horizontal = 8.dp),
-                    singleLine = true
-                )
-
-                // Email Box
-                FilterBox(
-                    title = "Email",
-                    isSelected = searchByEmail,
-                    onClick = { searchByEmail = true }
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Username Box
-                FilterBox(
-                    title = "Username",
-                    isSelected = !searchByEmail,
-                    onClick = { searchByEmail = false }
-                )
-            }
-            Spacer(modifier = Modifier.width(64.dp))
-
-            // 📋 Table header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-
-                Spacer(modifier = Modifier.width(24.dp)) // For checkbox spacing
-                Text("Email", Modifier.weight(1f))
-                Text("Username", Modifier.weight(1f))
-                //Text("Date Added", Modifier.weight(1f))
-            }
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-
-            //if (userList.isNotEmpty()) {
             if (filteredUsers.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxWidth(),
                     contentPadding = PaddingValues(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    //itemsIndexed(userList) { index, user ->
                     itemsIndexed(filteredUsers) { index, user ->
                         SelectableRow(
                             item = user,
@@ -236,12 +196,26 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                             isSelected = selectedEmails.contains(user.email),
                             onCheckedChange = { checked ->
                                 viewModel.toggleUserSelection(user.email, checked)
-                                              },
-                        ) { userItem ->
-                            Text(userItem.email, Modifier.weight(1f))
-                            Text(userItem.username, Modifier.weight(1f))
-                            //val formattedDate = DateUtils.formatTimeMillis(userItem.dateAdded )
-                            //Text(formattedDate, Modifier.weight(1f))
+                            },
+                        ) { _ ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.95f)
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Column with key + value
+                                ItemRow(
+                                    item = userService.userToTriple(user)
+                                ) { item ->
+                                    editingUser = userService.valuesToUser(
+                                        item.first,
+                                        item.second,
+                                        0L
+                                    )
+                                    editedValue = user.email
+                                }
+                            }
                         }
                     }
                 }
@@ -256,7 +230,6 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                 }
             }
             HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-            //Spacer(modifier = Modifier.height(32.dp))
         }
 
         if (openAddDialog) {
@@ -264,7 +237,8 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                 onDismiss = { openAddDialog = false },
                 onAddUser = { username, email ->
                     if (username.isNotBlank() && email.isNotBlank()) {
-                        val user = User.newBuilder()
+                        val user = User
+                            .newBuilder()
                             .setUsername(username)
                             .setEmail(email)
                             .setDateAdded(Instant.now().toEpochMilli()) // simple date example
@@ -278,7 +252,7 @@ fun UsersScreen(navController: NavHostController, userService: UserService) {
                             snackbarMessage = "Email '$email' $alterMessage"
                         }
                     } else {
-                        snackbarMessage = "Both Username and Email are required"
+                        snackbarMessage = "Username and email are required"
                     }
                 }
             )

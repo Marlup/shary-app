@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -19,8 +20,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.Field
 import com.shary.app.services.requestField.RequestFieldService
-import com.shary.app.ui.screens.ui_utils.GoBackButton
-import com.shary.app.ui.screens.ui_utils.SelectableRow
+import com.shary.app.ui.screens.requests.utils.AddRequestDialog
+import com.shary.app.ui.screens.requests.utils.SendRequestDialog
+import com.shary.app.ui.screens.utils.GoBackButton
+import com.shary.app.ui.screens.utils.SelectableRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,12 +73,13 @@ fun RequestsScreen(navController: NavHostController, requestFieldService: Reques
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
+                expandedHeight = 30.dp
             )
-        },
+                 },
         floatingActionButton = {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
             ) {
 
@@ -92,6 +96,7 @@ fun RequestsScreen(navController: NavHostController, requestFieldService: Reques
                 FloatingActionButton(
                     onClick = {
                         if (isEnabled) {
+                            // Copy of selectedUsers
                             requestFields.removeIf { field ->
                                 selectedKeys.contains(field.key)
                             }
@@ -107,6 +112,7 @@ fun RequestsScreen(navController: NavHostController, requestFieldService: Reques
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
+
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -117,16 +123,24 @@ fun RequestsScreen(navController: NavHostController, requestFieldService: Reques
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
 
-            Spacer(modifier = Modifier.height(32.dp))
-
             Row(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
-                Spacer(modifier = Modifier.width(24.dp))
-                Text("Key", Modifier.weight(1f))
-                Text("Key Alias", Modifier.weight(1f))
+
+                Text(
+                    "Key",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Key Alias",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             HorizontalDivider(thickness = 1.dp, color = Color.Gray)

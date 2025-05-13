@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.requests
+package com.shary.app.ui.screens.requests.utils
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*

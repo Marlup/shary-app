@@ -7,7 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-object CloudServiceUtils {
+object Utils {
     fun authHeader(token: String): Map<String, String> =
         mapOf("Authorization" to "Bearer $token")
 

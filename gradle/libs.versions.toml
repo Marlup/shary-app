@@ -1,35 +1,40 @@
 [versions]
 agp = "8.7.3"
 androidMail = "1.6.7"
-appcompatVersion = "1.6.1"
+appcompatVersion = "1.7.0"
 biometric = "1.2.0-alpha05"
-datastore = "1.1.5"
-datastorePreferences = "1.1.4"
-datastoreVersion = "1.0.0"
+datastore = "1.1.6"
+datastorePreferences = "1.1.6"
+datastoreVersion = "1.1.6"
 kotlin = "2.0.0"
-coreKtx = "1.15.0"
+coreKtx = "1.16.0"
 junit = "4.13.2"
-junitVersion = "1.2.1"
-espressoCore = "3.6.1"
+compose = "1.8.1"
+androidx-junit = "1.1.5"
+androidx_test_junit = "1.1.5"
+espresso_core = "3.5.0"
 kotlinxSerializationJson = "1.6.3"
 ktorClientCore = "2.3.9"
 ktorClientOkhttp = "2.3.9"
 ktorClientSerialization = "2.3.9"
-lifecycleRuntimeKtx = "2.8.7"
-activityCompose = "1.9.3"
-composeBom = "2024.04.01"
+lifecycleRuntimeKtx = "2.9.0"
+activityCompose = "1.10.1"
+composeBom = "2025.05.00"
+material = "1.12.0"
 material3 = "1.3.2"
+mockk = "1.13.8"
 protobufJavalite = "3.24.4"
 protobufJavaliteVersion = "4.26.1"
-ui = "1.7.8"
-navigationCompose = "2.8.9"
-navigationRuntimeKtx = "2.8.9"
-foundationLayoutAndroid = "1.7.2"
-room = "2.6.1"
-securitycrypto = "1.1.0-alpha06"
+ui = "1.8.1"
+navigationCompose = "2.9.0"
+navigationRuntimeKtx = "2.9.0"
+foundationLayoutAndroid = "1.8.1"
+room = "2.7.1"
+securitycrypto = "1.1.0-alpha07"
 fragmentKtx = "1.8.6"
-foundationAndroid = "1.7.2"
+foundationAndroid = "1.8.1"
 appcompat = "1.7.0"
+uiTestJunit4Android = "1.8.1"
 
 [libraries]
 android-activation = { module = "com.sun.mail:android-activation", version.ref = "androidMail" }
@@ -43,8 +48,8 @@ androidx-datastore-preferences = { module = "androidx.datastore:datastore-prefer
 androidx-datastore-v100 = { module = "androidx.datastore:datastore", version.ref = "datastoreVersion" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleRuntimeKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
-androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+androidx_test_junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx_test_junit" }
+espresso_core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso_core" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -59,7 +64,9 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktorClientCore" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktorClientOkhttp" }
 ktor-client-serialization = { module = "io.ktor:ktor-client-serialization", version.ref = "ktorClientSerialization" }
+material = { module = "com.google.android.material:material", version.ref = "material" }
 material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobufJavaliteVersion" }
 ui = { module = "androidx.compose.ui:ui", version.ref = "ui" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
@@ -77,6 +84,9 @@ datastore-core = { module = "androidx.datastore:datastore", version.ref = "datas
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragmentKtx" }
 androidx-foundation-android = { group = "androidx.compose.foundation", name = "foundation-android", version.ref = "foundationAndroid" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+androidx-ui-test-junit4-android = { group = "androidx.compose.ui", name = "ui-test-junit4-android", version.ref = "uiTestJunit4Android" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

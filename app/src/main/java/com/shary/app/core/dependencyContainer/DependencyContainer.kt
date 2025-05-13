@@ -10,8 +10,13 @@ import com.shary.app.services.cloud.CloudService
 import com.shary.app.services.email.EmailService
 import com.shary.app.services.field.FieldService
 import com.shary.app.services.file.FileService
+import com.shary.app.services.messaging.TelegramService
+import com.shary.app.services.messaging.WhatsAppService
 import com.shary.app.services.requestField.RequestFieldService
 import com.shary.app.services.user.UserService
+import com.shary.app.viewmodels.ViewModelFactory
+import com.shary.app.viewmodels.field.FieldViewModel
+import com.shary.app.viewmodels.user.UserViewModel
 
 object DependencyContainer {
 
@@ -27,23 +32,34 @@ object DependencyContainer {
     }
 
     fun initAll(context: Context) {
-        // Security
+        // ---- Security ----
         val cryptographyManager = CryptographyManager
         register("cryptography_manager", cryptographyManager)
 
-        // Session
+        // ---- Session ----
         val session = Session
         Session.cryptographyManager = CryptographyManager
         register("session", session)
 
-        // Repositories
+        // ---- Repositories ----
         val fieldRepository = FieldRepositoryImpl(context)
-        register("field_repository", fieldRepository)
+        //register("field_repository", fieldRepository)
 
         val userRepository = UserRepositoryImpl(context)
-        register("user_repository", userRepository)
+        //register("user_repository", userRepository)
 
-        // Services
+        // ---- Views model factories ----
+        val fieldViewModelFactory = ViewModelFactory {
+            FieldViewModel(fieldRepository)
+        }
+        register("fieldViewModel_factory", fieldViewModelFactory)
+
+        val userViewModelFactory = ViewModelFactory {
+            UserViewModel(userRepository)
+        }
+        register("userViewModel_factory", userViewModelFactory)
+
+        // ---- Services ----
         val emailService = EmailService(context, session)
         register("email_service", emailService)
 
@@ -59,10 +75,16 @@ object DependencyContainer {
         val requestFieldService = RequestFieldService(session)
         register("requestField_service", requestFieldService)
 
-        val fileService = FileService(context, session)
+        val fileService = FileService(context)
         register("file_service", fileService)
 
-        // Controller
+        val whatsAppService = WhatsAppService(context)
+        register("whatsApp_service", whatsAppService)
+
+        val telegramService = TelegramService(context)
+        register("telegram_service", telegramService)
+
+        // ---- Controller ----
         val controller = Controller(session, cryptographyManager, cloudService, emailService)
         register("controller", controller)
     }

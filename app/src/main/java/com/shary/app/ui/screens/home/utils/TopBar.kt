@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.ui_utils
+package com.shary.app.ui.screens.home.utils
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
-import com.shary.app.ui.screens.home.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

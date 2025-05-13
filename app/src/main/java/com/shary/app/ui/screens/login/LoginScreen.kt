@@ -4,7 +4,6 @@ package com.shary.app.ui.screens.login
 
 import android.util.Log
 import android.widget.Toast
-import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -22,7 +20,7 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.Session
 import com.shary.app.core.dependencyContainer.DependencyContainer
 import com.shary.app.services.cloud.CloudService
-import com.shary.app.ui.screens.home.Screen
+import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.utils.BiometricAuthManager
 import com.shary.app.utils.ValidationUtils.validateLoginCredentials
 import kotlinx.coroutines.launch
