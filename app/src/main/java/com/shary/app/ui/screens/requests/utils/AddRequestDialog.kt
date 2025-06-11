@@ -6,6 +6,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.shary.app.core.enums.PredefinedKey
+import com.shary.app.ui.screens.fields.utils.InputWithSuggestions
 
 @Composable
 fun AddRequestDialog(
@@ -14,6 +16,7 @@ fun AddRequestDialog(
 ) {
     var key by remember { mutableStateOf("") }
     var aliasKey by remember { mutableStateOf("") }
+    val predefinedKeys = PredefinedKey.entries.map { it.key }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -24,11 +27,10 @@ fun AddRequestDialog(
                 Text("Add New Request", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("Requested Key") },
-                    modifier = Modifier.fillMaxWidth()
+                InputWithSuggestions(
+                    key = key,
+                    onKeyChange = { key = it },
+                    predefinedKeys = predefinedKeys
                 )
 
                 OutlinedTextField(

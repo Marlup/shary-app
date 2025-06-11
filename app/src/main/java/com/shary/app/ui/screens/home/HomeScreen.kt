@@ -3,6 +3,7 @@ package com.shary.app.ui.screens.home
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -24,14 +26,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.shary.app.core.Session
+import com.shary.app.services.bluetooth.BluetoothService
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.services.email.EmailService
 import com.shary.app.services.messaging.TelegramService
 import com.shary.app.services.messaging.WhatsAppService
-import com.shary.app.ui.screens.fields.utils.SendFieldsDialog
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.AppTopBar
+import com.shary.app.ui.screens.home.utils.BluetoothDeviceSelectorDialog
+import com.shary.app.ui.screens.home.utils.SendOption
+import com.shary.app.ui.screens.home.utils.SendServiceDialog
 import com.shary.app.ui.screens.home.utils.ShareFieldsGenericButton
+import com.shary.app.utils.FormattingUtils.makeKeyValueTextFromFields
 
 @SuppressLint("StateFlowValueCalledInComposition")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,21 +48,49 @@ fun HomeScreen(
     emailService: EmailService,
     cloudService: CloudService,
     whatsAppService: WhatsAppService,
-    telegramService: TelegramService
+    telegramService: TelegramService,
+    bluetoothService: BluetoothService
 ) {
     val context = LocalContext.current
 
     // +++++ Selection Summary +++++
-    var emailsEmpty by remember { mutableStateOf(true) }
-    var fieldsEmpty by remember { mutableStateOf(true) }
+    var sendOption by remember { mutableStateOf<SendOption?>(null) }
+    var showSendDialog by remember { mutableStateOf(false) }
 
-    var openSendDialog by remember { mutableStateOf(false) }
-    //var sendOption by remember { mutableStateOf("Cloud") }
+    // ----- Bluetooth dialog -----
+    var openBluetoothDialog by remember { mutableStateOf(false) }
+
+    fun handleSendOption(option: SendOption) {
+        when (option) {
+            SendOption.Email -> emailService.sendEmailViaClient(
+                session.getSelectedFields(),
+                session.getSelectedEmails()
+            )
+            SendOption.Cloud -> Toast.makeText(context, "Currently on Development", Toast.LENGTH_SHORT).show()
+            SendOption.Whatsapp -> whatsAppService.sendFieldsToWhatsApp(
+                session.getSelectedFields(),
+                session.getSelectedPhoneNumber()
+            )
+            SendOption.Telegram -> telegramService.sendFieldsToTelegram(
+                session.getSelectedFields(),
+                session.getSelectedPhoneNumber()
+            )
+            SendOption.Bluetooth -> {
+                showSendDialog = false
+                openBluetoothDialog = true
+                return
+            }
+        }
+        showSendDialog = false
+    }
+
+    fun resetSelectedData() {
+        session.resetSelectedData()
+    }
 
     // Run at launch
     LaunchedEffect(Unit) {
-        emailsEmpty = session.selectedEmails.value.isEmpty()
-        fieldsEmpty = session.selectedFields.value.isEmpty()
+        //resetSelectedData()
     }
 
     Scaffold(
@@ -110,43 +144,33 @@ fun HomeScreen(
                 }
             }
 
-            if (openSendDialog) {
-                var sendOption = ""
-                SendFieldsDialog(
-                    selectedOption = sendOption,
-                    onDismiss = { openSendDialog = false },
+            if (showSendDialog) {
+                SendServiceDialog(
+                    options = SendOption.all,
                     onOptionSelected = { sendOption = it },
-                    onSend = {
-                        when (sendOption) {
-                            "Email" -> emailService.sendEmailViaClient(
-                                session.selectedFields.value,
-                                session.selectedEmails.value
-                            )
-                            "Cloud" -> {
-                                //TODO("Implement cloud sending")
-                                Toast.makeText(context, "Currently on Development", Toast.LENGTH_SHORT).show()
-                            }
-                            "Whatsapp" -> whatsAppService.sendFieldsToWhatsApp(
-                                session.selectedFields.value,
-                                session.selectedPhoneNumber.value
-                                )
-                            "Telegram" -> telegramService.sendFieldsToTelegram(
-                                session.selectedFields.value,
-                                session.selectedPhoneNumber.value
-                            )
-                        }
-                        openSendDialog = false
+                    onSendConfirmed = {
+                        showSendDialog = false
+                        // Ejecuta aquí la lógica de envío
+                        sendOption?.let { handleSendOption(it) }
                     },
-                    onLeave = {
-                        println("Reseting session selectedEmails and selectedFields")
-                        session.selectedEmails.value = emptyList()
-                        session.selectedFields.value = emptyList()
+                    onCancel = { showSendDialog = false }
+                )
+            }
+
+            if (openBluetoothDialog) {
+                BluetoothDeviceSelectorDialog(
+                    bluetoothService = bluetoothService,
+                    dataToSend = makeKeyValueTextFromFields(session.getSelectedFields()),
+                    onDismiss = { openBluetoothDialog = false },
+                    onFinished = {
+                        openBluetoothDialog = false
+                        resetSelectedData()
                     }
                 )
             }
 
             var textSummaryWarning = ""
-            if (!emailsEmpty && !fieldsEmpty) {
+            if (session.isAnyFieldSelected() && session.isAnyEmailSelected()) {
 
                 Column(
                     modifier = Modifier
@@ -154,14 +178,33 @@ fun HomeScreen(
                         .padding(16.dp)
                 ) {
                     Row {
-                        // Super Header
-                        Text(
-                            text = "Selection Summary",
-                            style = MaterialTheme.typography.headlineSmall,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
+                        Column(
+                        ) {
+                            ShareFieldsGenericButton(
+                                session.getSelectedFields(),
+                                onClick = { showSendDialog = true },
+                                Modifier.align(Alignment.CenterHorizontally)
+                            )
+                            // Super Header
+                            Text(
+                                text = "Sending Summary",
+                                style = MaterialTheme.typography.headlineSmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        /*
+                        FloatingActionButton(
+                            onClick = { showSendDialog = true },
+                            modifier = Modifier
+                                .size(40.dp)
+                                //.align(Alignment.CenterEnd)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Pre-send data",
+                            )
+                        }
+                         */
                     }
 
                     HorizontalDivider(Modifier.padding(horizontal = 8.dp))
@@ -189,7 +232,7 @@ fun HomeScreen(
                             LazyColumn(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(session.selectedEmails.value.toList()) { email ->
+                                items(session.getSelectedEmails()) { email ->
                                     Text(
                                         text = email,
                                         modifier = Modifier.padding(vertical = 4.dp, horizontal = 0.dp)
@@ -218,7 +261,7 @@ fun HomeScreen(
                             LazyColumn(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(session.selectedFields.value.toList()) { field ->
+                                items(session.getSelectedFields()) { field ->
                                     Text(
                                         text = field.key,
                                         modifier = Modifier.padding(vertical = 4.dp, horizontal = 0.dp)
@@ -227,28 +270,13 @@ fun HomeScreen(
                             }
                         }
                     }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        FloatingActionButton(
-                            onClick = { openSendDialog = true },
-                            modifier = Modifier
-                                .size(45.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send Fields")
-                        }
-                    }
                 }
-            } else if (emailsEmpty && fieldsEmpty) {
-                textSummaryWarning = "Select at least one field and one user to send the data"
-            } else if (emailsEmpty) {
+            } else if (session.isAnyFieldSelected()) {
                 textSummaryWarning = "Fields selected. Select at least one user to send the data"
-                ShareFieldsGenericButton(session.selectedFields.value, Modifier)
-            } else {
+            } else if (session.isAnyEmailSelected()) {
                 textSummaryWarning = "Users selected. Select at least one field to send the data"
+            } else {
+                textSummaryWarning = "Select at least one field and one user to send the data"
             }
 
             // Warning message for summary

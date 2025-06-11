@@ -4,7 +4,7 @@ import com.shary.app.Field
 import com.shary.app.core.Session
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.services.email.EmailService
-import com.shary.app.security.CryptographyManager
+import com.shary.app.services.security.CryptographyManager
 
 class Controller(
     private val session: Session,

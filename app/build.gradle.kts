@@ -115,9 +115,19 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.ui.test.junit4.android)
 
+    // Material incons extended library
+    implementation(libs.androidx.material.icons.extended)
+
     // Testing (unit + instrumented)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
+
+    // Optional -- Robolectric environment
+    testImplementation (libs.androidx.core)
+    // Optional -- Mockito framework
+    //testImplementation (libs.mockito.core)
+    // Optional -- mockito-kotlin
+    //testImplementation (libs.mockito.kotlin)
 
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.espresso.core)

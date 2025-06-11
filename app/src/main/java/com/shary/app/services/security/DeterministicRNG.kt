@@ -1,4 +1,4 @@
-package com.shary.app.security
+package com.shary.app.services.security
 
 import java.math.BigInteger
 import java.security.MessageDigest

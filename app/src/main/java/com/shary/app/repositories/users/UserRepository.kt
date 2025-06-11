@@ -1,4 +1,4 @@
-package com.shary.app.repositories.`interface`
+package com.shary.app.repositories.users
 
 import com.shary.app.User
 

@@ -4,13 +4,13 @@ import android.util.Log
 import com.shary.app.Field
 import com.shary.app.core.Session
 import com.shary.app.core.enums.StatusDataSentDb
-import com.shary.app.security.CryptographyManager
-import com.shary.app.security.CryptographyManager.getPubKeyFromString
-import com.shary.app.security.securityUtils.SecurityUtils.base64Encode
-import com.shary.app.security.securityUtils.SecurityUtils.getCurrentUtcTimestamp
-import com.shary.app.security.securityUtils.SecurityUtils.getTimestampAfterExpiry
-import com.shary.app.security.securityUtils.SecurityUtils.hashMessageExtended
-import com.shary.app.security.securityUtils.SecurityUtils.hashMessageToString
+import com.shary.app.services.security.CryptographyManager
+import com.shary.app.services.security.CryptographyManager.getPubKeyFromString
+import com.shary.app.services.security.securityUtils.SecurityUtils.base64Encode
+import com.shary.app.services.security.securityUtils.SecurityUtils.getCurrentUtcTimestamp
+import com.shary.app.services.security.securityUtils.SecurityUtils.getTimestampAfterExpiry
+import com.shary.app.services.security.securityUtils.SecurityUtils.hashMessageExtended
+import com.shary.app.services.security.securityUtils.SecurityUtils.hashMessageToString
 import com.shary.app.services.cloud.Constants.ENDPOINT_DELETE_USER
 import com.shary.app.services.cloud.Constants.ENDPOINT_GET_PUB_KEY
 import com.shary.app.services.cloud.Constants.ENDPOINT_PING
@@ -20,6 +20,8 @@ import com.shary.app.services.cloud.Constants.TIME_ALIVE_DOCUMENT
 import com.shary.app.services.cloud.Utils.authHeader
 import com.shary.app.services.cloud.Utils.buildPostRequest
 import com.shary.app.services.cloud.Utils.evaluateStatusCode
+import com.shary.app.services.security.RsaCrypto.encrypt
+import com.shary.app.services.security.RsaCrypto.sign
 import com.shary.app.utils.UtilsFunctions.makeJsonStringFromFields
 import com.shary.app.utils.UtilsFunctions.makeJsonStringFromRequestKeys
 import kotlinx.coroutines.Dispatchers
@@ -180,7 +182,7 @@ class CloudService(
                 return@forEach
             }
 
-            val encryptedData = cryptographyManager.encrypt(data.toByteArray(), getPubKeyFromString(consumerPubKey))
+            val encryptedData = encrypt(data.toByteArray(), getPubKeyFromString(consumerPubKey))
             val payloadData = base64Encode(encryptedData)
             val (signature, verification) = makeCredentials(listOf(userHash, consumerHash, hashMessageToString(data)))
 
@@ -250,7 +252,7 @@ class CloudService(
     private fun makeCredentials(fields: List<String>):
             Pair<String, String> {
         val (rawHash, verification) = hashMessageExtended(fields.joinToString("."))
-        val signature = cryptographyManager.sign(rawHash)
+        val signature = sign(rawHash)
         return Pair(base64Encode(signature), verification)
     }
 }

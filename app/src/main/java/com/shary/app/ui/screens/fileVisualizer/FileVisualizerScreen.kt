@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -134,7 +134,7 @@ fun FileVisualizerScreen(
                     if (selectedFile != null)
                         Toast.makeText(context, "${selectedFile?.name} loaded", Toast.LENGTH_SHORT).show()
                 }) {
-                    Icon(Icons.Default.Add, contentDescription = "Pick ZIP File")
+                    Icon(Icons.Filled.UploadFile, contentDescription = "Pick ZIP File")
                 }
 
                 FloatingActionButton(
@@ -143,7 +143,7 @@ fun FileVisualizerScreen(
                     modifier = Modifier.alpha(if (canMatchFields) 1f else 0.6f),
                     onClick = { isMatchingEnabled = canMatchFields }
                 ) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Enable Matching")
+                    Icon(Icons.Filled.Cable, contentDescription = "Enable Matching")
                 }
             }
         }
@@ -251,6 +251,8 @@ fun FileVisualizerScreen(
                         }
                     }
                 )
+            } else {
+                snackbarMessage = "Load a Request file."
             }
         }
     }

@@ -1,4 +1,4 @@
-package com.shary.app.repositories.`interface`
+package com.shary.app.repositories.fields
 
 import com.shary.app.Field
 

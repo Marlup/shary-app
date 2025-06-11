@@ -48,6 +48,7 @@ fun AppNavigator() {
                 DependencyContainer.get("cloud_service"),
                 DependencyContainer.get("whatsApp_service"),
                 DependencyContainer.get("telegram_service"),
+                DependencyContainer.get("bluetooth_service"),
             )
         }
         composable(Screen.Fields.route) {

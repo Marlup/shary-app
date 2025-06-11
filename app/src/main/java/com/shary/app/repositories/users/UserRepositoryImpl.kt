@@ -1,11 +1,10 @@
-package com.shary.app.repositories.impl
+package com.shary.app.repositories.users
 
 import android.content.Context
 import androidx.datastore.core.DataStore
 import com.shary.app.User
 import com.shary.app.UserList
 import com.shary.app.datastore.userListDataStore
-import com.shary.app.repositories.`interface`.UserRepository
 import kotlinx.coroutines.flow.first
 
 class UserRepositoryImpl(

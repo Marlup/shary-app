@@ -78,7 +78,21 @@ fun LoginScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(title = { Text("Login") })
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ) {
+                CenterAlignedTopAppBar(
+                    title = { Text("Shary", style = MaterialTheme.typography.headlineMedium) },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                    expandedHeight = 64.dp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                CenterAlignedTopAppBar(title = { Text("Login") })
+            }
         }
     ) { padding ->
         Column(
@@ -118,7 +132,7 @@ fun LoginScreen(
                         session.generateKeys(password, username)
 
                         // Try to login (check credentials)
-                        if (session.tryLogin(context, username, password)) {
+                        if (session.login(context, username, password)) {
                             scope.launch {
                                 val email = session.email.toString()
 

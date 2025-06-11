@@ -11,12 +11,15 @@ import com.shary.app.utils.DateUtils
 @Composable
 fun ShareFieldsGenericButton(
     fields: List<Field>,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
     Button(
         onClick = {
+            onClick()
+            /*
             val message = fields.joinToString("\n") {
                 val formattedDate = DateUtils.formatTimeMillis(it.dateAdded)
                 "${it.key}: ${it.value} (added on $formattedDate)"
@@ -31,9 +34,11 @@ fun ShareFieldsGenericButton(
 
             val chooser = Intent.createChooser(shareIntent, "Share fields using...")
             context.startActivity(chooser)
+            */
+
         },
         modifier = modifier
     ) {
-        Text("Share Fields")
+        Text("Share")
     }
 }

@@ -1,11 +1,9 @@
 package com.shary.app.viewmodels.user
 
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.User
-import com.shary.app.repositories.`interface`.UserRepository
+import com.shary.app.repositories.users.UserRepository
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -1,4 +1,4 @@
-package com.shary.app.security
+package com.shary.app.services.security
 
 object SecurityConstants {
 

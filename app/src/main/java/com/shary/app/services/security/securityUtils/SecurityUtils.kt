@@ -1,4 +1,4 @@
-package com.shary.app.security.securityUtils
+package com.shary.app.services.security.securityUtils
 
 import android.util.Base64
 import android.util.Log
@@ -14,7 +14,6 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
-import kotlin.math.log
 
 object SecurityUtils {
 
@@ -109,8 +108,9 @@ object SecurityUtils {
     }
 
     // --- Base 64 ---
+    //fun base64Encode(data: Pair<ByteArray, ByteArray>): String = Base64.encodeToString(data, Base64.NO_WRAP)
+    //fun base64Decode(encoded: String): ByteArray = Base64.decode(encoded, Base64.NO_WRAP)
     fun base64Encode(data: ByteArray): String = Base64.encodeToString(data, Base64.NO_WRAP)
-    fun base64Decode(encoded: String): ByteArray = Base64.decode(encoded, Base64.NO_WRAP)
 
     // --- Json Hash ---
     fun computeJsonHash(json: JSONObject): String {

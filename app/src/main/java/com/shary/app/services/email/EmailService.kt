@@ -80,19 +80,15 @@ class EmailService(
         val messageKeys = makeStringListFromFields(records)
 
         return """
-            Hello,
+Hello,
 
-            This email was sent from a Shary service.
+I made this email info. by Shary-App.
 
-            $sharyUri
+Fields:
 
-            Fields:
-            $messageKeys
+$messageKeys
 
-            Click the link above to open Shary and visualize the data.
-
-            Best regards,
-            Shary Team
-        """.trimIndent()
+Best regards,
+Shary Team""".trimIndent()
     }
 }

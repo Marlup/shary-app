@@ -1,7 +1,6 @@
 package com.shary.app.utils
 
 import android.content.Context
-import android.provider.Settings
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat

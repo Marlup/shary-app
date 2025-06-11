@@ -7,9 +7,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.shary.app.core.enums.PredefinedKey
 
 @Composable
 fun AddFieldDialog(
@@ -19,6 +18,7 @@ fun AddFieldDialog(
     val context = LocalContext.current
 
     var key by remember { mutableStateOf("") }
+    val predefinedKeys = PredefinedKey.entries.map { it.key }
     var keyAlias by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
 
@@ -45,14 +45,10 @@ fun AddFieldDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("Key") },
-                    isError = key.isBlank(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { contentDescription = "Field Key Input" }
+                InputWithSuggestions(
+                    key = key,
+                    onKeyChange = { key = it },
+                    predefinedKeys = predefinedKeys
                 )
 
                 OutlinedTextField(

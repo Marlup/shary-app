@@ -12,7 +12,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,15 +29,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.shary.app.ui.screens.fields.constants.Constants.MESSAGING_SERVICES
-import com.shary.app.ui.screens.fields.constants.Constants.SERVICES_ON_DEVELOPMENT
+import com.shary.app.ui.screens.home.utils.SendOption
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendFieldsDialog(
-    selectedOption: String,
+    selectedOption: SendOption?,
     onDismiss: () -> Unit,
-    onOptionSelected: (String) -> Unit,
+    onOptionSelected: (SendOption) -> Unit,
     onSend: () -> Unit,
     onLeave: () -> Unit
 ) {
@@ -70,39 +68,38 @@ fun SendFieldsDialog(
                 Text("Send Fields", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
 
-                // Menu desplegable
+                // Deployable Menu
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
                 ) {
+                    val scope = this // this is ExposedDropdownMenuBoxScope
                     TextField(
-                        value = selectedOption,
-                        onValueChange = { },
+                        value = selectedOption?.label ?: "Select a service",
+                        onValueChange = {}, // Read-only, no necesita onChange
                         readOnly = true,
-                        label = {
-                            val extraText = if (SERVICES_ON_DEVELOPMENT.contains("Cloud"))
-                                "(currently on development)"
-                            else
-                                ""
-                            Text("Send via $selectedOption $extraText")
-                                },
+                        label = { Text("Send via") },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                         },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable)
+                        modifier = Modifier
+                            .menuAnchor() // Esto solo funciona dentro del scope correcto
+                            .fillMaxWidth()
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
-                        MESSAGING_SERVICES.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    onOptionSelected(option)
-                                    expanded = false
-                                }
-                            )
+                        SendOption.all.forEach { option ->
+                            if (option != null) {
+                                DropdownMenuItem(
+                                    text = { option.label },
+                                    onClick = {
+                                        onOptionSelected(option)
+                                        expanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -111,7 +108,7 @@ fun SendFieldsDialog(
 
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = onSend) { Text("Send") }
+                    TextButton(onClick = onSend) { Text("Accept") }
                 }
             }
         }

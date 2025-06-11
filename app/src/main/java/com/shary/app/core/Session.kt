@@ -5,10 +5,10 @@ import android.util.Log
 import com.shary.app.Field
 import com.shary.app.core.constants.Constants.PATH_AUTHENTICATION
 import com.shary.app.core.constants.Constants.PATH_AUTH_SIGNATURE
-import com.shary.app.security.CryptographyManager
-import com.shary.app.security.CryptographyManager.generateKeysFromSecrets
-import com.shary.app.security.securityUtils.SecurityUtils.aesDecrypt
-import com.shary.app.security.securityUtils.SecurityUtils.aesEncrypt
+import com.shary.app.services.security.CryptographyManager
+import com.shary.app.services.security.RsaCrypto.generateKeysFromSecrets
+import com.shary.app.services.security.securityUtils.SecurityUtils.aesDecrypt
+import com.shary.app.services.security.securityUtils.SecurityUtils.aesEncrypt
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
 import org.json.JSONObject
@@ -28,15 +28,6 @@ object Session {
     var selectedPhoneNumber = MutableStateFlow<String?>("")
     var selectedFields = MutableStateFlow<List<Field>>(emptyList())
     var selectedRequestFields = MutableStateFlow<List<Field>>(emptyList())
-
-    fun canActivateSendingSummary(): Boolean{
-        return selectedEmails.value.isNotEmpty() &&
-                selectedFields.value.isNotEmpty()
-    }
-
-    fun initialize(cryptographyManager: CryptographyManager) {
-        this.cryptographyManager = cryptographyManager
-    }
 
     fun generateKeys(password: String, username: String) {
         if (password.isBlank() or username.isBlank())
@@ -163,6 +154,29 @@ object Session {
         return uiUsername == username && uiSafePasswordString == safePassword
     }
 
+    fun login(context: Context, username: String, password: String): Boolean {
+        this.username = username
+        this.safePassword = password
+
+        CryptographyManager.initializeWithUserSecrets(context, username, password)
+        loadCredentials(context, username, password)
+
+        return isAuthenticated()
+    }
+
+    fun signup(context: Context, username: String, email: String, password: String): Boolean {
+        this.username = username
+        this.email = email
+        this.safePassword = password
+
+        CryptographyManager.initializeWithUserSecrets(context, username, password)
+        cacheCredentials(email, username, password)
+        storeCachedCredentials(context)
+
+        return true
+    }
+
+
     fun isSignatureActive(context: Context): Boolean = authSignatureFile(context).exists()
     fun isCredentialsActive(context: Context): Boolean = credentialsFile(context).exists()
 
@@ -180,5 +194,31 @@ object Session {
     fun cacheSelectedPhoneNumbers(phoneNumber: String) {
         println("Saving selected phone Numbers on stop: $phoneNumber")
         selectedPhoneNumber.value = phoneNumber
+    }
+
+    fun resetSelectedData(){
+        Log.d("session.resetSelectedData", "Reseting session selectedEmails and selectedFields")
+        selectedEmails.value = emptyList()
+        selectedFields.value = emptyList()
+    }
+
+    fun getSelectedFields(): List<Field> {
+        return selectedFields.value
+    }
+
+    fun getSelectedEmails(): List<String> {
+        return selectedEmails.value
+    }
+
+    fun getSelectedPhoneNumber(): String? {
+        return selectedPhoneNumber.value
+    }
+
+    fun isAnyFieldSelected(): Boolean {
+        return getSelectedFields().isNotEmpty()
+    }
+
+    fun isAnyEmailSelected(): Boolean {
+        return getSelectedEmails().isNotEmpty()
     }
 }

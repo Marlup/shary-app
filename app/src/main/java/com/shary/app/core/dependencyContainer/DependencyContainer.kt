@@ -3,9 +3,10 @@ package com.shary.app.core.dependencyContainer
 import android.content.Context
 import com.shary.app.controller.Controller
 import com.shary.app.core.Session
-import com.shary.app.repositories.impl.FieldRepositoryImpl
-import com.shary.app.repositories.impl.UserRepositoryImpl
-import com.shary.app.security.CryptographyManager
+import com.shary.app.repositories.fields.FieldRepositoryImpl
+import com.shary.app.repositories.users.UserRepositoryImpl
+import com.shary.app.services.security.CryptographyManager
+import com.shary.app.services.bluetooth.BluetoothService
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.services.email.EmailService
 import com.shary.app.services.field.FieldService
@@ -13,6 +14,8 @@ import com.shary.app.services.file.FileService
 import com.shary.app.services.messaging.TelegramService
 import com.shary.app.services.messaging.WhatsAppService
 import com.shary.app.services.requestField.RequestFieldService
+import com.shary.app.services.security.RsaCrypto
+import com.shary.app.services.security.aes.AesCrypto
 import com.shary.app.services.user.UserService
 import com.shary.app.viewmodels.ViewModelFactory
 import com.shary.app.viewmodels.field.FieldViewModel
@@ -33,7 +36,10 @@ object DependencyContainer {
 
     fun initAll(context: Context) {
         // ---- Security ----
+        val rsaCrypto = RsaCrypto
+        val aesCrypto = AesCrypto
         val cryptographyManager = CryptographyManager
+        cryptographyManager.inject(rsaCrypto, AesCrypto)
         register("cryptography_manager", cryptographyManager)
 
         // ---- Session ----
@@ -42,7 +48,7 @@ object DependencyContainer {
         register("session", session)
 
         // ---- Repositories ----
-        val fieldRepository = FieldRepositoryImpl(context)
+        val fieldRepository = FieldRepositoryImpl(context, cryptographyManager)
         //register("field_repository", fieldRepository)
 
         val userRepository = UserRepositoryImpl(context)
@@ -83,6 +89,9 @@ object DependencyContainer {
 
         val telegramService = TelegramService(context)
         register("telegram_service", telegramService)
+
+        val bluetoothService = BluetoothService(context)
+        register("bluetooth_service", bluetoothService)
 
         // ---- Controller ----
         val controller = Controller(session, cryptographyManager, cloudService, emailService)

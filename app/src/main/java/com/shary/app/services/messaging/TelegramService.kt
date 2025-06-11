@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.shary.app.Field
-import com.shary.app.utils.DateUtils
+import com.shary.app.utils.UtilsFunctions.makeStringListFromFields
 
 class TelegramService(private val context: Context) {
 
@@ -31,9 +31,6 @@ class TelegramService(private val context: Context) {
     }
 
     private fun buildMessage(fields: List<Field>): String {
-        return fields.joinToString("\n") {
-            val formattedDate = DateUtils.formatTimeMillis(it.dateAdded)
-            "${it.key}: ${it.value} (added on $formattedDate)"
-        }
+        return makeStringListFromFields(fields)
     }
 }

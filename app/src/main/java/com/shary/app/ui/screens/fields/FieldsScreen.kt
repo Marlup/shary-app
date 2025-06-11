@@ -59,14 +59,12 @@ fun FieldsScreen(
     var editedAlias by remember { mutableStateOf("") }
 
     // ---- Checked rows ----
-    //val selectedKeys = remember { mutableStateListOf<String>() }
     val selectedKeys by viewModel.selectedKeys.collectAsState()
 
     // ---- Search Fields ----
     var showSearcher by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var searchByKey by remember { mutableStateOf(true) }
-
 
     val filteredFields = fieldList.filter { field ->
         if (searchByKey)
@@ -140,7 +138,10 @@ fun FieldsScreen(
 
                 // Add row button
                 FloatingActionButton(onClick = { openAddDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Field")
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add Field"
+                    )
                 }
 
                 // Delete row button
@@ -173,7 +174,7 @@ fun FieldsScreen(
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(8.dp)
+                .padding(4.dp)
                 .fillMaxWidth()
                 .fillMaxHeight(0.90f),
             horizontalAlignment =  Alignment.Start, //Alignment.CenterHorizontally
@@ -191,8 +192,8 @@ fun FieldsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     itemsIndexed(filteredFields) { index, field ->
                         SelectableRow(
@@ -205,21 +206,21 @@ fun FieldsScreen(
                         ) { _ ->
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.95f)
-                                .padding(vertical = 8.dp),
+                                    .fillMaxWidth(1.0f)
+                                .padding(vertical = 0.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Column with key + value
                                 ItemRow(
-                                    item = fieldService.fieldToTriple(field)
-                                ) { item ->
-                                    editingField = fieldService.valuesToField(
-                                        item.first,
-                                        item.second,
-                                        item.third
-                                    )
-                                    editedValue = field.value
-                                }
+                                    onEditClick = {
+                                        editingField = field
+                                        editedValue = field.value
+                                    },
+                                    getTitle = { field.key },
+                                    getSubtitle = { "- ${field.value}" },
+                                    getTooltip = { field.keyAlias },
+                                    getCopyToClipboard = { "${field.key}: ${field.value}" }
+                                )
                             }
                         }
                     }
@@ -272,8 +273,10 @@ fun FieldsScreen(
             text = {
                 Column {
 
-                    val formattedDate = DateUtils.formatTimeMillis(field.dateAdded)
-                    Text("Added at: $formattedDate")
+                    val formattedDate = DateUtils.formatTimeMillis(
+                        field.dateAdded
+                    ).split(" ")[0]
+                    Text("Added in $formattedDate")
 
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(

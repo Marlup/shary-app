@@ -206,15 +206,17 @@ fun UsersScreen(
                             ) {
                                 // Column with key + value
                                 ItemRow(
-                                    item = userService.userToTriple(user)
-                                ) { item ->
-                                    editingUser = userService.valuesToUser(
-                                        item.first,
-                                        item.second,
-                                        0L
-                                    )
-                                    editedValue = user.email
-                                }
+                                    onEditClick = {
+                                        editingUser = userService.valuesToUser(
+                                            user.username,
+                                            user.email
+                                        )
+                                        editedValue = user.email },
+                                    getTitle = { user.username },
+                                    getSubtitle = { "- ${user.email}" },
+                                    getTooltip = { "" },
+                                    getCopyToClipboard = { "${user.username}: ${user.email}" }
+                                )
                             }
                         }
                     }

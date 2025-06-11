@@ -3,7 +3,7 @@ package com.shary.app.viewmodels.field
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.Field
-import com.shary.app.repositories.`interface`.FieldRepository
+import com.shary.app.repositories.fields.FieldRepository
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow

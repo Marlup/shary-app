@@ -7,26 +7,9 @@ import com.shary.app.Field
 import org.json.JSONObject
 import java.io.File
 import java.io.StringWriter
-import java.nio.file.Path
 import java.util.regex.Pattern
 
 object UtilsFunctions {
-
-    fun resourcePath(context: Context, relativePath: String): File {
-        return File(context.filesDir, relativePath) //.absolutePath
-    }
-
-    fun isDirEmpty(path: String): Boolean {
-        val file = File(path)
-        return file.isDirectory && file.list()?.isEmpty() == true
-    }
-
-    fun loadUserCredentials(): Pair<String, String> {
-        // TODO: Replace with secure storage method (e.g., EncryptedSharedPreferences)
-        val senderEmail = "dummy_email@example.com"
-        val senderPassword = "ugtt iggn nnni dchj"
-        return Pair(senderEmail, senderPassword)
-    }
 
     fun buildFileFromFields(field: List<Field>, fileFormat: String = "json"): String? {
         return when (fileFormat) {
@@ -82,11 +65,13 @@ object UtilsFunctions {
     }
 
     fun makeStringListFromFields(fields: List<Field>): String {
-        return fields.joinToString(separator = "\n\t") { field -> "· $field.key: $field.value" }
+        return fields.joinToString(separator = "\n\t") { field ->
+            "- ${field.key.toString()}: ${field.value.toString()}"
+        }
     }
 
     fun makeStringListFromKeys(keys: List<String>): String {
-        return keys.joinToString(separator = "\n\t") { key -> "· $key" }
+        return keys.joinToString(separator = "\n\t") { key -> "- $key" }
     }
 
     fun informationPanel(context: Context, panelName: String, message: String) {
