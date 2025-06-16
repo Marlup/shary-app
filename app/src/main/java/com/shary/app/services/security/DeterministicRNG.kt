@@ -3,42 +3,31 @@ package com.shary.app.services.security
 import java.math.BigInteger
 import java.security.MessageDigest
 
-class DeterministicRNG(private val seed: ByteArray) {
-    private var counter: Int = 0
+class DeterministicRNG(seed: ByteArray) {
+    private var state: ByteArray = sha256(seed)
 
-    private fun getBytes(n: Int): ByteArray {
-        val output = mutableListOf<Byte>()
-        while (output.size < n) {
-            val counterBytes = counter.toBigEndianBytes()
-            val digest = MessageDigest.getInstance("SHA-256")
-            digest.update(seed)
-            digest.update(counterBytes)
-            output.addAll(digest.digest().toList())
-            counter++
+    fun nextBytes(n: Int): ByteArray {
+        val output = ByteArray(n)
+        var offset = 0
+        while (offset < n) {
+            state = sha256(state)
+            val chunkSize = minOf(n - offset, state.size)
+            System.arraycopy(state, 0, output, offset, chunkSize)
+            offset += chunkSize
         }
-        return output.take(n).toByteArray()
+        return output
     }
 
-    private fun getInt(bits: Int): BigInteger {
-        val nbytes = (bits + 7) / 8
-        return BigInteger(1, getBytes(nbytes))
+    fun nextPrime(bits: Int): BigInteger {
+        var candidate: BigInteger
+        do {
+            val bytes = nextBytes((bits + 7) / 8)
+            candidate = BigInteger(1, bytes).setBit(bits - 1) // asegurar tamaño
+        } while (!candidate.isProbablePrime(100))
+        return candidate
     }
 
-    fun getPrime(bits: Int): BigInteger {
-        while (true) {
-            val candidate = getInt(bits).setBit(0) // Force odd number
-            if (candidate.isProbablePrime(40)) {
-                return candidate
-            }
-        }
-    }
-
-    private fun Int.toBigEndianBytes(): ByteArray {
-        return byteArrayOf(
-            ((this shr 24) and 0xFF).toByte(),
-            ((this shr 16) and 0xFF).toByte(),
-            ((this shr 8) and 0xFF).toByte(),
-            (this and 0xFF).toByte()
-        )
+    private fun sha256(data: ByteArray): ByteArray {
+        return MessageDigest.getInstance("SHA-256").digest(data)
     }
 }

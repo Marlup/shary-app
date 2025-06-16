@@ -17,7 +17,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.core.dependencyContainer.DependencyContainer
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.ui.screens.home.utils.Screen
@@ -129,12 +129,12 @@ fun LoginScreen(
                     val message = validateLoginCredentials(username, password)
                     if (message.isBlank()) {
                         // Generate keys on the fly
-                        session.generateKeys(password, username)
+                        //session.generateKeys(password, username)
 
                         // Try to login (check credentials)
                         if (session.login(context, username, password)) {
                             scope.launch {
-                                val email = session.email.toString()
+                                val email = session.sessionEmail
 
                                 if (cloudService.isUserRegistered(email)) {
                                     Toast.makeText(
@@ -150,7 +150,10 @@ fun LoginScreen(
                             }
                             navController.navigate(Screen.Home.route)
                         } else {
-                            Toast.makeText(context, "Invalid credentials", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "Invalid credentials",
+                                Toast.LENGTH_SHORT).show()
                         }
                     }
                     else {

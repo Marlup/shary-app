@@ -26,7 +26,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.file.FileService
 import com.shary.app.ui.screens.utils.GoBackButton
 import com.shary.app.ui.screens.utils.MatchingDialog

@@ -5,12 +5,12 @@ import androidx.datastore.core.DataStore
 import com.shary.app.Field
 import com.shary.app.FieldList
 import com.shary.app.datastore.fieldListDataStore
-import com.shary.app.services.security.CryptographyManager
+import com.shary.app.services.security.CryptoManager
 import kotlinx.coroutines.flow.first
 
 class FieldRepositoryImpl(
     context: Context,
-    private val cryptographyManager: CryptographyManager
+    private val cryptographyManager: CryptoManager
 ) : FieldRepository {
     private val dataStore: DataStore<FieldList> = context.fieldListDataStore
     

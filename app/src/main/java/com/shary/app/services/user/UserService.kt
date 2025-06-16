@@ -1,7 +1,7 @@
 package com.shary.app.services.user
 
 import com.shary.app.User
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 
 class UserService(
     private val session: Session

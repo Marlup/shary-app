@@ -1,8 +1,12 @@
 package com.shary.app.services.security.securityUtils
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
+import com.shary.app.core.constants.Constants.PATH_AUTHENTICATION
+import com.shary.app.core.constants.Constants.PATH_AUTH_SIGNATURE
 import org.json.JSONObject
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -17,7 +21,25 @@ import javax.crypto.spec.SecretKeySpec
 
 object SecurityUtils {
 
-    fun getCurrentUtc(format: String = "iso"): Any {
+    fun signatureFile(context: Context): File {
+        val dir = File(context.filesDir, PATH_AUTH_SIGNATURE)
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, "signature.json")
+    }
+
+    fun credentialsFile(context: Context): File {
+        val dir = File(context.filesDir, PATH_AUTHENTICATION)
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, ".credentials")
+    }
+
+    private fun timestampFile(context: Context): File {
+        val dir = File(context.filesDir, PATH_AUTHENTICATION)
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, "credentials.timestamp")
+    }
+
+    private fun getCurrentUtc(format: String = "iso"): Any {
         val now = Date()
         return when (format) {
             "timestamp" -> now.time / 1000
@@ -94,7 +116,7 @@ object SecurityUtils {
     }
 
     fun makeUserSalt(user: String): ByteArray {
-        return "shary_creds.$user".toByteArray(StandardCharsets.UTF_8)
+        return user.toByteArray(StandardCharsets.UTF_8)
     }
 
     // --- Password hashing ---
@@ -108,8 +130,7 @@ object SecurityUtils {
     }
 
     // --- Base 64 ---
-    //fun base64Encode(data: Pair<ByteArray, ByteArray>): String = Base64.encodeToString(data, Base64.NO_WRAP)
-    //fun base64Decode(encoded: String): ByteArray = Base64.decode(encoded, Base64.NO_WRAP)
+    fun base64Decode(encoded: String): ByteArray = Base64.decode(encoded, Base64.NO_WRAP)
     fun base64Encode(data: ByteArray): String = Base64.encodeToString(data, Base64.NO_WRAP)
 
     // --- Json Hash ---
@@ -124,5 +145,16 @@ object SecurityUtils {
 
     fun getTimestampAfterExpiry(baseTimestamp: Long = getCurrentUtcTimestamp(), extraTime: Int = 3600): Long {
         return baseTimestamp + extraTime
+    }
+
+    fun loadOrCreateTimestamp(context: Context): String {
+        val file = timestampFile(context)
+        return if (file.exists()) {
+            file.readText()
+        } else {
+            val timestamp = System.currentTimeMillis().toString()
+            file.writeText(timestamp)
+            timestamp
+        }
     }
 }

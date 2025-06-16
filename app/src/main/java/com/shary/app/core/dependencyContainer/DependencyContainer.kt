@@ -2,10 +2,10 @@ package com.shary.app.core.dependencyContainer
 
 import android.content.Context
 import com.shary.app.controller.Controller
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.repositories.fields.FieldRepositoryImpl
 import com.shary.app.repositories.users.UserRepositoryImpl
-import com.shary.app.services.security.CryptographyManager
+import com.shary.app.services.security.CryptoManager
 import com.shary.app.services.bluetooth.BluetoothService
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.services.email.EmailService
@@ -38,13 +38,13 @@ object DependencyContainer {
         // ---- Security ----
         val rsaCrypto = RsaCrypto
         val aesCrypto = AesCrypto
-        val cryptographyManager = CryptographyManager
+        val cryptographyManager = CryptoManager
         cryptographyManager.inject(rsaCrypto, AesCrypto)
         register("cryptography_manager", cryptographyManager)
 
         // ---- Session ----
         val session = Session
-        Session.cryptographyManager = CryptographyManager
+        Session.cryptoManager = CryptoManager
         register("session", session)
 
         // ---- Repositories ----

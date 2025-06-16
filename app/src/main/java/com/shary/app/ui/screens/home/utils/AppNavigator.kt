@@ -6,7 +6,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.core.dependencyContainer.DependencyContainer
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.ui.screens.fields.FieldsScreen

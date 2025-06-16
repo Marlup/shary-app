@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,25 +38,29 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import com.shary.app.ui.screens.utils.Constants.FIELD_TOOLTIP_ALIVE_DURATION
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun ItemRow(
     onEditClick: () -> Unit,
+    onAddItemCopyClick: () -> Unit,
     getTitle: () -> String,
     getSubtitle: () -> String,
     getTooltip: () -> String,
     getCopyToClipboard: () -> String
 ) {
-    var showTooltip by remember { mutableStateOf(false) }
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showTooltip by remember { mutableStateOf(false) }
+
     LaunchedEffect(showTooltip) {
         if (showTooltip) {
-            delay(2000)
+            delay(FIELD_TOOLTIP_ALIVE_DURATION)
             showTooltip = false
         }
     }
@@ -64,13 +71,11 @@ fun ItemRow(
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Columna izquierda: texto
         Column(
             modifier = Modifier
                 .weight(0.6f)
                 .padding(end = 4.dp)
         ) {
-
             Text(
                 text = getTitle(),
                 style = MaterialTheme.typography.bodyLarge,
@@ -86,76 +91,109 @@ fun ItemRow(
             )
         }
 
-        // Columna derecha: iconos
-        Column(
-            modifier = Modifier,
-            horizontalAlignment = Alignment.End
+        // Deployable menu at the right end
+        Box(
+            modifier = Modifier.wrapContentSize(Alignment.TopEnd)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Filled.MoreHoriz,
+                    contentDescription = "Open Actions Menu",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
             ) {
-                val tooltip = getTooltip()
-                if (tooltip.isNotBlank()) {
-                    Box {
-                        IconButton(onClick = { showTooltip = true }) {
+                DropdownMenuItem(
+                    text = { Text("Edit") },
+                    onClick = {
+                        menuExpanded = false
+                        onEditClick()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit"
+                        )
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Add Copy") },
+                    onClick = {
+                        menuExpanded = false
+                        onAddItemCopyClick()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.CopyAll,
+                            contentDescription = "Add Copy"
+                        )
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = { Text("Copy") },
+                    onClick = {
+                        menuExpanded = false
+                        val textToCopy = getCopyToClipboard()
+                        scope.launch {
+                            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("row", textToCopy)))
+                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy"
+                        )
+                    }
+                )
+
+                if (getTooltip().isNotBlank()) {
+                    DropdownMenuItem(
+                        text = { Text("Show Details") },
+                        onClick = {
+                            menuExpanded = false
+                            showTooltip = true
+                        },
+                        leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Info,
-                                contentDescription = "More Info",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .size(10.dp)
+                                contentDescription = "Info"
                             )
                         }
-
-                        if (showTooltip) {
-                            Popup(
-                                alignment = Alignment.TopEnd,
-                                offset = IntOffset(0, -80),
-                                onDismissRequest = { showTooltip = false }
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    tonalElevation = 8.dp,
-                                    modifier = Modifier
-                                        .padding(4.dp)
-                                        .wrapContentSize()
-                                ) {
-                                    Text(
-                                        text = tooltip,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.padding(8.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                IconButton(onClick = { onEditClick() }) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .size(20.dp)
                     )
                 }
-                IconButton(onClick = {
-                    val textToCopy = getCopyToClipboard()
-                    scope.launch {
-                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("row", textToCopy)))
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                    }
-                }) {
-                    Icon(
-                        Icons.Filled.ContentCopy,
-                        contentDescription = "Copy to clipboard",
-                        modifier = Modifier
-                            .size(20.dp)
+            }
+        }
+
+        // Popup del tooltip
+        if (showTooltip) {
+            Popup(
+                alignment = Alignment.TopEnd,
+                offset = IntOffset(0, -80),
+                onDismissRequest = { showTooltip = false }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    tonalElevation = 8.dp,
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .wrapContentSize()
+                ) {
+                    Text(
+                        text = getTooltip(),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(8.dp)
                     )
                 }
             }
         }
     }
 }
+

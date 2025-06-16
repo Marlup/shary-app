@@ -2,10 +2,10 @@ package com.shary.app.services.cloud
 
 import android.util.Log
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.core.enums.StatusDataSentDb
-import com.shary.app.services.security.CryptographyManager
-import com.shary.app.services.security.CryptographyManager.getPubKeyFromString
+import com.shary.app.services.security.CryptoManager
+import com.shary.app.services.security.CryptoManager.getPubKeyFromString
 import com.shary.app.services.security.securityUtils.SecurityUtils.base64Encode
 import com.shary.app.services.security.securityUtils.SecurityUtils.getCurrentUtcTimestamp
 import com.shary.app.services.security.securityUtils.SecurityUtils.getTimestampAfterExpiry
@@ -35,7 +35,7 @@ import java.io.IOException
 
 class CloudService(
     private val session: Session,
-    private val cryptographyManager: CryptographyManager
+    private val cryptographyManager: CryptoManager
 ): ICloudService {
 
     //private val client = OkHttpClient()
@@ -53,13 +53,13 @@ class CloudService(
         try {
             val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
-                session.isOnline = response.isSuccessful
+                session.isSessionOnline = response.isSuccessful
             }
         } catch (e: IOException) {
             Log.e("CloudService", "Ping failed: ${e.message}")
-            session.isOnline = false
+            session.isSessionOnline = false
         }
-        session.isOnline
+        session.isSessionOnline
     }
 
     override suspend fun isUserRegistered(user: String):
@@ -77,7 +77,7 @@ class CloudService(
     private suspend fun runUploadUser(user: String):
             Pair<Boolean, String> = withContext(Dispatchers.IO)
     {
-        if (!session.isOnline && !sendPing()) return@withContext Pair(false, "")
+        if (!session.isSessionOnline && !sendPing()) return@withContext Pair(false, "")
 
         val userHash = hashMessageToString(user)
         val pubKey = cryptographyManager.getPubKeyToString()
@@ -125,7 +125,7 @@ class CloudService(
     }
 
     private suspend fun runDeleteUser(user: String): Boolean {
-        if (!session.isOnline && !sendPing()) return false
+        if (!session.isSessionOnline && !sendPing()) return false
 
         val userHash = hashMessageToString(user)
         val (signature, _) = makeCredentials(listOf(userHash))
@@ -133,7 +133,7 @@ class CloudService(
         val request = buildPostRequest(
             ENDPOINT_DELETE_USER,
             payload,
-            authHeader(session.authToken)
+            authHeader(session.sessionAuthToken)
         )
 
         return try {
@@ -162,7 +162,7 @@ class CloudService(
         consumers: List<String>,
         onRequest: Boolean
     ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO){
-        if (!session.isOnline && !sendPing()) return@withContext emptyMap()
+        if (!session.isSessionOnline && !sendPing()) return@withContext emptyMap()
         if (fields.isEmpty() || consumers.isEmpty()) return@withContext emptyMap()
 
         val data = if (onRequest)
@@ -199,7 +199,7 @@ class CloudService(
             val request = buildPostRequest(
                 ENDPOINT_SEND_DATA,
                 payload,
-                authHeader(session.authToken)
+                authHeader(session.sessionAuthToken)
             )
 
             try {

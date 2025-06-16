@@ -1,7 +1,7 @@
 package com.shary.app.services.requestField
 
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 
 class RequestFieldService(
     private val session: Session

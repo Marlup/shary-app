@@ -4,7 +4,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.compose.rememberNavController
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.field.FieldService
 import com.shary.app.ui.screens.fields.FieldsScreen
 import com.shary.app.viewmodels.field.FieldViewModel

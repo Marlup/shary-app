@@ -20,7 +20,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.shary.app.User
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.user.UserService
 import com.shary.app.ui.screens.utils.GoBackButton
 import com.shary.app.ui.screens.utils.ItemRow
@@ -52,6 +52,10 @@ fun UsersScreen(
     // ---- Add dialog ----
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+
+    // ---- Add Copy dialog ----
+    var openAddUserCopyDialog by remember { mutableStateOf(false) }
+    var targetAddUserCopy by remember { mutableStateOf<User?>(null) }
 
     // ---- Editing/Updating field ----
     var editingUser by remember { mutableStateOf<User?>(null) }
@@ -211,7 +215,12 @@ fun UsersScreen(
                                             user.username,
                                             user.email
                                         )
-                                        editedValue = user.email },
+                                        editedValue = user.email
+                                                  },
+                                    onAddItemCopyClick = {
+                                        openAddUserCopyDialog = true
+                                        targetAddUserCopy = user
+                                    },
                                     getTitle = { user.username },
                                     getSubtitle = { "- ${user.email}" },
                                     getTooltip = { "" },
@@ -251,7 +260,35 @@ fun UsersScreen(
                             // Close dialog if successful user added
                             openAddDialog = !success
                             val alterMessage = if (success) "added" else "already exists"
-                            snackbarMessage = "Email '$email' $alterMessage"
+                            snackbarMessage = "User '$email' $alterMessage"
+                        }
+                    } else {
+                        snackbarMessage = "Username and email are required"
+                    }
+                }
+            )
+        }
+
+        // --- Logic for Add Field Copy Dialog ---
+        if (openAddUserCopyDialog) {
+            AddCopyUserDialog(
+                targetUser = targetAddUserCopy!!,
+                onDismiss = { openAddUserCopyDialog = false },
+                onAddUser = { username, email ->
+                    if (username.isNotBlank() && email.isNotBlank()) {
+                        val user = User
+                            .newBuilder()
+                            .setUsername(username)
+                            .setEmail(email)
+                            .setDateAdded(Instant.now().toEpochMilli()) // simple date example
+                            .build()
+
+                        viewModel.viewModelScope.launch {
+                            val success = viewModel.saveUser(user).await()
+                            // Close dialog if successful user added
+                            openAddDialog = !success
+                            val alterMessage = if (success) "added" else "already exists"
+                            snackbarMessage = "Copied user '$email' $alterMessage"
                         }
                     } else {
                         snackbarMessage = "Username and email are required"

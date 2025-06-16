@@ -14,7 +14,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.PasswordOutlinedTextField
@@ -120,17 +120,15 @@ fun LogupScreen(
                     val message = validateLogupCredentials(email, username, password, confirmPassword)
                     if (message.isBlank()) {
                         // Cache Credentials from UI
-                        session.cacheCredentials(email, username, password)
-
                         // Generate keys on the fly
-                        session.generateKeys(password, username)
+                        session.logup(context, username, email, password)
 
                         scope.launch {
                             // Upload user to the cloud
                             val (success, token) = cloudService.uploadUser(email)
                             if (success) {
                                 // Set verification token
-                                session.authToken = token
+                                session.sessionAuthToken = token
                             } else {
                                 Toast.makeText(context,
                                     "The user couldn't be uploaded to the cloud",

@@ -1,7 +1,7 @@
 package com.shary.app.services.field
 
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 
 class FieldService(
     private val session: Session

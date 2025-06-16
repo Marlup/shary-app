@@ -7,7 +7,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.email.Constants.FILE_FORMATS
 import com.shary.app.services.email.Constants.MSG_DEFAULT_SEND_FILENAME
 import com.shary.app.utils.UtilsFunctions.buildFileFromFields
@@ -31,7 +31,7 @@ class EmailService(
             return false
         }
         val subject = "Shary message with ${records.size} fields"
-        val filename = (filenameParam ?: "$MSG_DEFAULT_SEND_FILENAME${session.username}") + ".$fileFormat"
+        val filename = (filenameParam ?: "$MSG_DEFAULT_SEND_FILENAME${session.sessionUsername}") + ".$fileFormat"
 
         val fileData = buildFileFromFields(records, fileFormat)
         if (fileData != null) {

@@ -20,8 +20,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.shary.app.Field
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.field.FieldService
+import com.shary.app.ui.screens.fields.utils.AddCopyFieldDialog
 import com.shary.app.ui.screens.fields.utils.AddFieldDialog
 import com.shary.app.ui.screens.utils.GoBackButton
 import com.shary.app.ui.screens.utils.ItemRow
@@ -52,6 +53,10 @@ fun FieldsScreen(
     // ---- Add dialog ----
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+
+    // ---- Add Copy dialog ----
+    var openAddFieldCopyDialog by remember { mutableStateOf(false) }
+    var targetAddFieldCopy by remember { mutableStateOf<Field?>(null) }
 
     // ---- Editing/Updating field ----
     var editingField by remember { mutableStateOf<Field?>(null) }
@@ -216,6 +221,10 @@ fun FieldsScreen(
                                         editingField = field
                                         editedValue = field.value
                                     },
+                                    onAddItemCopyClick = {
+                                        openAddFieldCopyDialog = true
+                                        targetAddFieldCopy = field
+                                                          },
                                     getTitle = { field.key },
                                     getSubtitle = { "- ${field.value}" },
                                     getTooltip = { field.keyAlias },
@@ -239,6 +248,7 @@ fun FieldsScreen(
         }
     }
 
+    // --- Logic for Add Field Dialog ---
     if (openAddDialog) {
         AddFieldDialog(
             onDismiss = { openAddDialog = false },
@@ -258,6 +268,35 @@ fun FieldsScreen(
                         openAddDialog = !success
                         val alterMessage = if (success) "added" else "already exists"
                         snackbarMessage = "Field '$key' $alterMessage"
+                    }
+                } else {
+                    snackbarMessage = "Key and value are required"
+                }
+            }
+        )
+    }
+
+    // --- Logic for Add Field Copy Dialog ---
+    if (openAddFieldCopyDialog) {
+        AddCopyFieldDialog (
+            targetField = targetAddFieldCopy!!,
+            onDismiss = { openAddFieldCopyDialog = false },
+            onAddField = { key, keyAlias, value ->
+                if (key.isNotBlank() && value.isNotBlank()) {
+                    val field = Field
+                        .newBuilder()
+                        .setKey(key)
+                        .setKeyAlias(keyAlias)
+                        .setValue(value)
+                        .setDateAdded(Instant.now().toEpochMilli())
+                        .build()
+
+                    viewModel.viewModelScope.launch {
+                        val success = viewModel.saveField(field).await()
+                        // Close dialog if successful field added
+                        openAddFieldCopyDialog = !success
+                        val alterMessage = if (success) "added" else "already exists"
+                        snackbarMessage = "Copied field '$key' $alterMessage"
                     }
                 } else {
                     snackbarMessage = "Key and value are required"

@@ -1,5 +1,6 @@
 package com.shary.app.screensTests
 
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -7,7 +8,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.services.cloud.CloudService
 import com.shary.app.ui.screens.login.LoginScreen
 import io.mockk.every
@@ -35,6 +36,8 @@ class LoginScreenTest {
     val composeTestRule = createComposeRule()
 
     @MockK
+    private lateinit var mockContext: Context
+    @MockK
     private lateinit var mockSession: Session
     @MockK
     private lateinit var mockCloudService: CloudService
@@ -43,6 +46,7 @@ class LoginScreenTest {
 
     @Before
     fun setUp() {
+        mockContext = mockk(relaxed = true)
         mockSession = mockk(relaxed = true)
         mockCloudService = mockk(relaxed = true)
     }
@@ -75,8 +79,8 @@ class LoginScreenTest {
 
     @Test
     fun loginScreen_validCredentials_triggersSessionMethods() {
-        every { mockSession.tryLogin(any(), "user", "pass") } returns true
-        every { mockSession.email } returns "user@example.com"
+        every { mockSession.login(any(), "user", "pass") } returns true
+        every { mockSession.sessionEmail } returns "user@example.com"
 
         setupLoginScreen()
 
@@ -84,7 +88,7 @@ class LoginScreenTest {
         composeTestRule.onNodeWithText("Password").performTextInput("pass")
         composeTestRule.onNodeWithText("Login").performClick()
 
-        verify { mockSession.generateKeys("pass", "user") }
-        verify { mockSession.tryLogin(any(), "user", "pass") }
+        verify { mockSession.logup(mockContext, "user", "email", "pass") }
+        verify { mockSession.login(mockContext, "user", "pass") }
     }
 }

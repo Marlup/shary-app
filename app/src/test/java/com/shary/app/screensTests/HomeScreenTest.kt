@@ -3,7 +3,7 @@ package com.shary.app.screensTests
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.compose.rememberNavController
-import com.shary.app.core.Session
+import com.shary.app.core.session.Session
 import com.shary.app.Field
 import com.shary.app.services.bluetooth.BluetoothService
 import com.shary.app.services.cloud.CloudService

@@ -3,6 +3,7 @@ package com.shary.app.ui.screens.utils
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -27,9 +28,8 @@ fun PasswordOutlinedTextField(
         singleLine = true,
         visualTransformation = if (isVisible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
-            val image = if (isVisible)
-                Icons.Default.Lock
-            else Icons.Default.Lock
+            val image = if (isVisible) Icons.Filled.LockOpen
+            else Icons.Filled.Lock
 
             val description = if (isVisible) "Hide password" else "Show password"
 
