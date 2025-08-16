@@ -9,7 +9,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.shary.app.core.session.Session
-import com.shary.app.services.cloud.CloudService
+import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
 import com.shary.app.ui.screens.login.LoginScreen
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
@@ -40,7 +40,7 @@ class LoginScreenTest {
     @MockK
     private lateinit var mockSession: Session
     @MockK
-    private lateinit var mockCloudService: CloudService
+    private lateinit var mockCloudServiceImpl: CloudServiceImpl
     @MockK
     private lateinit var navController: NavHostController
 
@@ -48,7 +48,7 @@ class LoginScreenTest {
     fun setUp() {
         mockContext = mockk(relaxed = true)
         mockSession = mockk(relaxed = true)
-        mockCloudService = mockk(relaxed = true)
+        mockCloudServiceImpl = mockk(relaxed = true)
     }
 
     @After
@@ -62,7 +62,7 @@ class LoginScreenTest {
             LoginScreen(
                 navController = navController,
                 session = mockSession,
-                cloudService = mockCloudService
+                cloudService = mockCloudServiceImpl
             )
         }
     }

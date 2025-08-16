@@ -1,14 +1,11 @@
 package com.shary.app.ui.screens.home.utils
 
 sealed class SendOption(val label: String) {
-    object Email : SendOption("Email")
-    object Cloud : SendOption("Cloud")
-    object Whatsapp : SendOption("Whatsapp")
-    object Telegram : SendOption("Telegram")
-    object Bluetooth : SendOption("Bluetooth")
+    data object Email : SendOption("Email")
+    data object Cloud : SendOption("Cloud")
 
     companion object {
-        val all: List<SendOption> = listOf(Email, Cloud, Whatsapp, Telegram, Bluetooth)
+        val all: List<SendOption> = listOf(Email, Cloud)
 
         fun fromLabel(label: String): SendOption? =
             all.find { it.label == label } }

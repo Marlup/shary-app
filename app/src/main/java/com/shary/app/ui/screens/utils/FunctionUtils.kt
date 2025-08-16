@@ -1,7 +1,7 @@
 package com.shary.app.ui.screens.utils
 
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import com.shary.app.Field
+import com.shary.app.core.domain.models.FieldDomain
 
 object FunctionUtils {
 
@@ -9,8 +9,8 @@ object FunctionUtils {
         storageIdx: Int?,
         requestIdx: Int?,
         matches: SnapshotStateList<Triple<Int, Int, Int>>,
-        storedFieldsSelection: SnapshotStateList<Field>,
-        storedFields: List<Field>,
+        storedFieldsSelection: SnapshotStateList<FieldDomain>,
+        storedFields: List<FieldDomain>,
         freeLabelsFromUnmatched: SnapshotStateList<Int>,
         isStorageFirst: Boolean,
         onUnselect: () -> Unit,

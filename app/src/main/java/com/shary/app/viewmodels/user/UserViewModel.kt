@@ -2,70 +2,187 @@ package com.shary.app.viewmodels.user
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shary.app.User
-import com.shary.app.repositories.users.UserRepository
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
+import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.session.Session
+import com.shary.app.core.domain.interfaces.repositories.UserRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
-class UserViewModel(
-    private val userRepository: UserRepository
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val userRepository: UserRepository,
+    private val session: Session
 ) : ViewModel() {
 
-    private val _users = MutableStateFlow<List<User>>(emptyList())
-    val users: StateFlow<List<User>> get() = _users
+    // Domain state exposed to UI
+    private val _users = MutableStateFlow<List<UserDomain>>(emptyList())
+    val users: StateFlow<List<UserDomain>> = _users.asStateFlow()
 
-    // Interno: mutable, solo para este ViewModel
-    private val _selectedEmails = MutableStateFlow<List<String>>(emptyList())
-    private val _selectedPhoneNumber = MutableStateFlow<String>("")
+    private val _selectedUsers = MutableStateFlow<List<UserDomain>>(emptyList())
+    val selectedUsers: StateFlow<List<UserDomain>> = _selectedUsers.asStateFlow()
 
-    // Externo: inmutable para la UI
-    val selectedEmails: StateFlow<List<String>> = _selectedEmails
-    val selectedPhoneNumber: StateFlow<String> = _selectedPhoneNumber
+    private val _selectedPhoneNumber = MutableStateFlow<String?>(null)
+    val selectedPhoneNumber: StateFlow<String?> = _selectedPhoneNumber.asStateFlow()
 
-    init {
-        loadUsers()
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    // One-shot events for UI (snackbar/toast)
+    private val _events = MutableSharedFlow<UserEvent>(extraBufferCapacity = 1)
+    val events: SharedFlow<UserEvent> = _events.asSharedFlow()
+
+    // Serialize writes to avoid concurrent edits on the same store
+    private val writeMutex = Mutex()
+
+    init { refresh() }
+    // If you prefer reactive updates:
+    // init {
+    //   viewModelScope.launch {
+    //     userRepository.users.collect { _users.value = it }
+    //   }
+    // }
+
+    // ------------------------- Selection helpers -------------------------
+
+    fun toggleUser(user: UserDomain) = _selectedUsers.update { current ->
+        if (user in current) current - user else current + user
     }
 
-    fun toggleUserSelection(email: String, isSelected: Boolean) {
-        _selectedEmails.update { current ->
-            if (isSelected) current + email else current - email
-        }
+    fun setSelectedUsers(users: List<UserDomain>) {
+        _selectedUsers.value = users.distinctBy { it.email.trim().lowercase() }
+        session.setSelectedUsers(_selectedUsers.value) // <— persistencia cross-screen
     }
 
-    fun clearSelectedEmails() {
-        _selectedEmails.value = emptyList()
+    fun setPhoneNumber(number: String?) {
+        _selectedPhoneNumber.value = number
+        session.setSelectedPhoneNumber(number) // opcional para WhatsApp/Telegram
     }
+    fun clearSelectedUsers() { session.resetSelectedUsers() }
 
-    private fun loadUsers() {
+    // ----------------------------- Loading -------------------------------
+
+    private fun refresh() {
         viewModelScope.launch {
-            _users.value = userRepository.getAllUsers()
+            _isLoading.value = true
+            val list = withContext(Dispatchers.IO) { userRepository.getAllUsers() }
+            _users.value = list
+            _isLoading.value = false
         }
     }
 
-    private suspend fun asyncSaveUser(user: User): Boolean {
-        val success = userRepository.saveUserIfNotExists(user)
-        loadUsers() // Recargar la lista
-        return success
-    }
+    // ----------------------------- Commands ------------------------------
 
-    fun saveUser(user: User): Deferred<Boolean> {
-        return viewModelScope.async {
-            asyncSaveUser(user)
+    /** Save user if not exists. Screen calls this method directly (no coroutines in UI). */
+    fun saveUser(user: UserDomain) {
+        val normalized = user.copy(
+            username = user.username.trim(),
+            email = user.email.trim()
+        )
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock { userRepository.saveUserIfNotExists(normalized) }
+                }
+            }
+            _isLoading.value = false
+
+            result.onSuccess { created ->
+                if (created) {
+                    _events.tryEmit(UserEvent.Saved(normalized))
+                    refresh()
+                } else {
+                    _events.tryEmit(UserEvent.AlreadyExists(normalized.email))
+                }
+            }.onFailure { e ->
+                _events.tryEmit(UserEvent.Error(e))
+            }
         }
     }
 
-    private suspend fun asyncDeleteUser(email: String) {
-        userRepository.deleteUser(email)
-        loadUsers() // Recargar la lista
-    }
+    /** Upsert convenience: replace if email exists, otherwise add. */
+    fun upsertUser(user: UserDomain) {
+        val normalized = user.copy(
+            username = user.username.trim(),
+            email = user.email.trim()
+        )
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock { userRepository.upsertUser(normalized) } // returns created:boolean
+                }
+            }
+            _isLoading.value = false
 
-    fun deleteUser(email: String): Deferred<Unit> {
-        return viewModelScope.async {
-            asyncDeleteUser(email)
+            result.onSuccess { created ->
+                if (created) {
+                    _events.tryEmit(UserEvent.Saved(normalized))
+                }
+                // You could emit a specific "Updated" event if desired
+                refresh()
+            }.onFailure { e ->
+                _events.tryEmit(UserEvent.Error(e))
+            }
         }
     }
+
+    /** Delete by full user (uses email as key). */
+    fun deleteUser(user: UserDomain) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock { userRepository.deleteUser(user.email) }
+                }
+            }
+            _isLoading.value = false
+
+            result.onSuccess { removed ->
+                if (removed) {
+                    _events.tryEmit(UserEvent.Deleted(user.email))
+                    refresh()
+                } else {
+                    // Not found; optional: emit a specific event
+                }
+            }.onFailure { e ->
+                _events.tryEmit(UserEvent.Error(e))
+            }
+        }
+    }
+
+    /** Batch delete by emails. */
+    fun deleteUsers(users: Collection<UserDomain>) {
+        if (users.isEmpty()) return
+        val emails = users.map { it.email }
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock { userRepository.deleteUsers(emails) }
+                }
+            }
+            _isLoading.value = false
+
+            result.onSuccess { removedCount ->
+                if (removedCount > 0) refresh()
+            }.onFailure { e ->
+                _events.tryEmit(UserEvent.Error(e))
+            }
+        }
+    }
+}
+
+// UI events for UserViewModel
+sealed interface UserEvent {
+    data class Saved(val user: UserDomain) : UserEvent
+    data class AlreadyExists(val email: String) : UserEvent
+    data class Deleted(val email: String) : UserEvent
+    data class Error(val throwable: Throwable) : UserEvent
 }

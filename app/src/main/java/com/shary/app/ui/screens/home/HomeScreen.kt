@@ -21,34 +21,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.shary.app.core.session.Session
-import com.shary.app.services.bluetooth.BluetoothService
-import com.shary.app.services.cloud.CloudService
-import com.shary.app.services.email.EmailService
-import com.shary.app.services.messaging.TelegramService
-import com.shary.app.services.messaging.WhatsAppService
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.AppTopBar
-import com.shary.app.ui.screens.home.utils.BluetoothDeviceSelectorDialog
 import com.shary.app.ui.screens.home.utils.SendOption
 import com.shary.app.ui.screens.home.utils.SendServiceDialog
 import com.shary.app.ui.screens.home.utils.ShareFieldsGenericButton
-import com.shary.app.utils.FormattingUtils.makeKeyValueTextFromFields
 
 @SuppressLint("StateFlowValueCalledInComposition")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
+fun HomeScreen(navController: NavHostController) {
+
+    /*
     navController: NavHostController,
-    session: Session,
-    emailService: EmailService,
-    cloudService: CloudService,
-    whatsAppService: WhatsAppService,
-    telegramService: TelegramService,
-    bluetoothService: BluetoothService
-) {
+    emailServiceImpl: EmailServiceImpl,
+    cloudServiceImpl: CloudServiceImpl
+    */
+
     val context = LocalContext.current
+    val session: Session = hiltViewModel()
 
     // +++++ Selection Summary +++++
     var sendOption by remember { mutableStateOf<SendOption?>(null) }
@@ -57,28 +50,19 @@ fun HomeScreen(
     // ----- Bluetooth dialog -----
     var openBluetoothDialog by remember { mutableStateOf(false) }
 
+
     fun handleSendOption(option: SendOption) {
+        TODO()
+        /*
         when (option) {
-            SendOption.Email -> emailService.sendEmailViaClient(
+            SendOption.Email -> emailServiceImpl.sendEmail(
                 session.getSelectedFields(),
                 session.getSelectedEmails()
             )
             SendOption.Cloud -> Toast.makeText(context, "Currently on Development", Toast.LENGTH_SHORT).show()
-            SendOption.Whatsapp -> whatsAppService.sendFieldsToWhatsApp(
-                session.getSelectedFields(),
-                session.getSelectedPhoneNumber()
-            )
-            SendOption.Telegram -> telegramService.sendFieldsToTelegram(
-                session.getSelectedFields(),
-                session.getSelectedPhoneNumber()
-            )
-            SendOption.Bluetooth -> {
-                showSendDialog = false
-                openBluetoothDialog = true
-                return
-            }
         }
         showSendDialog = false
+        */
     }
 
     fun resetSelectedData() {
@@ -148,21 +132,10 @@ fun HomeScreen(
                     onSendConfirmed = {
                         showSendDialog = false
                         // Ejecuta aquí la lógica de envío
-                        sendOption?.let { handleSendOption(it) }
+                        //sendOption?.let { handleSendOption(it) }
+                        sendOption?.let { TODO() }
                     },
                     onCancel = { showSendDialog = false }
-                )
-            }
-
-            if (openBluetoothDialog) {
-                BluetoothDeviceSelectorDialog(
-                    bluetoothService = bluetoothService,
-                    dataToSend = makeKeyValueTextFromFields(session.getSelectedFields()),
-                    onDismiss = { openBluetoothDialog = false },
-                    onFinished = {
-                        openBluetoothDialog = false
-                        resetSelectedData()
-                    }
                 )
             }
 

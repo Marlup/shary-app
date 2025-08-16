@@ -6,8 +6,8 @@ import androidx.navigation.compose.rememberNavController
 import com.shary.app.core.session.Session
 import com.shary.app.Field
 import com.shary.app.services.bluetooth.BluetoothService
-import com.shary.app.services.cloud.CloudService
-import com.shary.app.services.email.EmailService
+import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
+import com.shary.app.infrastructure.services.email.EmailServiceImpl
 import com.shary.app.services.messaging.TelegramService
 import com.shary.app.services.messaging.WhatsAppService
 import com.shary.app.ui.screens.home.HomeScreen
@@ -24,8 +24,8 @@ class HomeScreenTest {
     val composeTestRule = createComposeRule()
 
     private lateinit var session: Session
-    private lateinit var emailService: EmailService
-    private lateinit var cloudService: CloudService
+    private lateinit var emailServiceImpl: EmailServiceImpl
+    private lateinit var cloudServiceImpl: CloudServiceImpl
     private lateinit var whatsappService: WhatsAppService
     private lateinit var telegramService: TelegramService
     private lateinit var bluetoothService: BluetoothService
@@ -37,8 +37,8 @@ class HomeScreenTest {
         every { session.selectedFields } returns MutableStateFlow(emptyList())
         every { session.selectedPhoneNumber } returns MutableStateFlow("+123456789")
 
-        emailService = mockk(relaxed = true)
-        cloudService = mockk(relaxed = true)
+        emailServiceImpl = mockk(relaxed = true)
+        cloudServiceImpl = mockk(relaxed = true)
         whatsappService = mockk(relaxed = true)
         telegramService = mockk(relaxed = true)
         bluetoothService = mockk(relaxed = true)
@@ -54,8 +54,8 @@ class HomeScreenTest {
             HomeScreen(
                 navController = rememberNavController(),
                 session = session,
-                emailService = emailService,
-                cloudService = cloudService,
+                emailServiceImpl = emailServiceImpl,
+                cloudServiceImpl = cloudServiceImpl,
                 whatsAppService = whatsappService,
                 telegramService = telegramService,
                 bluetoothService = bluetoothService

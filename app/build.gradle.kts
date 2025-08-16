@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     id("com.google.protobuf") version "0.9.4" // versión reciente
+    id("kotlin-kapt")
+    id("com.google.dagger.hilt.android")
 }
 
 protobuf {
@@ -71,6 +73,14 @@ android {
 }
 
 dependencies {
+    implementation (libs.bcprov.jdk15to18)
+
+    //noinspection GradleDependency
+    implementation (libs.hilt.android)
+    kapt(libs.hilt.android.compiler)
+    // If you use Hilt ViewModel:
+    implementation (libs.androidx.hilt.navigation.compose)
+
     // Core AndroidX
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

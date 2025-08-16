@@ -9,7 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.navigation.NavHostController
 import com.shary.app.core.session.Session
-import com.shary.app.services.cloud.CloudService
+import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
 import com.shary.app.ui.screens.logup.LogupScreen
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -26,7 +26,7 @@ class LogupScreenTest {
 
     private val mockNavController = mockk<NavHostController>(relaxed = true)
     private val mockSession = mockk<Session>(relaxed = true)
-    private val mockCloudService = mockk<CloudService>(relaxed = true)
+    private val mockCloudServiceImpl = mockk<CloudServiceImpl>(relaxed = true)
 
     @Test
     fun screen_shows_all_fields_and_button() {
@@ -34,7 +34,7 @@ class LogupScreenTest {
             LogupScreen(
                 navController = mockNavController,
                 session = mockSession,
-                cloudService = mockCloudService
+                cloudService = mockCloudServiceImpl
             )
         }
 
@@ -50,7 +50,7 @@ class LogupScreenTest {
             LogupScreen(
                 navController = mockNavController,
                 session = mockSession,
-                cloudService = mockCloudService
+                cloudService = mockCloudServiceImpl
             )
         }
 
@@ -65,13 +65,13 @@ class LogupScreenTest {
 
     @Test
     fun valid_fields_calls_session_and_navigates() {
-        coEvery { mockCloudService.uploadUser(any()) } returns Pair(true, "token123")
+        coEvery { mockCloudServiceImpl.uploadUser(any()) } returns Pair(true, "token123")
 
         composeTestRule.setContent {
             LogupScreen(
                 navController = mockNavController,
                 session = mockSession,
-                cloudService = mockCloudService
+                cloudService = mockCloudServiceImpl
             )
         }
 
@@ -84,7 +84,7 @@ class LogupScreenTest {
 
         coVerify { mockSession.cacheCredentials("test@email.com", "testuser", "Test1234$") }
         //coVerify { mockSession.generateKeys("Test1234$", "testuser") }
-        coVerify { mockCloudService.uploadUser("test@email.com") }
+        coVerify { mockCloudServiceImpl.uploadUser("test@email.com") }
         coVerify { mockSession.storeCachedCredentials(any()) }
         verify { mockNavController.navigate("login") }
     }

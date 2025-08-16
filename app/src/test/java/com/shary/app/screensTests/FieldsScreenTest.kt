@@ -4,9 +4,10 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.compose.rememberNavController
 import com.shary.app.Field
+import com.shary.app.core.domain.types.enums.UiFieldTag
 import com.shary.app.core.session.Session
 import com.shary.app.services.field.FieldService
-import com.shary.app.ui.screens.fields.FieldsScreen
+import com.shary.app.ui.screens.field.FieldsScreen
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.ViewModelFactory
 import io.mockk.*
@@ -76,7 +77,7 @@ class FieldsScreenTest {
     @Test
     fun editDialogAppears_whenFieldClicked() {
         every { mockFieldService.fieldToTriple(any()) } returns Triple("email", "mail", "test@abc.com")
-        every { mockFieldService.valuesToField(any(), any(), any()) } returns fakeFields[0]
+        every { mockFieldService.valuesToField(any(), any(), "", UiFieldTag.Unknown) } returns fakeFields[0]
 
         launchScreen()
         composeRule.onNodeWithText("test@abc.com").performClick()

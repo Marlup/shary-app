@@ -3,10 +3,15 @@ agp = "8.7.3"
 androidMail = "1.6.7"
 androidXTestVersion = "1.5.0"
 appcompatVersion = "1.7.0"
+bcprovJdk15to18 = "1.78.1"
 biometric = "1.2.0-alpha05"
 datastore = "1.1.6"
 datastorePreferences = "1.1.6"
 datastoreVersion = "1.1.6"
+hiltAndroid = "2.56.2"
+hiltAndroidCompiler = "2.56.2"
+hiltAndroidGradlePlugin = "2.56.2"
+hiltNavigationCompose = "1.2.0"
 kotlin = "2.0.0"
 coreKtx = "1.16.0"
 junit = "4.13.2"
@@ -49,8 +54,13 @@ androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "d
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastoreVersion" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
 androidx-datastore-v100 = { module = "androidx.datastore:datastore", version.ref = "datastoreVersion" }
+androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleRuntimeKtx" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+bcprov-jdk15to18 = { module = "org.bouncycastle:bcprov-jdk15to18", version.ref = "bcprovJdk15to18" }
+hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hiltAndroid" }
+hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hiltAndroidCompiler" }
+hilt-android-gradle-plugin = { module = "com.google.dagger:hilt-android-gradle-plugin", version.ref = "hiltAndroidGradlePlugin" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx_test_junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx_test_junit" }
 espresso_core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso_core" }

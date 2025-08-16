@@ -1,8 +1,6 @@
 // --- LoginScreen.kt ---
-
 package com.shary.app.ui.screens.login
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -13,75 +11,93 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.core.session.Session
-import com.shary.app.core.dependencyContainer.DependencyContainer
-import com.shary.app.services.cloud.CloudService
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.utils.BiometricAuthManager
-import com.shary.app.utils.ValidationUtils.validateLoginCredentials
+import com.shary.app.viewmodels.authentication.AuthEvent
+import com.shary.app.viewmodels.authentication.AuthMode
+import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
+
+// Optional: small Hilt entry point if you still want to check registration on the cloud
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
+import dagger.hilt.EntryPoints
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface LoginScreenEntryPoints {
+    fun cloudService(): CloudServiceImpl
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(
-    navController: NavHostController,
-    session: Session,
-    cloudService: CloudService
-) {
-    val context = LocalContext.current
-    val activity = context as FragmentActivity //
-    //val executor = remember { ContextCompat.getMainExecutor(context) }
-    val scope = rememberCoroutineScope()
-    val errorMessage by remember { mutableStateOf<String?>(null) }
+fun LoginScreen(navController: NavHostController) {
 
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
+    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthMode.LOGIN) }
+
+    val ctx = LocalContext.current
+    val activity = ctx as FragmentActivity
+    val scope = rememberCoroutineScope()
+
+    // VM state
+    val form by authenticationViewModel.form.collectAsState()
+    val loading by authenticationViewModel.loading.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    fun showError(message: String) {
-        scope.launch {
-            snackbarHostState.showSnackbar(message)
-        }
-    }
-
-    // ⚠️ Clear dependencies when this screen loads
+    // Collect one-shot auth events
     LaunchedEffect(Unit) {
-        DependencyContainer.initAll(context)
-    }
-
-    fun clearStates() {
-        username = ""
-        password = ""
-    }
-
-    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
-
-    DisposableEffect(lifecycleOwner.value) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                clearStates()
+        authenticationViewModel.events.collect { ev ->
+            when (ev) {
+                is AuthEvent.Success -> {
+                    // OPTIONAL: after successful login, check cloud registration
+                    val deps = EntryPoints.get(ctx.applicationContext, LoginScreenEntryPoints::class.java)
+                    val cloudService = deps.cloudService()
+                    scope.launch {
+                        val email = authenticationViewModel.authState.value.email
+                        val registered = runCatching { cloudService.isUserRegistered(email) }.getOrDefault(false)
+                        val msg = if (registered) "User is registered in Cloud" else "User is NOT registered in Cloud"
+                        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                    }
+                    // Navigate to Home
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+                is AuthEvent.Error -> {
+                    snackbarHostState.showSnackbar(ev.message)
+                }
             }
         }
+    }
 
+    // Clear text fields when screen goes to background, like you had
+    fun clearStates() {
+        authenticationViewModel.setUsername("")
+        authenticationViewModel.setPassword("")
+    }
+    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+    DisposableEffect(lifecycleOwner.value) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) clearStates()
+        }
         val lifecycle = lifecycleOwner.value.lifecycle
         lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     Scaffold(
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-            ) {
+            Column(Modifier.fillMaxWidth()) {
                 CenterAlignedTopAppBar(
                     title = { Text("Shary", style = MaterialTheme.typography.headlineMedium) },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -93,7 +109,8 @@ fun LoginScreen(
                 )
                 CenterAlignedTopAppBar(title = { Text("Login") })
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -104,97 +121,62 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
+                value = form.username,
+                onValueChange = authenticationViewModel::setUsername,
                 label = { Text("Username") },
                 singleLine = true,
+                enabled = !loading,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
+                value = form.password,
+                onValueChange = authenticationViewModel::setPassword,
                 label = { Text("Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
+                enabled = !loading,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    val message = validateLoginCredentials(username, password)
-                    if (message.isBlank()) {
-                        // Generate keys on the fly
-                        //session.generateKeys(password, username)
-
-                        // Try to login (check credentials)
-                        if (session.login(context, username, password)) {
-                            scope.launch {
-                                val email = session.sessionEmail
-
-                                if (cloudService.isUserRegistered(email)) {
-                                    Toast.makeText(
-                                        context,
-                                        "User was registered on Cloud ",
-                                        Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        "User was not registered on Cloud ",
-                                        Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            navController.navigate(Screen.Home.route)
-                        } else {
-                            Toast.makeText(
-                                context,
-                                "Invalid credentials",
-                                Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    else {
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier
-                    //.fillMaxWidth(0.5f)
-                    .size(200.dp, 50.dp)
+                onClick = { authenticationViewModel.submit(ctx) },
+                enabled = !loading,
+                modifier = Modifier.size(200.dp, 50.dp)
             ) {
-                Text("Login")
+                Text(if (loading) "Checking..." else "Login")
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // UI: button for launching authentication
+            // Biometric Login (kept like your original; you can wire it to auth if desired)
             Column(
-                //modifier = Modifier.size(200.dp, 50.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Button(onClick = {
-                    Log.d("Biometric", "Entering biometric")
-                    val biometricManager = BiometricAuthManager(
-                        context = context,
-                        activity = activity,
-                        onAuthSuccess = {
-                            // 🔓 Successful Authentication → Continue
-                            navController.navigate("Home")
-                        },
-                    )
-
-                    val error = biometricManager.authenticate()
-                    if (error != null) {
-                        showError(error)
-                    }
-                },
+                Button(
+                    onClick = {
+                        val biometricManager = BiometricAuthManager(
+                            context = ctx,
+                            activity = activity,
+                            onAuthSuccess = {
+                                // On biometric success, go Home.
+                                // If you want biometric to actually sign in, call authenticationViewModel.submit(ctx) or provide a biometric path.
+                                navController.navigate(Screen.Home.route) {
+                                    popUpTo(Screen.Login.route) { inclusive = true }
+                                }
+                            }
+                        )
+                        val error = biometricManager.authenticate()
+                        if (error != null) errorMessage = error
+                    },
+                    enabled = !loading,
                     modifier = Modifier.size(200.dp, 50.dp),
-                ) {
-                    Text("Biometric Login")
-                }
+                ) { Text("Biometric Login") }
 
                 errorMessage?.let {
                     Spacer(modifier = Modifier.height(32.dp))

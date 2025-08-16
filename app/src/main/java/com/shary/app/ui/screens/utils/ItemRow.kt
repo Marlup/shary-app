@@ -41,15 +41,14 @@ import androidx.compose.ui.window.Popup
 import com.shary.app.ui.screens.utils.Constants.FIELD_TOOLTIP_ALIVE_DURATION
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
 @Composable
-fun ItemRow(
+fun ItemRowBase(
+    title: String,
+    subtitle: String,
+    tooltip: String = "",
+    copyText: String = "$title: $subtitle",
     onEditClick: () -> Unit,
-    onAddItemCopyClick: () -> Unit,
-    getTitle: () -> String,
-    getSubtitle: () -> String,
-    getTooltip: () -> String,
-    getCopyToClipboard: () -> String
+    onAddItemCopyClick: (() -> Unit)? = null // null hides "Add Copy"
 ) {
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
@@ -60,7 +59,7 @@ fun ItemRow(
 
     LaunchedEffect(showTooltip) {
         if (showTooltip) {
-            delay(FIELD_TOOLTIP_ALIVE_DURATION)
+            delay(Constants.FIELD_TOOLTIP_ALIVE_DURATION)
             showTooltip = false
         }
     }
@@ -77,13 +76,13 @@ fun ItemRow(
                 .padding(end = 4.dp)
         ) {
             Text(
-                text = getTitle(),
+                text = title,
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = getSubtitle(),
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -91,10 +90,8 @@ fun ItemRow(
             )
         }
 
-        // Deployable menu at the right end
-        Box(
-            modifier = Modifier.wrapContentSize(Alignment.TopEnd)
-        ) {
+        // Right menu
+        Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
             IconButton(onClick = { menuExpanded = true }) {
                 Icon(
                     imageVector = Icons.Filled.MoreHoriz,
@@ -103,74 +100,46 @@ fun ItemRow(
                 )
             }
 
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
-            ) {
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
                     text = { Text("Edit") },
-                    onClick = {
-                        menuExpanded = false
-                        onEditClick()
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit"
-                        )
-                    }
+                    onClick = { menuExpanded = false; onEditClick() },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = "Edit") }
                 )
-                DropdownMenuItem(
-                    text = { Text("Add Copy") },
-                    onClick = {
-                        menuExpanded = false
-                        onAddItemCopyClick()
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.CopyAll,
-                            contentDescription = "Add Copy"
-                        )
-                    }
-                )
+
+                // Show Add Copy only when provided
+                if (onAddItemCopyClick != null) {
+                    DropdownMenuItem(
+                        text = { Text("Add Copy") },
+                        onClick = { menuExpanded = false; onAddItemCopyClick() },
+                        leadingIcon = { Icon(Icons.Filled.CopyAll, contentDescription = "Add Copy") }
+                    )
+                }
 
                 DropdownMenuItem(
                     text = { Text("Copy") },
                     onClick = {
                         menuExpanded = false
-                        val textToCopy = getCopyToClipboard()
                         scope.launch {
-                            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("row", textToCopy)))
+                            clipboard.setClipEntry(
+                                ClipEntry(ClipData.newPlainText("row", copyText))
+                            )
                             Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy"
-                        )
-                    }
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = "Copy") }
                 )
 
-                if (getTooltip().isNotBlank()) {
+                if (tooltip.isNotBlank()) {
                     DropdownMenuItem(
                         text = { Text("Show Details") },
-                        onClick = {
-                            menuExpanded = false
-                            showTooltip = true
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = "Info"
-                            )
-                        }
+                        onClick = { menuExpanded = false; showTooltip = true },
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = "Info") }
                     )
                 }
             }
         }
 
-        // Popup del tooltip
         if (showTooltip) {
             Popup(
                 alignment = Alignment.TopEnd,
@@ -186,7 +155,7 @@ fun ItemRow(
                         .wrapContentSize()
                 ) {
                     Text(
-                        text = getTooltip(),
+                        text = tooltip,
                         color = MaterialTheme.colorScheme.onPrimary,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(8.dp)
@@ -196,4 +165,3 @@ fun ItemRow(
         }
     }
 }
-

@@ -6,11 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.shary.app.Field
+import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.utils.DateUtils
 
 @Composable
 fun ShareFieldsGenericButton(
-    fields: List<Field>,
+    fields: List<FieldDomain>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {

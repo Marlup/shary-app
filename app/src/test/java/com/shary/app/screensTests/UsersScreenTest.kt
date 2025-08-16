@@ -6,7 +6,7 @@ import androidx.navigation.compose.rememberNavController
 import com.shary.app.User
 import com.shary.app.core.session.Session
 import com.shary.app.services.user.UserService
-import com.shary.app.ui.screens.users.UsersScreen
+import com.shary.app.ui.screens.user.UsersScreen
 import com.shary.app.viewmodels.ViewModelFactory
 import com.shary.app.viewmodels.user.UserViewModel
 import io.mockk.*
@@ -85,7 +85,7 @@ class UsersScreenTest {
         launchScreen()
         composeRule.onAllNodesWithContentDescription("Delete users")[0].performClick()
         verify { viewModel.deleteUser("alice@example.com") }
-        verify { viewModel.clearSelectedEmails() }
+        verify { viewModel.clearSelectedUsers() }
     }
 
     @Test
