@@ -23,7 +23,7 @@ import com.shary.app.infrastructure.services.cloud.Utils.buildPostRequest
 import com.shary.app.infrastructure.services.cloud.Utils.evaluateStatusCode
 import com.shary.app.utils.Functions.buildJsonStringFromFields
 import com.shary.app.utils.Functions.makeJsonStringFromRequestKeys
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json

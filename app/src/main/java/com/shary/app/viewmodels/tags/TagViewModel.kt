@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.types.enums.UiFieldTag
 import com.shary.app.core.domain.interfaces.repositories.TagRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

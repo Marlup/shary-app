@@ -6,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.services.FileService
 import com.shary.app.core.domain.models.FieldDomain
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

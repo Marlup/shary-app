@@ -8,7 +8,7 @@ import com.shary.app.core.session.Session
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.TagRepository // <- simple abstraction: addCustomTag(name)
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*

@@ -7,7 +7,7 @@ import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
