@@ -3,7 +3,7 @@ package com.shary.app.infrastructure.services.connectivity
 import com.shary.app.core.domain.interfaces.ports.CloudStatusDataSource
 import com.shary.app.core.domain.interfaces.ports.ConnectivityPort
 import com.shary.app.core.domain.interfaces.services.CloudService
-import com.shary.app.infrastructure.di.ConnectivityPingPeriod
+import com.shary.app.infrastructure.di.DependenciesContainer
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +24,7 @@ import kotlinx.coroutines.isActive
 class ConnectivityPortImpl @Inject constructor(
     private val cloudService: CloudService,
     private val statusDataSource: CloudStatusDataSource,
-    @ConnectivityPingPeriod private val pingPeriodMillis: Long
+    @DependenciesContainer.ConnectivityPingPeriod private val pingPeriodMillis: Long
 ) : ConnectivityPort {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
