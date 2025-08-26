@@ -2,6 +2,7 @@ package com.shary.app.core.domain.interfaces.security
 
 import android.content.Context
 import com.shary.app.core.domain.interfaces.states.AuthState
+import com.shary.app.core.domain.types.valueobjects.Purpose
 import kotlinx.coroutines.flow.StateFlow
 
 
@@ -17,22 +18,12 @@ interface AuthService {
     fun getSafePassword(): String
     fun setSafePassword(value: String)
 
+    fun getLocalKeyByPurpose(purpose: Purpose): ByteArray?
+    fun addLocalKeyByPurpose(purpose: Purpose, value: ByteArray)
+
     fun isSignatureActive(context: Context): Boolean
     fun isCredentialsActive(context: Context): Boolean
 
-    suspend fun requestChallenge(username: String): ByteArray
-    suspend fun registerIdentity(
-        username: String,
-        email: String,
-        signPublic: ByteArray,
-        kexPublic: ByteArray
-    ): Boolean
-
-    suspend fun verifyLogin(
-        username: String,
-        challenge: ByteArray,
-        signature: ByteArray
-    ): Boolean
     suspend fun signUp(
         context: Context,
         username: String,

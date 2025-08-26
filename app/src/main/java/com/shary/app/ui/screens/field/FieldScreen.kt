@@ -1,11 +1,13 @@
 package com.shary.app.ui.screens.field
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,7 +22,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.AddFlow
-import com.shary.app.core.domain.types.enums.tagColor
+import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.UiFieldTag.Bank.safeColor
+import com.shary.app.core.domain.types.enums.UiFieldTag.Bank.safeTagString
 import com.shary.app.ui.screens.field.utils.dialogs.AddCopyFieldDialog
 import com.shary.app.ui.screens.field.utils.dialogs.AddFieldDialog
 import com.shary.app.ui.screens.utils.FieldItemRow
@@ -31,6 +35,7 @@ import com.shary.app.utils.DateUtils
 import com.shary.app.viewmodels.field.FieldEvent
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.tags.TagViewModel
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,17 +69,12 @@ fun FieldsScreen(navController: NavHostController) {
     val availableTags by tagViewModel.uiTags.collectAsState()
 
     // ---- Search Fields ----
-    var searchText by remember { mutableStateOf("") }
-    var searchByKey by remember { mutableStateOf(true) }
+    var searchCriteria by remember { mutableStateOf("") }
+    var fieldSearchAttribute by remember { mutableStateOf(FieldAttribute.Key) }
 
     // Safe filtering (keyAlias is nullable in domain)
-    val filteredFields = remember(fieldList, searchText, searchByKey) {
-        fieldList.filter { field ->
-            if (searchByKey) {
-                field.key.contains(searchText, ignoreCase = true)
-            } else {
-                field.keyAlias.orEmpty().contains(searchText, ignoreCase = true)
-            }
+    val filteredFields = remember(fieldList, searchCriteria, fieldSearchAttribute) {
+        fieldList.filter { filterFieldsBy(it, searchCriteria, fieldSearchAttribute)
         }.toMutableList()
     }
 
@@ -133,7 +133,7 @@ fun FieldsScreen(navController: NavHostController) {
         editingField = null
         editedValue = ""
         editedAlias = ""
-        searchText = ""
+        searchCriteria = ""
         filteredFields.clear()
     }
 
@@ -143,12 +143,7 @@ fun FieldsScreen(navController: NavHostController) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 val currentFilteredFields = fieldList
-                    .filter {
-                        if (searchByKey)
-                            it.key.contains(searchText, ignoreCase = true)
-                        else
-                            it.keyAlias.orEmpty().contains(searchText, ignoreCase = true)
-                    }
+                    .filter { filterFieldsBy(it, searchCriteria, fieldSearchAttribute) }
                     .filter { it in selectedFields }
 
                 fieldViewModel.setSelectedFields(currentFilteredFields)
@@ -193,7 +188,7 @@ fun FieldsScreen(navController: NavHostController) {
                             selectedFields.toList().forEach { field ->
                                 fieldViewModel.deleteField(field)
                             }
-                            fieldViewModel.clearSelectedKeys()
+                            fieldViewModel.clearSelectedFields()
                             snackbarMessage = "Deleted fields"
                         }
                     },
@@ -215,59 +210,110 @@ fun FieldsScreen(navController: NavHostController) {
                 .fillMaxHeight(0.90f),
             horizontalAlignment = Alignment.Start,
         ) {
+
             // Search header
             RowSearcher(
-                searchText,
-                onSearchTextChange = { searchText = it },
-                searchByFirstColumn = searchByKey,
-                onSearchByChange = { searchByKey = it },
-                Pair("key", "alias")
+                searchText = searchCriteria,
+                onSearchTextChange = { searchCriteria = it },
+                currentAttribute = fieldSearchAttribute,
+                onAttributeChange = { fieldSearchAttribute = it },
+                availableAttributes = FieldAttribute.entries,
+                resolveOptionText = { fieldAttribute ->
+                    fieldSearchAttribute = fieldAttribute
+                    fieldAttribute.name
+                }
             )
 
             if (filteredFields.isNotEmpty()) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(
                         items = filteredFields,
                         key = { _, field -> field.key }
-                    ) { index, field ->
-                        val isSelected = selectedFields.contains(field)
-                        val canAlternateColor = index % 2 == 0
+                    ) { _, field ->
+                        val isSelected = selectedFields.any { it.key == field.key } // comparar por key
 
-                        // Use domain tag directly (no string roundtrip)
-                        val backgroundColor = when {
-                            isSelected -> MaterialTheme.colorScheme.primary
-                            canAlternateColor -> tagColor(field.tag)
-                            else -> tagColor(field.tag)
-                        }
-
-                        SelectableRow(
-                            item = field,
-                            background = backgroundColor,
-                            onToggle = { fieldViewModel.toggleFieldSelection(field.key) }
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                                .border(
+                                    width = if (isSelected) 3.dp else 1.dp,
+                                    color = if (isSelected)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        field.tag.safeColor(),
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = field.tag.safeColor().copy(alpha = 0.1f)
+                            ),
+                            onClick = { fieldViewModel.toggleFieldSelection(field) }
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 0.dp),
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                FieldItemRow(
-                                    field = field,
-                                    onEditClick = {
-                                        editingField = field
-                                        editedValue = field.value
-                                    },
-                                    onAddItemCopyClick = {
-                                        openAddFieldCopyDialog = true
-                                        targetAddFieldCopy = field
-                                    },
-                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(field.key, style = MaterialTheme.typography.titleMedium)
+                                    Text(field.value, style = MaterialTheme.typography.bodyMedium)
+                                    field.keyAlias?.let {
+                                        val aliasText = if (it.isEmpty()) "" else "; Alias: $it"
+                                        val infoText = "Tag: ${field.tag.safeTagString()}$aliasText"
+                                        Text(infoText, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+
+                                // --- Three dots menu ---
+                                var expanded by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { expanded = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = "Options"
+                                        )
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expanded,
+                                        onDismissRequest = { expanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Copy") },
+                                            onClick = {
+                                                expanded = false
+                                                // Copia directa a portapapeles o VM
+                                                snackbarMessage = "Field '${field.key}' copied"
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Add Copy") },
+                                            onClick = {
+                                                expanded = false
+                                                openAddFieldCopyDialog = true
+                                                targetAddFieldCopy = field
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Edit") },
+                                            onClick = {
+                                                expanded = false
+                                                editingField = field
+                                                editedValue = field.value
+                                                editedAlias = field.keyAlias.orEmpty()
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
+
                     }
                 }
             } else {
@@ -297,7 +343,7 @@ fun FieldsScreen(navController: NavHostController) {
         )
     }
 
-// --- Add Copy Field Dialog (duplicates with possible edits) ---
+    // --- Add Copy Field Dialog (duplicates with possible edits) ---
     if (openAddFieldCopyDialog && targetAddFieldCopy != null) {
         val target = targetAddFieldCopy!!
         AddCopyFieldDialog(
@@ -358,4 +404,16 @@ fun FieldsScreen(navController: NavHostController) {
             }
         )
     }
+}
+
+fun filterFieldsBy(candidateField: FieldDomain, criteria: String, fieldSearchBy: FieldAttribute): Boolean {
+    val isValidField = when (fieldSearchBy) {
+        FieldAttribute.Key ->
+            candidateField.key.contains(criteria, ignoreCase = true)
+        FieldAttribute.Alias ->
+            candidateField.keyAlias.orEmpty().contains(criteria, ignoreCase = true)
+        FieldAttribute.Tag ->
+            candidateField.tag.toString().orEmpty().contains(criteria, ignoreCase = true)
+    }
+    return isValidField
 }

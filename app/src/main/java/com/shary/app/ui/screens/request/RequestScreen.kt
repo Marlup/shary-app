@@ -20,7 +20,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.domain.types.enums.tagColor
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
 import com.shary.app.ui.screens.request.utils.SendRequestDialog
@@ -155,16 +154,23 @@ fun RequestsScreen(navController: NavHostController) {
                         key = { _, field -> field.key } // stable
                     ) { index, field ->
                         val isSelected = field.key in selectedKeys
-                        val canAlternateColor = index % 2 == 0
+
                         val backgroundColor = when {
-                            isSelected -> tagColor(field.tag) // domain tag
-                            canAlternateColor -> MaterialTheme.colorScheme.surface
-                            else -> MaterialTheme.colorScheme.surfaceVariant
+                            isSelected -> MaterialTheme.colorScheme.secondaryContainer // highlight selection
+                            index % 2 == 0 -> MaterialTheme.colorScheme.surface
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+
+                        val rowBackgroundColor = when {
+                            isSelected -> Color.LightGray // ← selection color
+                            index % 2 == 0 -> MaterialTheme.colorScheme.surface                     // alternate / tag color
+                            else -> MaterialTheme.colorScheme.secondaryContainer
                         }
 
                         SelectableRow(
                             item = field,
-                            background = backgroundColor,
+                            index = index,
+                            backgroundColorProvider = { backgroundColor },
                             onToggle = {
                                 if (isSelected) selectedKeys.remove(field.key)
                                 else selectedKeys.add(field.key)

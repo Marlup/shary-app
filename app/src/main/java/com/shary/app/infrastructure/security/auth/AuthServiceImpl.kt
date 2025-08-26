@@ -3,9 +3,11 @@ package com.shary.app.infrastructure.security.auth
 import android.content.Context
 import android.util.Log
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
+import com.shary.app.core.domain.interfaces.security.AuthBackend
 import com.shary.app.core.domain.interfaces.security.AuthService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.states.AuthState
+import com.shary.app.core.domain.types.valueobjects.Purpose
 import com.shary.app.infrastructure.security.helper.SecurityUtils
 import com.shary.app.infrastructure.security.helper.SecurityUtils.base64Encode
 import kotlinx.coroutines.delay
@@ -33,7 +35,8 @@ import javax.inject.Singleton
 @Singleton
 class AuthServiceImpl @Inject constructor(
     private val crypto: CryptographyManager,
-    private val store: CredentialsStore
+    private val store: CredentialsStore,
+    private val backend: AuthBackend
 ) : AuthService {
 
     private val DELAY_TIME_SECONDS = 40L
@@ -56,6 +59,14 @@ class AuthServiceImpl @Inject constructor(
     override fun setSafePassword(value: String) { _state.value.safePassword = value }
 
 
+    // Local Keys
+    override fun getLocalKeyByPurpose(purpose: Purpose): ByteArray? =
+        state.value.localKeys[purpose.code]
+    override fun addLocalKeyByPurpose(purpose: Purpose, value: ByteArray) {
+        _state.value.localKeys[purpose.code] = value
+    }
+
+
     // SafePassword
     override fun isSignatureActive(context: Context) = store.hasSignature(context)
     override fun isCredentialsActive(context: Context) = store.hasCredentials(context)
@@ -67,23 +78,18 @@ class AuthServiceImpl @Inject constructor(
      * 2) Register identity in the in-memory "server".
      * 3) Cache and persist encrypted credentials JSON through CryptographyManager.
      */
-    override suspend fun signUp(
-        context: Context,
-        username: String,
-        email: String,
-        password: String
-    ): Result<Unit> = runCatching {
+    override suspend fun signUp(context: Context, username: String, email: String, password: String) = runCatching {
         val safe = computeSafePassword(username, password)
-
         crypto.initializeKeysWithUser(context, username, safe)
         crypto.saveSignature(context, username, email, safe)
 
         val signPub = crypto.getSignPublic()
         val kexPub  = crypto.getKexPublic()
-        check(registerIdentity(username, email, signPub, kexPub)) { "Register failed" }
+        //check(backend.registerIdentity(username, email, signPub, kexPub))
 
-        cacheCredentials(username, email, safe, token = "")
-        persistCredentialsEncryptedJson(context)
+        cacheCredentials(username, email, safe)
+        persistCredentials(context)
+        preLoadLocalKeys(username, safe)
     }
 
     /**
@@ -92,23 +98,22 @@ class AuthServiceImpl @Inject constructor(
      * 2) Decrypt credentials JSON and verify match.
      * 3) Perform challenge/response against in-memory "server".
      */
-    override suspend fun signIn(
-        context: Context,
-        username: String,
-        password: String
-    ): Result<Unit> = runCatching {
+    override suspend fun signIn(context: Context, username: String, password: String) = runCatching {
         val safe = computeSafePassword(username, password)
-
         crypto.initializeKeysWithUser(context, username, safe)
 
-        loadCredentialsEncryptedJson(context, username, safe)
+        preLoadLocalKeys(username, safe)
+        loadCredentials(context, username, safe)
         check(isAuthenticated(username, safe)) { "Invalid credentials" }
 
-        val challenge = requestChallenge(username)
-        val signature = crypto.signDetached(challenge)
-        check(verifyLogin(username, challenge, signature)) { "Challenge verification failed" }
+        // Start challenge/response:
+        //val challenge = backend.requestChallenge(username)
+        //val signature = crypto.signDetached(challenge)
+        //check(backend.verifyLogin(username, challenge, signature)) { "Challenge verification failed" }
 
-        _state.value = _state.value.copy(isOnline = true)
+        //_state.value = _state.value.copy(isOnline = true)
+
+
     }
 
     /** Clears in-memory state and deletes the encrypted credentials file. */
@@ -135,9 +140,12 @@ class AuthServiceImpl @Inject constructor(
         )
     }
 
-    /** Build + encrypt the JSON credentials using CryptographyManager. */
-    private fun persistCredentialsEncryptedJson(context: Context) {
+    /** Build + encrypt the JSON credentials + store. */
+    private fun persistCredentials(context: Context) {
         val s = _state.value
+
+        Log.d("AuthServiceImpl", "persistCredentials - username: ${s.username}")
+
         val json = JSONObject().apply {
             put("user_email", s.email)
             put("user_username", s.username)
@@ -146,29 +154,46 @@ class AuthServiceImpl @Inject constructor(
             put("version", 2) // bump as needed for future schema evolution
             put("ts", SecurityUtils.getCurrentUtcTimestamp())
         }
-        val bytes = crypto.encryptCredentialsJson(s.username, s.safePassword, json)
+        val bytes = crypto.encryptCredentialsByDerivation(
+            s.username,
+            s.safePassword,
+            Purpose.Credentials.code,
+            json
+        )
         store.writeCredentials(context, bytes)
         Log.d("Auth", "Encrypted credentials stored (${bytes.size} bytes).")
     }
 
     /** Read, decrypt and load the JSON credentials through CryptographyManager. */
-    private fun loadCredentialsEncryptedJson(context: Context, username: String, safe: String) {
+    private fun loadCredentials(context: Context, username: String, safe: String) {
         val encrypted = store.readCredentials(context) ?: error("Credentials file not found")
-        val data = crypto.decryptCredentialsJson(username, safe, encrypted)
+        val data = crypto.decryptCredentials(
+            username,
+            getLocalKeyByPurpose(Purpose.Credentials)!!,
+            encrypted
+        )
+
+        Log.d("AuthServiceImpl", "loadCredentials - username: ${data.optString("user_username")}")
+
         cacheCredentials(
             username = data.optString("user_username"),
             email    = data.optString("user_email"),
             safe     = data.optString("user_safe_password"),
             token    = data.optString("user_validation_token")
         )
+        Log.d("AuthServiceImpl", "Encrypted credentials loaded (${encrypted.size} bytes).")
+        Log.d("AuthServiceImpl", "loadCredentialsEncryptedJson (username) - ${data.optString("user_username")}")
+        Log.d("AuthServiceImpl", "loadCredentialsEncryptedJson (email) - ${data.optString("user_email")}")
+        Log.d("AuthServiceImpl", "loadCredentialsEncryptedJson (password) - ${data.optString("user_safe_password")}")
+        Log.d("AuthServiceImpl", "loadCredentialsEncryptedJson (token) - ${data.optString("user_validation_token")}")
     }
 
     private fun isAuthenticated(username: String, safePassword: String): Boolean {
         val s = _state.value
-        return username.isNotBlank() &&
-                safePassword.isNotBlank() &&
-                s.username == username &&
-                s.safePassword == safePassword
+        Log.d("AuthServiceImpl", "isAuthenticated (usernames) - ${s.username}, $username}")
+        Log.d("AuthServiceImpl", "isAuthenticated (safePasswords) - ${s.safePassword}, $safePassword}")
+        return username.isNotBlank() && safePassword.isNotBlank() &&
+                s.username == username && s.safePassword == safePassword
     }
 
     // ---------------- In-memory “server” simulation ----------------
@@ -188,25 +213,6 @@ class AuthServiceImpl @Inject constructor(
         return true
     }
 
-    override suspend fun registerIdentity(
-        username: String,
-        email: String,
-        signPublic: ByteArray,
-        kexPublic: ByteArray
-    ): Boolean = doRegisterIdentity(username, email, signPublic, kexPublic)
-
-        /** Issues a random 32B challenge. Replace with real backend call in prod. */
-    private suspend fun doRequestChallenge(username: String): ByteArray {
-        delay(30)
-        val ch = ByteArray(32).also { rng.nextBytes(it) }
-        challenges[username] = ch
-        return ch
-    }
-
-    override suspend fun requestChallenge(username: String): ByteArray =
-        doRequestChallenge(username)
-
-
     /** Verifies challenge equality and signature using the registered Ed25519 pub key. */
     private suspend fun doVerifyLogin(
         username: String,
@@ -214,17 +220,28 @@ class AuthServiceImpl @Inject constructor(
         signature: ByteArray
     ): Boolean {
         delay(DELAY_TIME_SECONDS)
+        Log.w("AuthServiceImpl", "doVerifyLogin: $challenge, ${challenges[username]}")
+        Log.w("AuthServiceImpl", "doVerifyLogin: ${!challenges[username].contentEquals(challenge)}")
+        Log.w("AuthServiceImpl", "users: $users")
+        Log.w("AuthServiceImpl", "users[username]: ${users[username]}")
         val (signPub, _) = users[username] ?: return false
         val last = challenges[username] ?: return false
+        Log.w("AuthServiceImpl", "before last.contentEquals: ${!challenges[username].contentEquals(challenge)}")
         if (!last.contentEquals(challenge)) return false
+        Log.w("AuthServiceImpl", "after last.contentEquals: ${!challenges[username].contentEquals(challenge)}")
         return crypto.verifyDetached(challenge, signature, signPub)
     }
 
-    override suspend fun verifyLogin(
-        username: String,
-        challenge: ByteArray,
-        signature: ByteArray
-    ): Boolean =
-        doVerifyLogin(username, challenge, signature)
-
+    private fun preLoadLocalKeys(username: String, password: String) {
+        Purpose.builtIns.forEach { purpose ->
+            addLocalKeyByPurpose(
+                purpose,
+                crypto.deriveLocalKey(
+                    username,
+                    password.toCharArray(),
+                    purpose.code
+                )
+            )
+        }
+    }
 }

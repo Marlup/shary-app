@@ -17,7 +17,7 @@ import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.PasswordOutlinedTextField
 import com.shary.app.viewmodels.authentication.AuthEvent
-import com.shary.app.viewmodels.authentication.AuthMode
+import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
 
@@ -40,7 +40,7 @@ fun LogupScreen(
     navController: NavHostController
 ) {
     val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
-    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthMode.SIGNUP) }
+    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.SIGNUP) }
 
     val ctx = LocalContext.current
     val form by authenticationViewModel.form.collectAsState()

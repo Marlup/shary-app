@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.enums.AddFlow
+import com.shary.app.core.domain.types.enums.UserAttribute
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
 import com.shary.app.ui.screens.utils.GoBackButton
@@ -50,17 +51,13 @@ fun UsersScreen(navController: NavHostController) {
     var editedValue by remember { mutableStateOf("") }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
-    // Search
-    var searchText by remember { mutableStateOf("") }
-    var searchByEmail by remember { mutableStateOf(true) } // true=email, false=username
+    //  ---- Search Users ----
+    var searchCriteria by remember { mutableStateOf("") }
+    var userSearchAttribute by remember { mutableStateOf(UserAttribute.Username) }
 
-    val filteredUsers = remember(userList, searchText, searchByEmail) {
-        userList.filter { user ->
-            if (searchByEmail)
-                user.email.contains(searchText, ignoreCase = true)
-            else
-                user.username.contains(searchText, ignoreCase = true)
-        }
+    val filteredUsers = remember(userList, searchCriteria, userSearchAttribute) {
+        userList.filter { filterUsersBy(it, searchCriteria, userSearchAttribute)
+        }.toMutableList()
     }
 
     // ---- Event-driven UX ----
@@ -105,7 +102,7 @@ fun UsersScreen(navController: NavHostController) {
 
     // ---- Lifecycle: persist selection into Session via VM ----
     fun clearEphemeralStates() {
-        searchText = ""
+        searchCriteria = ""
     }
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
     DisposableEffect(lifecycleOwner.value) {
@@ -173,12 +170,18 @@ fun UsersScreen(navController: NavHostController) {
                 .fillMaxHeight(0.90f),
             horizontalAlignment = Alignment.Start
         ) {
+
+            // Search header
             RowSearcher(
-                searchText,
-                onSearchTextChange = { searchText = it },
-                searchByFirstColumn = searchByEmail,
-                onSearchByChange = { searchByEmail = it },
-                Pair("username", "email")
+                searchText = searchCriteria,
+                onSearchTextChange = { searchCriteria = it },
+                currentAttribute = userSearchAttribute,
+                onAttributeChange = { userSearchAttribute = it },
+                availableAttributes = UserAttribute.entries,
+                resolveOptionText = { userAttribute ->
+                    userSearchAttribute = userAttribute
+                    userAttribute.name
+                }
             )
 
             if (isLoading) {
@@ -199,17 +202,19 @@ fun UsersScreen(navController: NavHostController) {
                         key = { _, user -> user.email }
                     ) { index, user ->
                         val isSelected = selectedUsers.contains(user)
-                        val backgroundColor = when {
-                            isSelected -> MaterialTheme.colorScheme.primary
-                            index % 2 == 0 -> MaterialTheme.colorScheme.surface
-                            else -> MaterialTheme.colorScheme.surfaceVariant
+
+                        val rowBackgroundColor = when {
+                            isSelected -> Color.LightGray // ← selection color
+                            index % 2 == 0 -> MaterialTheme.colorScheme.surface                     // alternate / tag color
+                            else -> MaterialTheme.colorScheme.secondaryContainer
                         }
 
                         SelectableRow(
                             item = user,
-                            background = backgroundColor,
+                            index = index,
+                            backgroundColorProvider = { rowBackgroundColor },
                             onToggle = { userViewModel.toggleUser(user) }
-                        ) { _ ->
+                        ) { userItem ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth(0.95f)
@@ -217,18 +222,20 @@ fun UsersScreen(navController: NavHostController) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 UserItemRow(
-                                    user = user,
+                                    user = userItem,
+                                    titleColor = rowBackgroundColor,
                                     onEditClick = {
-                                        editingUser = user
-                                        editedValue = user.email
+                                        editingUser = userItem
+                                        editedValue = userItem.email
                                     },
                                     onAddItemCopyClick = {
                                         openAddUserCopyDialog = true
-                                        targetAddUserCopy = user
+                                        targetAddUserCopy = userItem
                                     },
                                 )
                             }
                         }
+
                     }
                 }
             } else {
@@ -264,4 +271,14 @@ fun UsersScreen(navController: NavHostController) {
             )
         }
     }
+}
+
+fun filterUsersBy(candidateUser: UserDomain, criteria: String, userSearchBy: UserAttribute): Boolean {
+    val isValidUser = when (userSearchBy) {
+        UserAttribute.Username ->
+            candidateUser.username.contains(criteria, ignoreCase = true)
+        UserAttribute.Email ->
+            candidateUser.email.orEmpty().contains(criteria, ignoreCase = true)
+    }
+    return isValidUser
 }

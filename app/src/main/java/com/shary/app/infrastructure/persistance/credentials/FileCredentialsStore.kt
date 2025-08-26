@@ -4,13 +4,14 @@ import android.content.Context
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.infrastructure.security.helper.SecurityUtils.credentialsFile
 import com.shary.app.infrastructure.security.helper.SecurityUtils.signatureFile
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 
 @Singleton
 class FileCredentialsStore @Inject constructor(
-    context: Context
+    @ApplicationContext private val context: Context
 ) : CredentialsStore {
     override fun hasSignature(context: Context) = signatureFile(context).exists()
     override fun hasCredentials(context: Context) = credentialsFile(context).exists()

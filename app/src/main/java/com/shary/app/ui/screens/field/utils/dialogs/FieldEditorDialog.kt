@@ -17,7 +17,7 @@ import java.time.Instant
 
 @Composable
 fun FieldEditorDialog(
-    initial: FieldDomain,
+    initialField: FieldDomain,
     allTags: List<UiFieldTag>,
     title: String,
     confirmLabel: String,
@@ -26,11 +26,11 @@ fun FieldEditorDialog(
 ) {
     val context = LocalContext.current
 
-    // Keep a working draft of the field being edited/created
-    var draft by remember(initial) { mutableStateOf(initial) }
+    // Keep a working draftField of the field being edited/created
+    var draftField by remember(initialField) { mutableStateOf(initialField) }
 
     // Simple validation: key and value are required
-    fun isValid(): Boolean = draft.key.isNotBlank() && draft.value.isNotBlank()
+    fun isValid(): Boolean = draftField.key.isNotBlank() && draftField.value.isNotBlank()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 8.dp) {
@@ -41,25 +41,25 @@ fun FieldEditorDialog(
 
                 // --- Key with suggestions (same component you already use) ---
                 InputWithSuggestions(
-                    key = draft.key,
-                    onKeyChange = { draft = draft.copy(key = it) },
+                    key = draftField.key,
+                    onKeyChange = { draftField = draftField.copy(key = it) },
                     predefinedKeys = PredefinedKey.entries.map { it.key }
-                )
-
-                // --- Alias (optional) ---
-                OutlinedTextField(
-                    value = draft.keyAlias.orEmpty(),
-                    onValueChange = { draft = draft.copy(keyAlias = it.ifBlank { null }) },
-                    label = { Text("Key alias (optional)") },
-                    modifier = Modifier.fillMaxWidth()
                 )
 
                 // --- Value (required) ---
                 OutlinedTextField(
-                    value = draft.value,
-                    onValueChange = { draft = draft.copy(value = it) },
+                    value = draftField.value,
+                    onValueChange = { draftField = draftField.copy(value = it) },
                     label = { Text("Value") },
-                    isError = draft.value.isBlank(),
+                    isError = draftField.value.isBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // --- Alias (optional) ---
+                OutlinedTextField(
+                    value = draftField.keyAlias.orEmpty(),
+                    onValueChange = { draftField = draftField.copy(keyAlias = it.ifBlank { null }) },
+                    label = { Text("Key alias (optional)") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -67,9 +67,9 @@ fun FieldEditorDialog(
 
                 // --- Tag picker (expects String; convert to/from UiFieldTag) ---
                 TagPicker(
-                    selected = UiFieldTag.toString(draft.tag),
-                    onSelected = { selectedName ->
-                        draft = draft.copy(tag = UiFieldTag.fromString(selectedName))
+                    selectedTag = draftField.tag,
+                    onSelected = { selectedStringTag ->
+                        draftField = draftField.copy(tag = selectedStringTag)
                     },
                     allowNone = true,
                     allTags = allTags
@@ -83,11 +83,11 @@ fun FieldEditorDialog(
                         onClick = {
                             if (!isValid()) return@TextButton
                             // Ensure timestamp is set at confirm time
-                            val normalized = draft.copy(
-                                key = draft.key.trim(),
-                                value = draft.value.trim(),
-                                keyAlias = draft.keyAlias?.trim(),
-                                dateAdded = if (draft.dateAdded == Instant.EPOCH) Instant.now() else draft.dateAdded
+                            val normalized = draftField.copy(
+                                key = draftField.key.trim(),
+                                value = draftField.value.trim(),
+                                keyAlias = draftField.keyAlias?.trim(),
+                                dateAdded = if (draftField.dateAdded == Instant.EPOCH) Instant.now() else draftField.dateAdded
                             )
                             onConfirm(normalized)
                             Toast.makeText(context, "Field added", Toast.LENGTH_SHORT).show()

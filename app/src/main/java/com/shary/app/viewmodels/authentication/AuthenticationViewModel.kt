@@ -1,6 +1,7 @@
 package com.shary.app.viewmodels.authentication
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -8,14 +9,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.security.AuthService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-enum class AuthMode { LOGIN, SIGNUP }
+enum class AuthenticationMode { LOGIN, SIGNUP }
 
 data class AuthForm(
     val username: String = "",
@@ -31,15 +34,15 @@ sealed interface AuthEvent {
 
 @HiltViewModel
 class AuthenticationViewModel @Inject constructor(
-    private val auth: AuthService
+    private val authService: AuthService
 ) : ViewModel() {
 
     // Public auth state (email, username, token, isOnline…)
-    val authState = auth.state
+    val authState = authService.state
 
     // UI form + mode
-    private val _mode = MutableStateFlow(AuthMode.LOGIN)
-    val mode: StateFlow<AuthMode> = _mode
+    private val _mode = MutableStateFlow(AuthenticationMode.LOGIN)
+    val mode: StateFlow<AuthenticationMode> = _mode
 
     private val _form = MutableStateFlow(AuthForm())
     val form: StateFlow<AuthForm> = _form
@@ -59,7 +62,7 @@ class AuthenticationViewModel @Inject constructor(
 
 
     // ---- Mode & form updates ----
-    fun setMode(m: AuthMode) { _mode.value = m }
+    fun setMode(m: AuthenticationMode) { _mode.value = m }
     fun setUsername(v: String) { _form.value = _form.value.copy(username = v) }
     fun setEmail(v: String) { _form.value = _form.value.copy(email = v) }
     fun setPassword(v: String) { _form.value = _form.value.copy(password = v) }
@@ -67,46 +70,46 @@ class AuthenticationViewModel @Inject constructor(
     fun resetForm() { _form.value = AuthForm() }
 
     // ---- Entry helpers for navigator / splash ----
-    fun isCredentialsActive(ctx: Context) = auth.isCredentialsActive(ctx)
-    fun isSignatureActive(ctx: Context) = auth.isSignatureActive(ctx)
+    fun isCredentialsActive(context: Context) = authService.isCredentialsActive(context)
+    fun isSignatureActive(context: Context) = authService.isSignatureActive(context)
 
     // ---- Submit (login or signup) ----
-    fun submit(ctx: Context) {
+    fun submit(context: Context) {
         val f = _form.value
-        when (_mode.value) {
-            AuthMode.LOGIN -> login(ctx, f.username, f.password)
-            AuthMode.SIGNUP -> signup(ctx, f.username, f.email, f.password, f.confirm)
+        Log.w("AuthenticationViewModel", "submit: $f")
+
+        // basic validation before launching coroutine
+        val validationError = when (_mode.value) {
+            AuthenticationMode.LOGIN -> validateLogin(f.username, f.password)
+            AuthenticationMode.SIGNUP -> validateSignup(f.username, f.email, f.password, f.confirm)
         }
-    }
 
-    private fun login(ctx: Context, username: String, password: String) {
-        val err = validateLogin(username, password)
-        if (err != null) { emitError(err); return }
+        if (validationError != null) {
+            emitError(validationError)
+            return
+        }
 
+        // launch actual login/signup work in background
         viewModelScope.launch {
             _loading.value = true
-            val result = auth.signIn(ctx, username, password)
-            _loading.value = false
-            result.onSuccess {
-                _events.trySend(AuthEvent.Success)
-            }.onFailure { e ->
-                emitError(e.message ?: "Invalid credentials")
+            val result = withContext(Dispatchers.IO) {
+                when (_mode.value) {
+                    AuthenticationMode.LOGIN ->
+                        authService.signIn(context, f.username, f.password)
+                    AuthenticationMode.SIGNUP ->
+                        authService.signUp(context, f.username, f.email, f.password)
+                }
             }
-        }
-    }
-
-    private fun signup(ctx: Context, username: String, email: String, password: String, confirm: String) {
-        val err = validateSignup(username, email, password, confirm)
-        if (err != null) { emitError(err); return }
-
-        viewModelScope.launch {
-            _loading.value = true
-            val result = auth.signUp(ctx, username, email, password)
             _loading.value = false
+
             result.onSuccess {
                 _events.trySend(AuthEvent.Success)
             }.onFailure { e ->
-                emitError(e.message ?: "Sign up failed")
+                val msg = when (_mode.value) {
+                    AuthenticationMode.LOGIN -> e.message ?: "Invalid credentials"
+                    AuthenticationMode.SIGNUP -> e.message ?: "Sign up failed"
+                }
+                emitError(msg)
             }
         }
     }

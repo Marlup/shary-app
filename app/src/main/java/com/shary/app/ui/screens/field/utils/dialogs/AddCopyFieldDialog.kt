@@ -13,13 +13,13 @@ fun AddCopyFieldDialog(
     onAddField: (FieldDomain) -> Unit
 ) {
     // Seed with target values; change key and reset date to set on confirm
-    val initial = targetField.copy(
+    val initialField = targetField.copy(
         key = "${targetField.key} - Copy",
         dateAdded = Instant.EPOCH
     )
 
     FieldEditorDialog(
-        initial = initial,
+        initialField = initialField,
         allTags = allTags,
         title = "Copy field",
         confirmLabel = "Add",

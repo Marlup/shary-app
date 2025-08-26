@@ -11,26 +11,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun RowSearcher(
+fun <A> RowSearcher(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
-    searchByFirstColumn: Boolean,
-    onSearchByChange: (Boolean) -> Unit,
-    optionsSearchBy: Pair<String, String>
+    currentAttribute: A,
+    onAttributeChange: (A) -> Unit,
+    availableAttributes: List<A>,
+    resolveOptionText: (A) -> String
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val optionText = if (searchByFirstColumn)
-            optionsSearchBy.first
-        else
-            optionsSearchBy.second
+        val optionText = resolveOptionText(currentAttribute)
 
-        // 🔍 Search and Toggle Filter
         TextField(
             value = searchText,
             onValueChange = onSearchTextChange,
-            label = { Text("Search by ${optionText.lowercase()}", maxLines=1) },
+            label = {
+                Text(
+                    text = "Search by ${optionText.lowercase()}",
+                    maxLines = 1
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth(0.7f)
                 .padding(vertical = 4.dp, horizontal = 4.dp),
@@ -40,8 +42,13 @@ fun RowSearcher(
 
         FilterBox(
             optionText,
-            isSelected = searchByFirstColumn,
-            onClick = { onSearchByChange(!searchByFirstColumn) } // { searchByFirstColumn = true },
+            isSelected = availableAttributes.first() == currentAttribute,
+            onClick = {
+                // cycle through attributes or toggle between 2
+                val currentIndex = availableAttributes.indexOf(currentAttribute)
+                val next = availableAttributes[(currentIndex + 1) % availableAttributes.size]
+                onAttributeChange(next)
+            }
         )
     }
 }

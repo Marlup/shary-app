@@ -13,7 +13,7 @@ import com.shary.app.infrastructure.services.email.Constants.FILE_FORMATS
 import com.shary.app.infrastructure.services.email.Constants.MSG_DEFAULT_SEND_FILENAME
 import com.shary.app.utils.Functions.buildFileFromFields
 import com.shary.app.utils.Functions.makeStringListFromFields
-import jakarta.inject.Inject
+import javax.inject.Inject
 import okio.ByteString.Companion.encodeUtf8
 import java.io.File
 

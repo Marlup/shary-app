@@ -5,8 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.services.FileService
 import com.shary.app.core.domain.models.FieldDomain
+import com.shary.app.core.domain.types.enums.DataFileMode
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,7 +26,7 @@ class FileVisualizerViewModel @Inject constructor(
     data class ParsedZip(
         val file: File,
         val fileName: String,
-        val mode: String?,               // from meta.txt
+        val mode: DataFileMode?,               // from meta.txt
         val fields: List<FieldDomain>,   // parsed from content.json
         val isValidStructure: Boolean
     )
@@ -42,6 +43,90 @@ class FileVisualizerViewModel @Inject constructor(
     sealed interface Event {
         data class Info(val message: String) : Event
         data class Error(val message: String) : Event
+    }
+
+    // concurrent-safe queue of files to process
+    private val fileChannel = MutableSharedFlow<File>(extraBufferCapacity = 10)
+
+    init {
+        // Launch a consumer coroutine once at VM init
+        viewModelScope.launch {
+            fileChannel.collect { file ->
+                refreshFromFile(file)
+            }
+        }
+    }
+
+    fun refreshFiles() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            try {
+                val found = fileService.listPrivateZipFiles()
+                val parsed = found.mapNotNull { f ->
+                    processFileSafe(f)
+                }
+                _items.value = parsed
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /** Parse an already-copied File */
+    private suspend fun processFileSafe(file: File): ParsedZip? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val valid = fileService.validateZipStructure(file)
+                val mode = fileService.getModeFromZip(file)
+                val fieldsMap = fileService.getFieldsFromZip(file)
+
+                val fieldsDomain = fieldsMap.map { (key, value) ->
+                    FieldDomain(key = key, value = value, dateAdded = Instant.MIN)
+                }
+
+                ParsedZip(
+                    file = file,
+                    fileName = file.name,
+                    mode = mode,
+                    fields = fieldsDomain,
+                    isValidStructure = valid
+                )
+            } catch (e: Exception) {
+                _events.tryEmit(Event.Error("Error parsing file: ${file.name} -> ${e.message}"))
+                null
+            }
+        }
+    }
+
+    /** Called when a new file is added from UI (after copyZipToPrivateStorage). */
+    fun onNewFile(file: File) {
+        fileChannel.tryEmit(file) // push file into processing queue
+    }
+
+    /** Process a single file safely (runs inside collect). */
+    private suspend fun refreshFromFile(file: File) {
+        _isLoading.value = true
+        try {
+            val mode = fileService.getModeFromZip(file) ?: return
+            val fieldsMap = fileService.getFieldsFromZip(file)
+
+            val domainFields = fieldsMap.map { (k, v) ->
+                FieldDomain.create(k, v)
+            }
+
+            val parsed = ParsedZip(
+                file = file,
+                fileName = file.name,
+                mode = mode,
+                fields = domainFields,
+                isValidStructure = fileService.validateZipStructure(file)
+            )
+
+            // replace items list with the latest file only
+            _items.value = listOf(parsed)
+        } finally {
+            _isLoading.value = false
+        }
     }
 
     fun addZips(uris: List<Uri>) {

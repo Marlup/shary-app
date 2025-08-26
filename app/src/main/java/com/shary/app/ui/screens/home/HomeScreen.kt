@@ -23,12 +23,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.shary.app.core.domain.interfaces.navigator.HomeDepsEntryPoint
 import com.shary.app.core.session.Session
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.AppTopBar
 import com.shary.app.ui.screens.home.utils.SendOption
 import com.shary.app.ui.screens.home.utils.SendServiceDialog
 import com.shary.app.ui.screens.home.utils.ShareFieldsGenericButton
+import dagger.hilt.EntryPoints
 
 @SuppressLint("StateFlowValueCalledInComposition")
 @Composable
@@ -41,7 +43,10 @@ fun HomeScreen(navController: NavHostController) {
     */
 
     val context = LocalContext.current
-    val session: Session = hiltViewModel()
+    val session: Session = remember {
+        val ep = EntryPoints.get(context.applicationContext, HomeDepsEntryPoint::class.java)
+        ep.session()
+    }
 
     // +++++ Selection Summary +++++
     var sendOption by remember { mutableStateOf<SendOption?>(null) }

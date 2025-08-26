@@ -11,14 +11,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.domain.types.enums.tagColor
+import com.shary.app.core.domain.types.enums.UiFieldTag.Unknown.safeColor
+import com.shary.app.core.domain.types.enums.UiFieldTag.Unknown.safeTagString
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagPicker(
-    selected: String,
-    onSelected: (String) -> Unit,
+    selectedTag: UiFieldTag = UiFieldTag.Unknown,
+    onSelected: (UiFieldTag) -> Unit,
     allowNone: Boolean = true,
     allTags: List<UiFieldTag>
 ) {
@@ -26,8 +27,7 @@ fun TagPicker(
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    val selectedLabel = selected ?: "No tag"
-    val chipColor = tagColor(UiFieldTag.fromString(selectedLabel))
+    val chipColor = selectedTag.safeColor()
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -35,7 +35,7 @@ fun TagPicker(
         modifier = Modifier.fillMaxWidth()
     ) {
         TextField(
-            value = selectedLabel,
+            value = selectedTag.name,
             onValueChange = {},
             readOnly = true,
             label = { Text("Tag") },
@@ -68,13 +68,13 @@ fun TagPicker(
                                 modifier = Modifier
                                     .size(12.dp)
                                     .clip(CircleShape)
-                                    .background(tagColor(UiFieldTag.Unknown))
+                                    .background(selectedTag.safeColor())
                             )
                             Text("No tag", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     onClick = {
-                        onSelected("")
+                        onSelected(UiFieldTag.Unknown) // mejor explícito
                         expanded = false
                     }
                 )
@@ -91,13 +91,13 @@ fun TagPicker(
                                 modifier = Modifier
                                     .size(12.dp)
                                     .clip(CircleShape)
-                                    .background(tagColor(tag))
+                                    .background(tag.safeColor())
                             )
-                            Text(tag.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(tag.safeTagString(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     onClick = {
-                        onSelected(tag.name)
+                        onSelected(tag) // ✅ usar el tag clicado
                         expanded = false
                     }
                 )

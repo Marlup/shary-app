@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
 import com.shary.app.core.domain.interfaces.services.FileService
+import com.shary.app.core.domain.types.enums.DataFileMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -13,6 +14,7 @@ import java.io.InputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+
 
 class FileServiceImpl(
     private val context: Context
@@ -24,12 +26,13 @@ class FileServiceImpl(
 
     // -------------------- Public API (all suspend/IO) --------------------
 
-    override suspend fun getModeFromZip(file: File): String? = withContext(Dispatchers.IO) {
+    override suspend fun getModeFromZip(file: File): DataFileMode? = withContext(Dispatchers.IO) {
         extractTextEntry(file, "meta.txt")?.let { meta ->
             Regex("""(?im)^\s*mode\s*=\s*([A-Za-z0-9_-]+)\s*$""")
-                .find(meta)?.groupValues?.getOrNull(1)?.also {
-                    Log.d("getModeFromZip", it)
-                }
+                .find(meta)
+                ?.groupValues?.getOrNull(1)
+                ?.let { DataFileMode.fromString(it) }
+                ?.also { Log.d("getModeFromZip", it.name) }
         }
     }
 
@@ -107,6 +110,19 @@ class FileServiceImpl(
     override fun deletePrivateFile(file: File): Boolean = runCatching { file.delete() }.getOrDefault(false)
 
     // -------------------- Internals --------------------
+
+    // In FileServiceImpl
+    override fun listPrivateZipFiles(): List<File> {
+        return context.filesDir
+            .listFiles { f -> f.extension == "zip" }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
+    }
+
+
+    fun buildMetaFile(mode: DataFileMode): String {
+        return "mode=${DataFileMode.toString(mode)}"
+    }
 
     private suspend fun extractTextEntry(file: File, fileName: String): String? =
         withContext(Dispatchers.IO) {

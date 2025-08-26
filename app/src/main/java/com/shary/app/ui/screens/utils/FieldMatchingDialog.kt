@@ -10,12 +10,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.shary.app.Field
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.domain.types.enums.tagColor
 import com.shary.app.ui.screens.field.utils.dialogs.AddFieldDialog
 
 
@@ -115,14 +114,17 @@ fun FieldMatchingDialog(
                             val isSelected = selectedStorageIndex == index
                             val isMatched = matches.any { it.first == index }
 
-                            val backgroundColor =
-                                if (isSelected) tagColor(UiFieldTag.fromString(field.tag.name))
-                                else if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant
-                                else MaterialTheme.colorScheme.surface
+                            val backgroundColor = when {
+                                isSelected -> field.tag.toColor() // highlight with tag color
+                                isMatched -> MaterialTheme.colorScheme.secondaryContainer   // matched highlight
+                                index % 2 == 0 -> MaterialTheme.colorScheme.surfaceVariant    // alternate background
+                                else -> MaterialTheme.colorScheme.surface
+                            }
 
                             SelectableRow(
                                 item = field.key,
-                                background = backgroundColor,
+                                index = index,
+                                backgroundColorProvider = { backgroundColor },
                                 onToggle = {
                                     if (isFullyMatched && isSelected) {
                                         selectedStorageIndex = null
@@ -134,17 +136,24 @@ fun FieldMatchingDialog(
                             ) {
                                 Column(Modifier.fillMaxWidth()) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(field.key, maxLines = 1, style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            field.key,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = backgroundColor
+                                        )
                                         Spacer(Modifier.width(8.dp))
                                         matches.firstOrNull { it.first == index }?.let { triple ->
                                             if (triple.third > 0) {
                                                 Text("[${triple.third}]", style = MaterialTheme.typography.bodySmall)
                                             }
                                         }
+                                        /*
                                         if (isMatched) {
                                             Spacer(Modifier.width(8.dp))
                                             AssistChip(onClick = {}, label = { Text("Matched") })
                                         }
+                                         */
                                     }
                                     Text(field.value, maxLines = 1, style = MaterialTheme.typography.bodySmall)
                                 }
@@ -167,14 +176,16 @@ fun FieldMatchingDialog(
                             val match = matches.firstOrNull { it.second == index }
                             val isMatched = match != null
 
-                            val backgroundColor =
-                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                else if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant
-                                else MaterialTheme.colorScheme.surface
+                            val rowBackgroundColor = when {
+                                isSelected -> Color.LightGray // ← selection color
+                                index % 2 == 0 -> MaterialTheme.colorScheme.surface                     // alternate / tag color
+                                else -> MaterialTheme.colorScheme.secondaryContainer
+                            }
 
                             SelectableRow(
                                 item = key,
-                                background = backgroundColor,
+                                index = index,
+                                backgroundColorProvider = { rowBackgroundColor },
                                 onToggle = {
                                     if (isFullyMatched && isSelected) {
                                         selectedRequestIndex = null
@@ -186,17 +197,24 @@ fun FieldMatchingDialog(
                             ) {
                                 Column(Modifier.fillMaxWidth()) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(key, maxLines = 1, style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            key,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = rowBackgroundColor
+                                        )
                                         Spacer(Modifier.width(8.dp))
                                         match?.let {
                                             if (it.third > 0) {
                                                 Text("[${it.third}]", style = MaterialTheme.typography.bodySmall)
                                             }
                                         }
+                                        /*
                                         if (isMatched) {
                                             Spacer(Modifier.width(8.dp))
                                             AssistChip(onClick = {}, label = { Text("Matched") })
                                         }
+                                         */
                                     }
                                     Text(value, maxLines = 1, style = MaterialTheme.typography.bodySmall)
                                 }

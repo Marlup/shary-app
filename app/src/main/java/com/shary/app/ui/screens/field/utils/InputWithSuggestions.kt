@@ -46,7 +46,7 @@ fun InputWithSuggestions(
             onValueChange = {
                 onKeyChange(it)
 
-                showSuggestions = it.length >= 2
+                showSuggestions = it.length >= 1
                 filteredSuggestions = predefinedKeys.filter { suggestion ->
                     suggestion.contains(it, ignoreCase = true)
                 }

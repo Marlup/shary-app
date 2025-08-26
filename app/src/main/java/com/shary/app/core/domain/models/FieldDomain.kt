@@ -1,7 +1,6 @@
 package com.shary.app.core.domain.models
 
 import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.domain.types.enums.tagColor
 import java.time.Instant
 
 // --------------------
@@ -14,7 +13,7 @@ data class FieldDomain(
     val tag: UiFieldTag = UiFieldTag.Unknown,
     val dateAdded: Instant
 ) {
-    val tagColor get() = tagColor(tag)
+    val tagColor get() = tag.toColor()
 
     companion object {
         fun create(

@@ -17,9 +17,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
-import com.shary.app.utils.BiometricAuthManager
 import com.shary.app.viewmodels.authentication.AuthEvent
-import com.shary.app.viewmodels.authentication.AuthMode
+import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
 
@@ -41,10 +40,10 @@ interface LoginScreenEntryPoints {
 fun LoginScreen(navController: NavHostController) {
 
     val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
-    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthMode.LOGIN) }
+    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.LOGIN) }
 
-    val ctx = LocalContext.current
-    val activity = ctx as FragmentActivity
+    val context = LocalContext.current
+    val activity = context as FragmentActivity
     val scope = rememberCoroutineScope()
 
     // VM state
@@ -60,13 +59,13 @@ fun LoginScreen(navController: NavHostController) {
             when (ev) {
                 is AuthEvent.Success -> {
                     // OPTIONAL: after successful login, check cloud registration
-                    val deps = EntryPoints.get(ctx.applicationContext, LoginScreenEntryPoints::class.java)
+                    val deps = EntryPoints.get(context.applicationContext, LoginScreenEntryPoints::class.java)
                     val cloudService = deps.cloudService()
                     scope.launch {
                         val email = authenticationViewModel.authState.value.email
                         val registered = runCatching { cloudService.isUserRegistered(email) }.getOrDefault(false)
                         val msg = if (registered) "User is registered in Cloud" else "User is NOT registered in Cloud"
-                        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     }
                     // Navigate to Home
                     navController.navigate(Screen.Home.route) {
@@ -144,13 +143,14 @@ fun LoginScreen(navController: NavHostController) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = { authenticationViewModel.submit(ctx) },
+                onClick = { authenticationViewModel.submit(context) },
                 enabled = !loading,
                 modifier = Modifier.size(200.dp, 50.dp)
             ) {
                 Text(if (loading) "Checking..." else "Login")
             }
 
+            /*
             Spacer(modifier = Modifier.height(32.dp))
 
             // Biometric Login (kept like your original; you can wire it to auth if desired)
@@ -161,11 +161,11 @@ fun LoginScreen(navController: NavHostController) {
                 Button(
                     onClick = {
                         val biometricManager = BiometricAuthManager(
-                            context = ctx,
+                            context = context,
                             activity = activity,
                             onAuthSuccess = {
                                 // On biometric success, go Home.
-                                // If you want biometric to actually sign in, call authenticationViewModel.submit(ctx) or provide a biometric path.
+                                // If you want biometric to actually sign in, call authenticationViewModel.submit(context) or provide a biometric path.
                                 navController.navigate(Screen.Home.route) {
                                     popUpTo(Screen.Login.route) { inclusive = true }
                                 }
@@ -183,6 +183,8 @@ fun LoginScreen(navController: NavHostController) {
                     Text(text = it, color = MaterialTheme.colorScheme.error)
                 }
             }
+
+             */
         }
     }
 }

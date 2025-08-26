@@ -6,14 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @HiltViewModel
-class CloudServiceViewModel @Inject constructor(
+class CloudViewModel @Inject constructor(
     private val cloudService: CloudService
 ) : ViewModel() {
 

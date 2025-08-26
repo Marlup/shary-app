@@ -1,5 +1,6 @@
 package com.shary.app.infrastructure.repositories
 
+import android.util.Log
 import androidx.datastore.core.DataStore
 import com.shary.app.FieldList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
@@ -8,8 +9,8 @@ import com.shary.app.core.domain.types.enums.UiFieldTag
 import com.shary.app.infrastructure.mappers.toDomain
 import com.shary.app.infrastructure.mappers.toProto
 import com.shary.app.core.domain.interfaces.security.FieldCodec
-import jakarta.inject.Inject
-import jakarta.inject.Singleton
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 
 @Singleton
@@ -22,18 +23,21 @@ class FieldRepositoryImpl @Inject constructor(
 
     override suspend fun getAllFields(): List<FieldDomain> {
         val fieldProtoList = dataStore.data.first().fieldsList
+        Log.w("FieldRepositoryImpl", "getAllFields: $fieldProtoList")
         return fieldProtoList.map { it.toDomain(codec) }
     }
 
     override suspend fun getFieldsByTag(tag: UiFieldTag): List<FieldDomain> {
-        val wanted = UiFieldTag.toString(tag).lowercase()
+        val wanted = tag.toTagString().lowercase()
         return dataStore.data.first().fieldsList
             .map { it.toDomain(codec) }
-            .filter { UiFieldTag.toString(it.tag).lowercase() == wanted }
+            .filter { it.tag.toTagString().lowercase() == wanted }
     }
 
     override suspend fun saveField(field: FieldDomain) {
+        Log.w("FieldRepositoryImpl", "before encryption")
         val encrypted = field.toProto(codec)
+        Log.w("FieldRepositoryImpl", "after encryption - encrypted saveField: $encrypted")
         dataStore.updateData { current ->
             current.toBuilder()
                 .addFields(encrypted)
@@ -44,6 +48,7 @@ class FieldRepositoryImpl @Inject constructor(
     override suspend fun saveFieldIfNotExists(field: FieldDomain): Boolean {
         // Compare by decrypted key in clear text
         val existing = getAllFields()
+        Log.w("FieldRepositoryImpl", "saveFieldIfNotExists: $existing")
         return if (existing.none { it.key.equals(field.key, ignoreCase = true) }) {
             saveField(field)
             true

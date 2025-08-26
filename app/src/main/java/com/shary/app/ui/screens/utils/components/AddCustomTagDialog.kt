@@ -11,10 +11,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.shary.app.core.domain.types.enums.UiFieldTag
 
 @Composable
 fun AddCustomTagDialog(
-    onAdd: (String) -> Unit,
+    onAdd: (UiFieldTag) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
@@ -35,7 +36,7 @@ fun AddCustomTagDialog(
             TextButton(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onAdd(name.trim())
+                        onAdd(UiFieldTag.fromString(name.trim()))
                     }
                 },
                 enabled = name.isNotBlank()

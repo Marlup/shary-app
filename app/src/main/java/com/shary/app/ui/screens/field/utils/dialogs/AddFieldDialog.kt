@@ -25,7 +25,7 @@ fun AddFieldDialog(
     )
 
     FieldEditorDialog(
-        initial = initial,
+        initialField = initial,
         allTags = allTags,
         title = "Add new field",
         confirmLabel = "Add",

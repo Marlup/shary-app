@@ -1,5 +1,6 @@
 package com.shary.app.viewmodels.field
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.models.FieldDomain
@@ -8,7 +9,7 @@ import com.shary.app.core.session.Session
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.TagRepository // <- simple abstraction: addCustomTag(name)
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -30,9 +31,6 @@ class FieldViewModel @Inject constructor(
 
     private val _selectedFields = MutableStateFlow<List<FieldDomain>>(emptyList())
     val selectedFields: StateFlow<List<FieldDomain>> = _selectedFields.asStateFlow()
-
-    private val _selectedKeys = MutableStateFlow<List<String>>(emptyList())
-    val selectedKeys: StateFlow<List<String>> = _selectedKeys.asStateFlow()
 
     // Loading flag for long-running operations
     private val _isLoading = MutableStateFlow(false)
@@ -56,14 +54,16 @@ class FieldViewModel @Inject constructor(
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
-                        val normalized = normalize(field)
+                        val normalizedFiedl = normalize(field)
                         // persist custom tag if needed
-                        if (normalized.tag is UiFieldTag.Custom) {
-                            val name = UiFieldTag.toString(normalized.tag)
+                        if (normalizedFiedl.tag is UiFieldTag.Custom) {
+                            val name = normalizedFiedl.tag.toTagString()
                             tagRepository.addCustomTag(name)
                         }
                         // save if not exists
-                        fieldRepository.saveFieldIfNotExists(normalized)
+                        Log.w("FieldViewModel", "before - saveFieldIfNotExists in" +
+                                " addField: $normalizedFiedl")
+                        fieldRepository.saveFieldIfNotExists(normalizedFiedl)
                     }
                 }
             }
@@ -150,7 +150,7 @@ class FieldViewModel @Inject constructor(
                     writeMutex.withLock {
                         // ensure custom tag is registered before updating
                         if (tag is UiFieldTag.Custom) {
-                            tagRepository.addCustomTag(UiFieldTag.toString(tag))
+                            tagRepository.addCustomTag(tag.toTagString())
                         }
                         fieldRepository.updateTag(field.key, tag)
                     }
@@ -172,12 +172,14 @@ class FieldViewModel @Inject constructor(
         session.setSelectedFields(_selectedFields.value) // <— persistencia cross-screen
     }
 
-    fun clearSelectedFields() { session.resetSelectedFields() }
-
-    fun toggleFieldSelection(key: String) {
-        _selectedKeys.update { current -> if (key in current) current - key else current + key }
+    fun clearSelectedFields() {
+        session.resetSelectedFields()
+        _selectedFields.value = emptyList()
     }
-    fun clearSelectedKeys() { _selectedKeys.value = emptyList() }
+
+    fun toggleFieldSelection(field: FieldDomain) {
+        _selectedFields.update { current -> if (field in current) current - field else current + field }
+    }
 
     // ----------------------------- Internals --------------------------------
 

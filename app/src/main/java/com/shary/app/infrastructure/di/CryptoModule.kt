@@ -8,12 +8,16 @@ import com.shary.app.infrastructure.security.hkdf.HkdfSha256
 import com.shary.app.infrastructure.security.cipher.AesGcmCipher
 import com.shary.app.infrastructure.security.box.AesGcmBox
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
-import com.shary.app.infrastructure.security.local.InMemoryCredentialsProvider
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.security.DetachedVerifier
 import com.shary.app.core.domain.interfaces.security.Ed25519Factory
+import com.shary.app.core.domain.interfaces.security.FieldCodec
+import com.shary.app.core.domain.security.Box
+import com.shary.app.core.session.Session
+import com.shary.app.infrastructure.security.local.FieldCodecVault
 import com.shary.app.infrastructure.security.local.LocalVault
 import com.shary.app.infrastructure.security.manager.CryptographyManagerImpl
+import com.shary.app.infrastructure.security.sign.BcEd25519Factory
 import com.shary.app.infrastructure.security.sign.Ed25519DetachedVerifier
 import dagger.Module
 import dagger.Provides
@@ -29,13 +33,10 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object CryptoModule {
 
-    @Provides @Singleton fun provideAesGcmCipher(
-    ): AesGcmCipher = AesGcmCipher()
-
     @Provides @Singleton fun provideAesGcmBox(
         hkdf: HkdfSha256,
         cipher: AesGcmCipher
-    ): AesGcmBox = AesGcmBox(hkdf, cipher)
+    ): Box = AesGcmBox(hkdf, cipher)
 
     @Provides @Singleton fun provideKeyDerivation(
         kdf: Kdf,
@@ -50,10 +51,6 @@ object CryptoModule {
     ): HkdfSha256 = HkdfSha256()
     @Provides @Singleton fun provideCipher(
     ): AesGcmCipher = AesGcmCipher()
-    @Provides @Singleton fun provideBox(
-        h: HkdfSha256,
-        c: AesGcmCipher
-    ): AesGcmBox = AesGcmBox(h, c)
 
     @Provides @Singleton fun provideLocalVault(
         kd: KeyDerivation,
@@ -71,9 +68,14 @@ object CryptoModule {
     ): CryptographyManager =
         CryptographyManagerImpl(kd, box, cipher, factory, localVault, verifier, context)
 
-    @Provides @Singleton fun provideCredentialsProvider(
-    ): InMemoryCredentialsProvider = InMemoryCredentialsProvider()
-
     @Provides @Singleton fun provideDetachedVerifier(
     ): DetachedVerifier = Ed25519DetachedVerifier()
+
+    @Provides @Singleton fun provideEd25519Factory(
+    ): Ed25519Factory = BcEd25519Factory()
+
+    @Provides @Singleton fun provideFieldCodecVault(
+        vault: LocalVault,
+        session: Session
+    ): FieldCodec = FieldCodecVault(vault, session)
 }

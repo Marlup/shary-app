@@ -5,6 +5,7 @@ import com.shary.app.core.domain.interfaces.security.AuthService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.types.valueobjects.Purpose
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,7 +36,11 @@ class Session @Inject constructor(
     // SafePassword
     fun getOwnerSafePassword(): String = auth.getSafePassword()
     fun setOwnerSafePassword(safePassword: String) = auth.setSafePassword(safePassword)
-    
+
+    // SafePassword
+    fun getLocalKeyByPurpose(purpose: Purpose): ByteArray? = auth.getLocalKeyByPurpose(purpose)
+    fun addLocalKeyByPurpose(purpose: Purpose, value: ByteArray) = auth.addLocalKeyByPurpose(purpose, value)
+
     // IsOnline
     fun getOwnerIsOnline() = auth.getIsOnline()
     fun setOwnerIsOnline(value: Boolean) = auth.setIsOnline(value)
