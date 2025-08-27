@@ -16,6 +16,7 @@ import com.shary.app.ui.screens.home.HomeScreen
 import com.shary.app.ui.screens.login.LoginScreen
 import com.shary.app.ui.screens.logup.LogupScreen
 import com.shary.app.ui.screens.request.RequestsScreen
+import com.shary.app.ui.screens.summary.SummaryScreen
 import com.shary.app.ui.screens.user.UsersScreen
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import dagger.hilt.EntryPoints
@@ -57,6 +58,7 @@ fun AppNavigator() {
         composable(Screen.Logup.route) { LogupScreen(navController) }
         composable(Screen.Login.route) { LoginScreen(navController) }
         composable(Screen.Home.route) { HomeScreen(navController) }
+        composable(Screen.Summary.route) { SummaryScreen(navController) }
         composable(Screen.Fields.route) { FieldsScreen(navController) }
         composable(Screen.Users.route) { UsersScreen(navController) }
         composable(Screen.Requests.route) { RequestsScreen(navController) }

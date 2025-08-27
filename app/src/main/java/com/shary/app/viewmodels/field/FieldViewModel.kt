@@ -34,7 +34,7 @@ class FieldViewModel @Inject constructor(
 
     // Loading flag for long-running operations
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    //val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     // One-shot events (snackbar/toast/navigation)
     private val _events = MutableSharedFlow<FieldEvent>(extraBufferCapacity = 1)
@@ -46,6 +46,9 @@ class FieldViewModel @Inject constructor(
     init { refresh() }
 
     // ------------------- Public API (called from Screen) -------------------
+
+    fun anyFieldCached() = session.isAnyFieldCached()
+    fun anySelectedField() = _selectedFields.value.isNotEmpty()
 
     /** Add a new field. Handles custom tag persistence and de-duplication. */
     fun addField(field: FieldDomain) {
@@ -169,11 +172,11 @@ class FieldViewModel @Inject constructor(
 
     fun setSelectedFields(fields: List<FieldDomain>) {
         _selectedFields.value = fields.distinctBy { it.key.lowercase() }
-        session.setSelectedFields(_selectedFields.value) // <— persistencia cross-screen
+        session.setCachedFields(_selectedFields.value) // <— persistencia cross-screen
     }
 
     fun clearSelectedFields() {
-        session.resetSelectedFields()
+        session.resetCachedFields()
         _selectedFields.value = emptyList()
     }
 

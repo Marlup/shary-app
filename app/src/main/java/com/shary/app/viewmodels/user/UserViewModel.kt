@@ -41,14 +41,11 @@ class UserViewModel @Inject constructor(
     private val writeMutex = Mutex()
 
     init { refresh() }
-    // If you prefer reactive updates:
-    // init {
-    //   viewModelScope.launch {
-    //     userRepository.users.collect { _users.value = it }
-    //   }
-    // }
 
     // ------------------------- Selection helpers -------------------------
+
+    fun anyUserCached() = session.isAnyUserCached()
+    fun anySelectedUser() = _selectedUsers.value.isNotEmpty()
 
     fun toggleUser(user: UserDomain) = _selectedUsers.update { current ->
         if (user in current) current - user else current + user
@@ -56,14 +53,14 @@ class UserViewModel @Inject constructor(
 
     fun setSelectedUsers(users: List<UserDomain>) {
         _selectedUsers.value = users.distinctBy { it.email.trim().lowercase() }
-        session.setSelectedUsers(_selectedUsers.value) // <— persistencia cross-screen
+        session.setCachedUsers(_selectedUsers.value) // <— persistencia cross-screen
     }
 
     fun setPhoneNumber(number: String?) {
         _selectedPhoneNumber.value = number
-        session.setSelectedPhoneNumber(number) // opcional para WhatsApp/Telegram
+        session.setCachedPhoneNumber(number) // opcional para WhatsApp/Telegram
     }
-    fun clearSelectedUsers() { session.resetSelectedUsers() }
+    fun clearSelectedUsers() { session.resetCachedUsers() }
 
     // ----------------------------- Loading -------------------------------
 

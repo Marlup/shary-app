@@ -24,22 +24,22 @@ class Session @Inject constructor(
 
     // Email
     fun getOwnerEmail(): String = auth.state.value.email
-    fun setOwnerEmail(newEmail: String) { auth.state.value.email = newEmail }
+    //fun setOwnerEmail(newEmail: String) { auth.state.value.email = newEmail }
     
     // Username
     fun getOwnerUsername(): String = auth.state.value.username
     
     // AuthToken
     fun getOwnerAuthToken(): String = auth.getAuthToken()
-    fun setOwnerAuthToken(authToken: String) = auth.setAuthToken(authToken)
+    //fun setOwnerAuthToken(authToken: String) = auth.setAuthToken(authToken)
     
     // SafePassword
     fun getOwnerSafePassword(): String = auth.getSafePassword()
-    fun setOwnerSafePassword(safePassword: String) = auth.setSafePassword(safePassword)
+    //fun setOwnerSafePassword(safePassword: String) = auth.setSafePassword(safePassword)
 
     // SafePassword
     fun getLocalKeyByPurpose(purpose: Purpose): ByteArray? = auth.getLocalKeyByPurpose(purpose)
-    fun addLocalKeyByPurpose(purpose: Purpose, value: ByteArray) = auth.addLocalKeyByPurpose(purpose, value)
+    //fun addLocalKeyByPurpose(purpose: Purpose, value: ByteArray) = auth.addLocalKeyByPurpose(purpose, value)
 
     // IsOnline
     fun getOwnerIsOnline() = auth.getIsOnline()
@@ -48,28 +48,28 @@ class Session @Inject constructor(
     
     // ==================== Fields ====================
 
-    fun setSelectedFields(fields: List<FieldDomain>) = cacheSelection.cacheFields(fields)
-    fun getSelectedFields(): List<FieldDomain>       = cacheSelection.readFields()
-    fun isAnyFieldSelected(): Boolean                = cacheSelection.readFields().isNotEmpty()
-    fun resetSelectedFields() = cacheSelection.clearFields()
+    fun setCachedFields(fields: List<FieldDomain>) = cacheSelection.cacheFields(fields)
+    fun getCachedFields(): List<FieldDomain>       = cacheSelection.readFields()
+    fun isAnyFieldCached(): Boolean                = cacheSelection.readFields().isNotEmpty()
+    fun resetCachedFields() = cacheSelection.clearFields()
 
 
     // ==================== Users ====================
 
-    fun setSelectedUsers(users: List<UserDomain>)    = cacheSelection.cacheUsers(users)
-    fun getSelectedEmails(): List<String>            =
+    fun setCachedUsers(users: List<UserDomain>)    = cacheSelection.cacheUsers(users)
+    fun getCachedEmails(): List<String>            =
         cacheSelection.readUsers().map { it.email }
-    fun isAnyEmailSelected(): Boolean                = cacheSelection.readUsers().isNotEmpty()
-    fun resetSelectedUsers() = cacheSelection.clearUsers()
+    fun isAnyUserCached(): Boolean = cacheSelection.readUsers().isNotEmpty()
+    fun resetCachedUsers() = cacheSelection.clearUsers()
 
 
     // ==================== Phone ====================
 
-    fun setSelectedPhoneNumber(n: String?)           = cacheSelection.setPhoneNumber(n)
-    fun getSelectedPhoneNumber(): String?            = cacheSelection.getPhoneNumber()
+    fun setCachedPhoneNumber(n: String?)           = cacheSelection.setPhoneNumber(n)
+    //fun getCachedPhoneNumber(): String?            = cacheSelection.getPhoneNumber()
 
 
     // ==================== Global ====================
 
-    fun resetSelectedData()                          = cacheSelection.clearAll()
+    fun resetCachedData()                          = cacheSelection.clearAll()
 }

@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import com.shary.app.FieldList
 import com.shary.app.RequestList
-import com.shary.app.User
 import com.shary.app.UserList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
@@ -96,8 +95,7 @@ object DependenciesContainer {
 
     @Provides @Singleton fun provideFileService(
         @ApplicationContext context: Context
-    ): FileService =
-        FileServiceImpl(context)
+    ): FileService = FileServiceImpl(context)
 
     @Provides @Singleton fun provideSelectionCacheService(
     ): CacheService = SelectionCacheService()

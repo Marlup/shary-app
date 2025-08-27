@@ -8,6 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Summarize
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,14 +29,14 @@ import com.shary.app.core.domain.types.enums.UiFieldTag.Bank.safeColor
 import com.shary.app.core.domain.types.enums.UiFieldTag.Bank.safeTagString
 import com.shary.app.ui.screens.field.utils.dialogs.AddCopyFieldDialog
 import com.shary.app.ui.screens.field.utils.dialogs.AddFieldDialog
-import com.shary.app.ui.screens.utils.FieldItemRow
-import com.shary.app.ui.screens.utils.GoBackButton
+import com.shary.app.ui.screens.home.utils.Screen
+import com.shary.app.ui.screens.utils.GoToScreen
 import com.shary.app.ui.screens.utils.RowSearcher
-import com.shary.app.ui.screens.utils.SelectableRow
 import com.shary.app.utils.DateUtils
 import com.shary.app.viewmodels.field.FieldEvent
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.tags.TagViewModel
+import com.shary.app.viewmodels.user.UserViewModel
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +44,7 @@ import com.shary.app.viewmodels.tags.TagViewModel
 fun FieldsScreen(navController: NavHostController) {
     val fieldViewModel: FieldViewModel = hiltViewModel()
     val tagViewModel: TagViewModel = hiltViewModel()
+    val userViewModel: UserViewModel = hiltViewModel()
 
     // ---- Table and DB rows (Domain) ----
     val fieldList by fieldViewModel.fields.collectAsState()
@@ -129,7 +132,7 @@ fun FieldsScreen(navController: NavHostController) {
     }
 
     // Reset transient UI state
-    fun clearStates() {
+    fun clearEphemeralStates() {
         editingField = null
         editedValue = ""
         editedAlias = ""
@@ -139,15 +142,13 @@ fun FieldsScreen(navController: NavHostController) {
 
     // Persist selection on lifecycle stop
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                val currentFilteredFields = fieldList
-                    .filter { filterFieldsBy(it, searchCriteria, fieldSearchAttribute) }
-                    .filter { it in selectedFields }
-
-                fieldViewModel.setSelectedFields(currentFilteredFields)
-                clearStates()
+            if (event == Lifecycle.Event.ON_STOP)
+            {
+                fieldViewModel.setSelectedFields(selectedFields)
+                clearEphemeralStates()
             }
         }
         val lifecycle = lifecycleOwner.value.lifecycle
@@ -171,8 +172,9 @@ fun FieldsScreen(navController: NavHostController) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
             ) {
-                // Back button
-                GoBackButton(navController)
+
+                // Back to home button
+                GoToScreen(navController, Screen.Home) { fieldViewModel.clearSelectedFields() }
 
                 // Add row button
                 FloatingActionButton(onClick = { openAddDialog = true }) {
@@ -180,23 +182,48 @@ fun FieldsScreen(navController: NavHostController) {
                 }
 
                 // Delete selected rows button
-                val isEnabled = selectedFields.isNotEmpty()
+                val anySelectedFields = selectedFields.isNotEmpty()
                 FloatingActionButton(
                     onClick = {
-                        if (isEnabled) {
+                        if (anySelectedFields) {
                             // Delete selected fields sequentially
                             selectedFields.toList().forEach { field ->
                                 fieldViewModel.deleteField(field)
                             }
                             fieldViewModel.clearSelectedFields()
-                            snackbarMessage = "Deleted fields"
+                            snackbarMessage = "Deleted ${selectedFields.size} fields"
                         }
                     },
-                    containerColor = if (isEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
-                    contentColor = if (isEnabled) Color.White else Color.LightGray,
-                    modifier = Modifier.alpha(if (isEnabled) 1f else 0.6f)
+                    containerColor = if (anySelectedFields) MaterialTheme.colorScheme.primary else Color.Gray,
+                    contentColor = if (anySelectedFields) Color.White else Color.LightGray,
+                    modifier = Modifier.alpha(if (anySelectedFields) 1f else 0.6f)
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                    Icon(Icons.Default.Delete, contentDescription = "Delete fields")
+                }
+
+                // Send the fields to the users
+                FloatingActionButton(
+                    onClick = {
+                        if (userViewModel.anyUserCached() && anySelectedFields)
+                            navController.navigate(Screen.Summary.route)
+                              },
+                    containerColor = if (anySelectedFields) MaterialTheme.colorScheme.primary else Color.Gray,
+                    contentColor = if (anySelectedFields) Color.White else Color.LightGray,
+                    modifier = Modifier.alpha(1f)
+                ) {
+                    Icon(Icons.Filled.Summarize, contentDescription = "User Selection")
+                }
+                // Forward to users screen for sending pipeline
+                FloatingActionButton(
+                    onClick = {
+                        if (anySelectedFields)
+                            navController.navigate(Screen.Users.route)
+                              },
+                    containerColor = if (anySelectedFields) MaterialTheme.colorScheme.primary else Color.Gray,
+                    contentColor = if (anySelectedFields) Color.White else Color.LightGray,
+                    modifier = Modifier.alpha(if (anySelectedFields) 1f else 0.6f)
+                ) {
+                    Icon(Icons.Filled.Person, contentDescription = "Summarization")
                 }
             }
         },

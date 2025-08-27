@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Summarize
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,12 +23,14 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.enums.AddFlow
 import com.shary.app.core.domain.types.enums.UserAttribute
+import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
-import com.shary.app.ui.screens.utils.GoBackButton
+import com.shary.app.ui.screens.utils.GoToScreen
 import com.shary.app.ui.screens.utils.RowSearcher
 import com.shary.app.ui.screens.utils.SelectableRow
 import com.shary.app.ui.screens.utils.UserItemRow
+import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.user.UserEvent
 import com.shary.app.viewmodels.user.UserViewModel
 
@@ -35,6 +39,7 @@ import com.shary.app.viewmodels.user.UserViewModel
 fun UsersScreen(navController: NavHostController) {
     // ---- ViewModel ----
     val userViewModel: UserViewModel = hiltViewModel()
+    val fieldViewModel: FieldViewModel = hiltViewModel()
 
     // ---- State from VM ----
     val userList by userViewModel.users.collectAsState()
@@ -62,7 +67,7 @@ fun UsersScreen(navController: NavHostController) {
 
     // ---- Event-driven UX ----
     var lastFlow by remember { mutableStateOf(AddFlow.NONE) }
-    var lastSubmittedEmail by remember { mutableStateOf<String?>(null) }
+    val lastSubmittedEmail by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         userViewModel.events.collect { ev ->
@@ -107,8 +112,9 @@ fun UsersScreen(navController: NavHostController) {
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                userViewModel.setSelectedUsers(selectedUsers) // <-- persists to Session
+            if (event == Lifecycle.Event.ON_STOP)
+            {
+                userViewModel.setSelectedUsers(selectedUsers)
                 clearEphemeralStates()
             }
         }
@@ -134,7 +140,9 @@ fun UsersScreen(navController: NavHostController) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
             ) {
-                GoBackButton(navController)
+
+                // Back to home button
+                GoToScreen(navController, Screen.Home) { userViewModel.clearSelectedUsers() }
 
                 FloatingActionButton(
                     onClick = { openAddDialog = true },
@@ -142,22 +150,50 @@ fun UsersScreen(navController: NavHostController) {
                     contentColor = Color.White
                 ) { Icon(Icons.Default.Add, contentDescription = "Add User") }
 
-                val canDelete = selectedUsers.isNotEmpty()
+                val anySelectedUsers = selectedUsers.isNotEmpty()
                 FloatingActionButton(
                     onClick = {
-                        if (canDelete) {
+                        if (anySelectedUsers) {
                             // delete selected
-                            selectedUsers.toList().forEach { selectedUser ->
-                                userViewModel.deleteUser(selectedUser)
+                            selectedUsers.toList().forEach { user ->
+                                userViewModel.deleteUser(user)
                             }
                             userViewModel.clearSelectedUsers()
                             snackbarMessage = "Deleted ${selectedUsers.size} user(s)"
                         }
                     },
-                    containerColor = if (canDelete) MaterialTheme.colorScheme.primary else Color.Gray,
-                    contentColor = if (canDelete) Color.White else Color.LightGray,
-                    modifier = Modifier.alpha(if (canDelete) 1f else 0.6f)
-                ) { Icon(Icons.Default.Delete, contentDescription = "Delete users") }
+                    containerColor = if (anySelectedUsers) MaterialTheme.colorScheme.primary else Color.Gray,
+                    contentColor = if (anySelectedUsers) Color.White else Color.LightGray,
+                    modifier = Modifier.alpha(if (anySelectedUsers) 1f else 0.6f)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete users")
+                }
+
+                // Send the fields to the users
+                FloatingActionButton(
+                    onClick = {
+                        if (fieldViewModel.anyFieldCached() && anySelectedUsers)
+                        navController.navigate(Screen.Summary.route)
+                              },
+                    containerColor = if (anySelectedUsers) MaterialTheme.colorScheme.primary else Color.Gray,
+                    contentColor = if (anySelectedUsers) Color.White else Color.LightGray,
+                    modifier = Modifier.alpha(1f)
+                ) {
+                    Icon(Icons.Filled.Summarize, contentDescription = "Field Selection")
+                }
+
+                // Forward to fields screen for sending pipeline
+                FloatingActionButton(
+                    onClick = {
+                        if (anySelectedUsers)
+                            navController.navigate(Screen.Fields.route)
+                              },
+                    containerColor = if (anySelectedUsers) MaterialTheme.colorScheme.primary else Color.Gray,
+                    contentColor = if (anySelectedUsers) Color.White else Color.LightGray,
+                    modifier = Modifier.alpha(if (anySelectedUsers) 1f else 0.6f)
+                ) {
+                    Icon(Icons.Filled.TextFields, contentDescription = "Summarization")
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }

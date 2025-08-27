@@ -1,6 +1,5 @@
 package com.shary.app.infrastructure.repositories
 
-import android.util.Log
 import androidx.datastore.core.DataStore
 import com.shary.app.FieldList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
@@ -23,7 +22,6 @@ class FieldRepositoryImpl @Inject constructor(
 
     override suspend fun getAllFields(): List<FieldDomain> {
         val fieldProtoList = dataStore.data.first().fieldsList
-        Log.w("FieldRepositoryImpl", "getAllFields: $fieldProtoList")
         return fieldProtoList.map { it.toDomain(codec) }
     }
 
@@ -35,9 +33,7 @@ class FieldRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveField(field: FieldDomain) {
-        Log.w("FieldRepositoryImpl", "before encryption")
         val encrypted = field.toProto(codec)
-        Log.w("FieldRepositoryImpl", "after encryption - encrypted saveField: $encrypted")
         dataStore.updateData { current ->
             current.toBuilder()
                 .addFields(encrypted)
@@ -48,7 +44,6 @@ class FieldRepositoryImpl @Inject constructor(
     override suspend fun saveFieldIfNotExists(field: FieldDomain): Boolean {
         // Compare by decrypted key in clear text
         val existing = getAllFields()
-        Log.w("FieldRepositoryImpl", "saveFieldIfNotExists: $existing")
         return if (existing.none { it.key.equals(field.key, ignoreCase = true) }) {
             saveField(field)
             true
