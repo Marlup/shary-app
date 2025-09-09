@@ -1,24 +1,35 @@
 package com.shary.app.ui.screens.fileVisualizer
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.AddFlow
 import com.shary.app.core.domain.types.enums.DataFileMode
-import com.shary.app.core.domain.types.enums.UiFieldTag
+import com.shary.app.ui.screens.field.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.FieldMatchingDialog
-import com.shary.app.ui.screens.utils.GoBackButton
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.fileVisualizer.FileVisualizerViewModel
 
@@ -26,51 +37,145 @@ import com.shary.app.viewmodels.fileVisualizer.FileVisualizerViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileVisualizerScreen(navController: NavHostController) {
+
+    // ---------------- ViewModels ----------------
     val fieldViewModel: FieldViewModel = hiltViewModel()
     val fileVisualizerViewModel: FileVisualizerViewModel = hiltViewModel()
 
     val items by fileVisualizerViewModel.items.collectAsState()
     val isLoading by fileVisualizerViewModel.isLoading.collectAsState()
 
-    var selected by remember { mutableStateOf<FileVisualizerViewModel.ParsedZip?>(null) }
+    var selected by remember { mutableStateOf<FileVisualizerViewModel.ParsedJson?>(null) }
     var isMatchingOpen by remember { mutableStateOf(false) }
 
     var lastSubmittedKey by remember { mutableStateOf<String?>(null) }
     var lastFlow by remember { mutableStateOf(AddFlow.NONE) }
+
+    // For file picking
+    val jsonPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri: Uri? ->
+            uri?.let { fileVisualizerViewModel.importJsonFromUri(it) }
+        }
+    )
 
     // Auto-refresh when entering
     LaunchedEffect(Unit) { fileVisualizerViewModel.refreshFiles() }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("File Visualizer") },
-                navigationIcon = {  },
-                actions = {
-                    IconButton(onClick = { fileVisualizerViewModel.refreshFiles() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+            Column(
+                modifier = Modifier
+                    .padding(end = 16.dp),
+                horizontalAlignment = Alignment.End
+            )
+            {
+                var expanded by remember { mutableStateOf(false) }
+
+                Box {
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreHoriz,
+                            contentDescription = "Menu"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Request") },
+                            onClick = {
+                                expanded = false
+                                navController.navigate(Screen.Requests.route)
+                            },
+                            leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Fields") },
+                            onClick = {
+                                expanded = false
+                                fieldViewModel.clearSelectedFields()
+                                navController.navigate(Screen.Fields.route)
+                            },
+                            leadingIcon = { Icon(Icons.Filled.TextFields, contentDescription = null) }
+                        )
                     }
                 }
-            )
+            }
         },
+        floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
+
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
-                // Go back to home button
-                GoBackButton(navController)
-
-                if (selected?.mode == DataFileMode.Request && selected?.fields?.isNotEmpty() == true) {
-                    ExtendedFloatingActionButton(
-                        onClick = { isMatchingOpen = true },
-                        icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Start Matching") },
-                        text = { Text("Start matching") }
+                // ---- Left: Delete ----
+                Box(
+                    modifier = Modifier
+                        .weight(0.15f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.Fields.route) },
+                        icon = Icons.Default.TextFields,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "To Fields"
+                    )
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.FileVisualizer.route) },
+                        icon = Icons.Default.KeyboardDoubleArrowLeft,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Back to Visualization Home"
                     )
                 }
+
+                // ---- Center: Add + Users ----
+                Row(
+                    modifier = Modifier.weight(0.70f),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactActionButton(
+                        onClick = {
+                            jsonPickerLauncher.launch(
+                                arrayOf("application/json", "application/zip")
+                            )
+                                  },
+                        icon = Icons.Default.Add,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "\"Import JSON or ZIP\""
+                    )
+
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.Users.route) },
+                        icon = Icons.Default.Person,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Send to Users"
+                    )
+                }
+
+                // ---- Right: Summary ----
+                Box(
+                    modifier = Modifier
+                        .weight(0.15f),
+                    contentAlignment = Alignment.Center
+                ) {
+
+                    if (selected?.mode == DataFileMode.Request && selected?.fields?.isNotEmpty() == true) {
+                        ExtendedFloatingActionButton(
+                            onClick = { isMatchingOpen = true },
+                            icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Start Matching") },
+                            text = { Text("Start matching") }
+                        )
+                    }
+                }
             }
-        }
+        },
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when {
@@ -92,16 +197,26 @@ fun FileVisualizerScreen(navController: NavHostController) {
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(items) { zip ->
+                        items(items) { json ->
                             ElevatedCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { selected = zip }
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                                    .border(
+                                        width = 4.dp,
+                                        color = colorScheme.primary,
+                                        shape = MaterialTheme.shapes.medium
+                                    ),
+                                colors = CardDefaults.elevatedCardColors(
+                                    containerColor = Color.White
+                                ),
+                                onClick = { selected = json }
                             ) {
                                 Column(Modifier.padding(12.dp)) {
-                                    Text(zip.fileName, style = MaterialTheme.typography.titleMedium)
+                                    Text(json.fileName, style = MaterialTheme.typography.titleMedium)
                                     Spacer(Modifier.height(4.dp))
-                                    Text("Mode: ${zip.mode ?: "Unknown"}", style = MaterialTheme.typography.bodySmall)
-                                    Text("Valid: ${zip.isValidStructure}", style = MaterialTheme.typography.bodySmall)
+                                    Text("Mode: ${json.mode ?: "Unknown"}", style = MaterialTheme.typography.bodySmall)
+                                    Text("Valid: ${json.isValidStructure}", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -130,7 +245,6 @@ fun FileVisualizerScreen(navController: NavHostController) {
                         lastSubmittedKey = newField.key
                         fieldViewModel.addField(newField)
                     },
-                    availableTags = UiFieldTag.entries
                 )
             }
         }

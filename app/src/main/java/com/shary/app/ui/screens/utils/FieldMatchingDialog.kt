@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.ui.screens.field.utils.dialogs.AddFieldDialog
+import com.shary.app.core.domain.types.enums.safeColor
+import com.shary.app.ui.screens.field.utils.AddFieldDialog
 
 
 @Composable
@@ -25,7 +25,6 @@ fun FieldMatchingDialog(
     onDismiss: () -> Unit,
     onAccept: (List<FieldDomain>) -> Unit,
     onAddField: (FieldDomain) -> Unit,
-    availableTags: List<UiFieldTag>
 ) {
     var selectedStorageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedRequestIndex by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -115,7 +114,7 @@ fun FieldMatchingDialog(
                             val isMatched = matches.any { it.first == index }
 
                             val backgroundColor = when {
-                                isSelected -> field.tag.toColor() // highlight with tag color
+                                isSelected -> field.tag.safeColor() // highlight with tag color
                                 isMatched -> MaterialTheme.colorScheme.secondaryContainer   // matched highlight
                                 index % 2 == 0 -> MaterialTheme.colorScheme.surfaceVariant    // alternate background
                                 else -> MaterialTheme.colorScheme.surface
@@ -227,7 +226,6 @@ fun FieldMatchingDialog(
                     AddFieldDialog(
                         onDismiss = { openAddDialog = false },
                         onAddField = onAddField,
-                        allTags = availableTags
                     )
                 }
             }

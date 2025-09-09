@@ -19,9 +19,7 @@ fun <A> RowSearcher(
     availableAttributes: List<A>,
     resolveOptionText: (A) -> String
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         val optionText = resolveOptionText(currentAttribute)
 
         TextField(
@@ -34,7 +32,7 @@ fun <A> RowSearcher(
                 )
             },
             modifier = Modifier
-                .fillMaxWidth(0.7f)
+                .fillMaxWidth(0.6f)
                 .padding(vertical = 4.dp, horizontal = 4.dp),
             singleLine = true,
             maxLines = 1
@@ -42,7 +40,6 @@ fun <A> RowSearcher(
 
         FilterBox(
             optionText,
-            isSelected = availableAttributes.first() == currentAttribute,
             onClick = {
                 // cycle through attributes or toggle between 2
                 val currentIndex = availableAttributes.indexOf(currentAttribute)

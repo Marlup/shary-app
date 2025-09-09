@@ -1,6 +1,7 @@
 // --- LogupScreen.kt ---
 package com.shary.app.ui.screens.logup
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -16,7 +17,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.PasswordOutlinedTextField
-import com.shary.app.viewmodels.authentication.AuthEvent
+import com.shary.app.viewmodels.authentication.AuthenticationEvent
 import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
@@ -26,6 +27,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
+import com.shary.app.viewmodels.authentication.AuthLogForm
+import com.shary.app.viewmodels.communication.CloudViewModel
 import dagger.hilt.EntryPoints
 
 @EntryPoint
@@ -36,40 +39,39 @@ interface LogupScreenEntryPoints {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LogupScreen(
-    navController: NavHostController
-) {
-    val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
-    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.SIGNUP) }
+fun LogupScreen(navController: NavHostController) {
 
-    val ctx = LocalContext.current
-    val form by authenticationViewModel.form.collectAsState()
+    // ---------------- ViewModels ----------------
+    val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
+    val cloudViewModel: CloudViewModel = hiltViewModel()
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // ---------------- ViewModels States ----------------
+    val signupForm by authenticationViewModel.logForm.collectAsState()
     val loading by authenticationViewModel.loading.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
-    var passwordVisible by remember { mutableStateOf(false) }
-    var confirmVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.SIGNUP) }
 
     // Listen to one-shot events from the VM
     LaunchedEffect(Unit) {
         authenticationViewModel.events.collect { ev ->
             when (ev) {
-                is AuthEvent.Success -> {
-                    // OPTIONAL: register user in cloud after successful sign-up
-                    val deps = EntryPoints.get(ctx.applicationContext, LogupScreenEntryPoints::class.java)
-                    val cloud = deps.cloudService()
+                is AuthenticationEvent.Success -> {
                     scope.launch {
-                        val authToken = cloud.uploadUser(form.email)
-                        if (authToken.isEmpty()) {
+                        authenticationViewModel.onLoginSuccess(signupForm.email)
+                        val authToken = authenticationViewModel.getToken()
+                        if (authToken.isNullOrEmpty()) {
                             Toast.makeText(
-                                ctx,
+                                context,
                                 "The user couldn't be uploaded to the cloud",
                                 Toast.LENGTH_LONG
                             ).show()
                         } else {
-                            Toast.makeText(ctx, "User created successfully!", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "User created successfully!", Toast.LENGTH_LONG).show()
                         }
                         // Navigate to Login (or Home if you prefer)
                         navController.navigate(Screen.Login.route) {
@@ -77,12 +79,56 @@ fun LogupScreen(
                         }
                     }
                 }
-                is AuthEvent.Error -> {
+
+                is AuthenticationEvent.Error -> {
                     snackbarHostState.showSnackbar(ev.message)
+                }
+
+                is AuthenticationEvent.CloudAnonymousReady -> {
+                    // Cloud anonymous session established
+                    val msg = "Anonymous cloud session ready (uid=${ev.uid.take(8)}…)"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    Log.i("LogupEvents", msg)
+                    // Optional: automatically upload user after anonymous session
+                    scope.launch {
+                        cloudViewModel.uploadUser(signupForm.email)
+                        val authToken = authenticationViewModel.getToken()
+                            if (authToken.isNullOrEmpty()) {
+                            Log.i("LogupEvents", "User uploaded after anonymous connect")
+                        }
+                    }
+                }
+
+                AuthenticationEvent.CloudSignedOut -> {
+                    // Cloud session signed out
+                    val msg = "Cloud session signed out"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    Log.i("LogupEvents", msg)
+                    // Navigate back to Login
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Logup.route) { inclusive = true }
+                    }
+                }
+
+                is AuthenticationEvent.CloudTokenRefreshed -> {
+                    // Cloud token refreshed
+                    val msg = "Cloud token refreshed"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    Log.i("LogupEvents", "New token: ${ev.token.take(12)}…")
+                    // Optional: you could retry a failed uploadUser here with fresh token
+                }
+
+                is AuthenticationEvent.UserRegisteredInCloud -> {
+                    Toast.makeText(context, "User is registered in Cloud", Toast.LENGTH_SHORT).show()
+                }
+
+                is AuthenticationEvent.UserNotRegisteredInCloud -> {
+                    Toast.makeText(context, "User is NOT registered in Cloud", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
+
 
     // Clear fields when screen goes to background (keeps your previous behavior)
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
@@ -97,9 +143,17 @@ fun LogupScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(title = { Text("Logup") })
+            CenterAlignedTopAppBar(
+                title = { Text("Logup") },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+                expandedHeight = 64.dp
+            )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {  }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -110,8 +164,8 @@ fun LogupScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             OutlinedTextField(
-                value = form.email,
-                onValueChange = authenticationViewModel::setEmail,
+                value = signupForm.email,
+                onValueChange = { authenticationViewModel.updateEmail(it) },
                 label = { Text("Email") },
                 singleLine = true,
                 enabled = !loading,
@@ -121,8 +175,8 @@ fun LogupScreen(
             Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = form.username,
-                onValueChange = authenticationViewModel::setUsername,
+                value = signupForm.username,
+                onValueChange = { authenticationViewModel.updateUsername(it) },
                 label = { Text("Username") },
                 singleLine = true,
                 enabled = !loading,
@@ -132,23 +186,23 @@ fun LogupScreen(
             Spacer(Modifier.height(16.dp))
 
             PasswordOutlinedTextField(
-                secret = form.password,
+                secret = signupForm.password,
                 isVisible = authenticationViewModel.passwordVisible,
-                onValueChange = authenticationViewModel::setPassword,
+                onValueChange = { authenticationViewModel.updatePassword(it) },
                 onClick = authenticationViewModel::togglePasswordVisibility
             )
 
             PasswordOutlinedTextField(
-                secret = form.confirm,
+                secret = signupForm.passwordConfirm,
                 isVisible = authenticationViewModel.confirmVisible,
-                onValueChange = authenticationViewModel::setConfirm,
-                onClick = authenticationViewModel::toggleConfirmVisibility
+                onValueChange = { authenticationViewModel.updatePasswordConfirm(it) },
+                onClick = authenticationViewModel ::toggleConfirmVisibility
             )
 
             Spacer(Modifier.height(24.dp))
 
             Button(
-                onClick = { authenticationViewModel.submit(ctx) },
+                onClick = { authenticationViewModel.submit(context) },
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth()
             ) {

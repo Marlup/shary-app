@@ -8,7 +8,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 object Utils {
-    fun authHeader(token: String): Map<String, String> =
+    fun authBearerHeader(token: String?): Map<String, String> =
         mapOf("Authorization" to "Bearer $token")
 
     fun buildPostRequest(
@@ -17,11 +17,12 @@ object Utils {
         headers: Map<String, String> = emptyMap()
     ): Request {
         val json = Json.encodeToString(body)
-        val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        //val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
 
-        val builder = Request.Builder()
+        val builder = Request
+            .Builder()
             .url(url)
-            .post(requestBody)
+            .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
 
         headers.forEach { (key, value) ->
             builder.addHeader(key, value)
@@ -37,4 +38,5 @@ object Utils {
         500 -> StatusDataSentDb.ERROR
         else -> StatusDataSentDb.ERROR
     }
+
 }

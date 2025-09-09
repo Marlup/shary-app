@@ -8,7 +8,7 @@ import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.Field as FieldProto
 import com.shary.app.Request as RequestProto
 import com.shary.app.User as UserProto
-import com.shary.app.core.domain.types.enums.UiFieldTag
+import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.valueobjects.Purpose
 import java.time.Instant
 
@@ -22,23 +22,22 @@ fun FieldProto.toDomain(
 ): FieldDomain = try {
 
     FieldDomain(
-        //key       = codec.decode(key, Purpose.Key.code).trim(),
         key       = codec.decode(key, Purpose.Key),
         value     = codec.decode(value, Purpose.Value),
-        //keyAlias  = codec.decode(keyAlias, Purpose.Alias).ifBlank { null }?.trim(),
         keyAlias  = codec.decode(keyAlias, Purpose.Alias).ifBlank { null },
-        tag       = UiFieldTag.fromString(
-            codec.decode(tag, Purpose.Tag).ifBlank { "unknown" }
+        tag       = Tag.fromString(
+            name=codec.decode(tag, Purpose.Tag).ifBlank { "unknown" },
+            color=Tag.Unknown.toColor()
         ),
         dateAdded = Instant.ofEpochMilli(dateAdded)
     )
 } catch (_: Exception) {
-    // Fallback para registros dañados o credenciales no válidas: no romper flujo
+    // Fallback for corrupted registers or invalid credentials: avoids breaking the flow
     FieldDomain(
-        key       = key,                     // seguirá cifrado (útil para diagnóstico)
+        key       = key,                     // it will remain encrypted (useful for diagnostics)
         value     = value,
         keyAlias  = keyAlias.ifBlank { null },
-        tag       = UiFieldTag.Unknown,
+        tag       = Tag.Unknown,
         dateAdded = Instant.ofEpochMilli(dateAdded)
     )
 }

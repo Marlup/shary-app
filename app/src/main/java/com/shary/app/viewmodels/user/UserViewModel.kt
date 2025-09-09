@@ -3,8 +3,8 @@ package com.shary.app.viewmodels.user
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.models.UserDomain
-import com.shary.app.core.session.Session
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
+import com.shary.app.core.domain.interfaces.services.CacheService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class UserViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val session: Session
+    private val cacheSelection: CacheService
 ) : ViewModel() {
 
     // Domain state exposed to UI
@@ -44,8 +44,9 @@ class UserViewModel @Inject constructor(
 
     // ------------------------- Selection helpers -------------------------
 
-    fun anyUserCached() = session.isAnyUserCached()
+    fun anyUserCached() = cacheSelection.isAnyUserCached()
     fun anySelectedUser() = _selectedUsers.value.isNotEmpty()
+    fun getOwnerEmail() = cacheSelection.getOwnerEmail()
 
     fun toggleUser(user: UserDomain) = _selectedUsers.update { current ->
         if (user in current) current - user else current + user
@@ -53,14 +54,16 @@ class UserViewModel @Inject constructor(
 
     fun setSelectedUsers(users: List<UserDomain>) {
         _selectedUsers.value = users.distinctBy { it.email.trim().lowercase() }
-        session.setCachedUsers(_selectedUsers.value) // <— persistencia cross-screen
+        cacheSelection.cacheUsers(_selectedUsers.value) // <— persistencia cross-screen
     }
+
+    fun getCachedUsers(): List<UserDomain> = cacheSelection.getUsers()
 
     fun setPhoneNumber(number: String?) {
         _selectedPhoneNumber.value = number
-        session.setCachedPhoneNumber(number) // opcional para WhatsApp/Telegram
+        cacheSelection.cachePhoneNumber(number) // opcional para WhatsApp/Telegram
     }
-    fun clearSelectedUsers() { session.resetCachedUsers() }
+    fun clearSelectedUsers() { cacheSelection.clearCachedUsers() }
 
     // ----------------------------- Loading -------------------------------
 

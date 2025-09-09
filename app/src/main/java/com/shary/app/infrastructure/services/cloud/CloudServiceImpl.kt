@@ -3,7 +3,6 @@ package com.shary.app.infrastructure.services.cloud
 import android.util.Log
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.session.Session
 import com.shary.app.core.domain.types.enums.StatusDataSentDb
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.infrastructure.security.helper.SecurityUtils.base64Decode
@@ -12,294 +11,366 @@ import com.shary.app.infrastructure.security.helper.SecurityUtils.getCurrentUtcT
 import com.shary.app.infrastructure.security.helper.SecurityUtils.getTimestampAfterExpiry
 import com.shary.app.infrastructure.security.helper.SecurityUtils.hashMessage
 import com.shary.app.infrastructure.security.helper.SecurityUtils.hashMessageB64
-import com.shary.app.infrastructure.services.cloud.Constants.ENDPOINT_DELETE_USER
-import com.shary.app.infrastructure.services.cloud.Constants.ENDPOINT_GET_PUB_KEY
-import com.shary.app.infrastructure.services.cloud.Constants.ENDPOINT_PING
-import com.shary.app.infrastructure.services.cloud.Constants.ENDPOINT_SEND_DATA
-import com.shary.app.infrastructure.services.cloud.Constants.ENDPOINT_STORE_USER
-import com.shary.app.infrastructure.services.cloud.Constants.TIME_ALIVE_DOCUMENT
-import com.shary.app.infrastructure.services.cloud.Utils.authHeader
+import com.shary.app.infrastructure.services.cloud.Utils.authBearerHeader
 import com.shary.app.infrastructure.services.cloud.Utils.buildPostRequest
 import com.shary.app.infrastructure.services.cloud.Utils.evaluateStatusCode
+import com.google.firebase.auth.FirebaseAuth
+import com.shary.app.core.domain.interfaces.states.CloudState
+import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_DELETE_USER
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_GET_PUB_KEY
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_PING
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_SEND_DATA
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_STORE_USER
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_UPDATE_FCM_TOKEN
+import com.shary.app.infrastructure.services.cloud.Constants.TIME_ALIVE_FIREBASE_DOCUMENT
 import com.shary.app.utils.Functions.buildJsonStringFromFields
 import com.shary.app.utils.Functions.makeJsonStringFromRequestKeys
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-
-import okhttp3.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONException
 import java.io.IOException
 
+/**
+ * CloudServiceImpl
+ *
+ * Concrete implementation of CloudService.
+ * - Handles communication with Firebase-backed endpoints (ping, upload, delete, etc.).
+ * - Injects FirebaseAuth to establish and maintain anonymous sessions.
+ * - Always attaches a valid ID token (Authorization: Bearer <token>) when required.
+ * - Encrypts payloads end-to-end (before leaving the device) using CryptographyManager.
+ */
 class CloudServiceImpl @Inject constructor(
-    private val session: Session,
-    private val cryptographyManager: CryptographyManager
-): CloudService {
+    private val cryptographyManager: CryptographyManager,
+    private val firebaseAuth: FirebaseAuth
+) : CloudService {
 
-    //private val client = OkHttpClient()
+    private val authAdapter = FirebaseAnonymousAuthAdapter(firebaseAuth)
+    override var cloudState = MutableStateFlow(CloudState())
 
-    /*llamada de red en el hilo principal (Main/UI Thread), lo cual está prohibido en Android
-    desde Android 3.0 (Honeycomb) porque puede bloquear la interfaz de usuario.
-    */
+    // -------------------- AUTH --------------------
+
+    /**
+     * Ensures that the client has a valid ID token before making requests.
+     * If the Session has no token (or expired), refreshes it via FirebaseAuth.
+     */
+    private suspend fun ensureAuth(): Unit = withContext(Dispatchers.IO) {
+        val token = cloudState.value.token
+        if (token.isNullOrEmpty()) authAdapter.ensureSession()
+        else setIsOnlineInCLoud(true)
+    }
+
+    override suspend fun ensureAnonymousSession(): Result<String> = runCatching {
+        withContext(Dispatchers.IO) { authAdapter.ensureSession() }
+    }
+
+    override suspend fun refreshIdToken(): Result<String> = runCatching {
+        withContext(Dispatchers.IO) { authAdapter.refreshToken() }
+    }
+
+    override suspend fun signOutCloud(): Result<Unit> = runCatching {
+        authAdapter.signOut()
+    }
+
+    // -------------------- EXISTING FUNCTIONALITY --------------------
+
+    /**
+     * Sends a "ping" to the cloud service to check reachability.
+     * Updates Session.isOnline based on response.
+     */
     override suspend fun sendPing(): Boolean = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(ENDPOINT_PING)
-            .get()
-            .build()
-
-        //return@withContext try {
+        val request = Request.Builder().url(FIREBASE_ENDPOINT_PING).get().build()
         return@withContext try {
             val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
-                session.setOwnerIsOnline(response.isSuccessful)
+                cloudState.value.isOnline = response.isSuccessful
                 response.isSuccessful
             }
         } catch (e: IOException) {
             Log.e("CloudServiceImpl", "Ping failed: ${e.message}")
-            session.setOwnerIsOnline(false)
+            cloudState.value.isOnline = false
             false
         }
     }
 
-    override suspend fun isUserRegistered(user: String):
-            Boolean = withContext(Dispatchers.IO)
-    {
-        val pubKey = getPubKey(hashMessageB64(user))
-        return@withContext pubKey != ""
+    /**
+     * Checks if a user is registered by verifying if their public key exists.
+     */
+    override suspend fun isUserRegisteredInCloud(user: String): Boolean = withContext(Dispatchers.IO) {
+        ensureAuth()
+        val safeUser = safeGetUser(user)
+        val pubKey = getPubKey(hashMessageB64(safeUser))
+        return@withContext pubKey.isNotEmpty()
     }
 
-    override suspend fun uploadUser(user: String):
-            String = withContext(Dispatchers.IO) {
-        return@withContext doUploadUser(user)
+    /**
+     * Uploads a new user identity (with keys) to the backend.
+     */
+    override suspend fun uploadUser(user: String): String = withContext(Dispatchers.IO) {
+        ensureAuth()
+        val safeUser = safeGetUser(user)
+        return@withContext doUploadUser(safeUser)
     }
 
+    /**
+     * Performs actual user upload: hashes user, attaches pubKey, signature, and verification.
+     */
     private suspend fun doUploadUser(user: String): String = withContext(Dispatchers.IO) {
         if (!isCloudReachable()) return@withContext ""
+        ensureAuth()
 
-        val userHash = hashMessageB64(user)
+        val safeUser = safeGetUser(user)
+        val userHash = hashMessageB64(safeUser)
         val pubKey = base64Encode(cryptographyManager.getKexPublic())
         val (signature, verification) = makeCredentials(listOf(userHash, pubKey))
 
-        val payload = mapOf(
+        val payload = mutableMapOf(
             "user" to userHash,
             "creation_at" to getCurrentUtcTimestamp().toString(),
-            "expires_at" to getTimestampAfterExpiry(TIME_ALIVE_DOCUMENT).toString(),
+            "expires_at" to getTimestampAfterExpiry(TIME_ALIVE_FIREBASE_DOCUMENT).toString(),
             "pubkey" to pubKey,
             "verification" to verification,
             "signature" to signature
         )
 
-        val request = buildPostRequest(ENDPOINT_STORE_USER, payload)
+        // If we already cached a token in CloudState, attach it
+        cloudState.value.fcmToken?.let { payload["fcmToken"] = it }
+
+        Log.d("doUploadUser", "AuthToken() - ${cloudState.value.token}")
+
+        val request = buildPostRequest(
+            FIREBASE_ENDPOINT_STORE_USER,
+            payload,
+            authBearerHeader(cloudState.value.token)
+        )
 
         return@withContext try {
-            Log.d("doUploadUser Endpoint: ", ENDPOINT_STORE_USER)
-
             val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
-                val jsonBody = Json.parseToJsonElement(
-                    response.body?.string() ?: "")
-                    .jsonObject
+                val bodyString = response.body?.string().orEmpty()
+                val jsonBody = Json.parseToJsonElement(bodyString).jsonObject
                 if (response.code == 200) {
-                    val verificationToken = jsonBody["token"]
-                        ?.jsonPrimitive
-                        ?.content
-                        .toString()
-
-                    verificationToken
+                    jsonBody["token"]?.jsonPrimitive?.content.orEmpty()
                 } else {
-                    Log.w("CloudServiceImpl", "${response.code}. Upload user failed: ${jsonBody["message"]}")
+                    Log.w("CloudServiceImpl",
+                        "${response.code}. Upload user failed: ${jsonBody["message"]}")
                     ""
                 }
             }
-        } catch (e: IOException) {
-            Log.e("CloudServiceImpl", "Upload user exception: ${e.message}")
+        } catch (e: Exception) {
+            Log.e("CloudServiceImpl", "doUploadUser exception: ${e.message}")
             ""
         }
     }
-    override suspend fun deleteUser(user: String):
-            Boolean = withContext(Dispatchers.IO) {
-        return@withContext doDeleteUser(user)
+
+
+    /**
+     * Deletes a user by sending signature + hash.
+     */
+    override suspend fun deleteUser(user: String): Boolean = withContext(Dispatchers.IO) {
+        ensureAuth()
+        val safeUser = safeGetUser(user)
+        return@withContext doDeleteUser(safeUser)
     }
 
-    private suspend fun doDeleteUser(user: String): Boolean {
-        if (!isCloudReachable()) return false
-
-        val userHash = hashMessageB64(user)
+    private suspend fun doDeleteUser(user: String): Boolean = withContext(Dispatchers.IO) {
+        ensureAuth()
+        if (!isCloudReachable()) return@withContext false
+        val safeUser = safeGetUser(user)
+        val userHash = hashMessageB64(safeUser)
         val (signature, _) = makeCredentials(listOf(userHash))
         val payload = mapOf("user" to userHash, "signature" to signature)
-        val request = buildPostRequest(
-            ENDPOINT_DELETE_USER,
-            payload,
-            authHeader(session.getOwnerAuthToken())
-        )
-
-        return try {
+        val request = buildPostRequest(FIREBASE_ENDPOINT_DELETE_USER, payload, authBearerHeader(cloudState.value.token))
+        return@withContext try {
             val client = OkHttpClient()
-            client.newCall(request).execute().use { response ->
-                response.code == 200
-            }
+            client.newCall(request).execute().use { response -> response.code == 200 }
         } catch (e: IOException) {
             Log.e("CloudServiceImpl", "Delete user exception: ${e.message}")
             false
         }
     }
 
-    override suspend fun uploadData (
+    /**
+     * Uploads encrypted data (fields or request) to one or more consumers.
+     */
+    override suspend fun uploadData(
         fields: List<FieldDomain>,
-        user: String,
-        consumers: List<String>,
+        owner: String?,
+        consumers: List<UserDomain>,
         isRequest: Boolean
-    ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO) {
+    ) = withContext(Dispatchers.IO) {
+        ensureAuth()
         if (!isCloudReachable()) return@withContext emptyMap()
         if (isEmptyArguments(fields, consumers)) return@withContext emptyMap()
-
-        if (isRequest)
-            return@withContext doUploadRequest(fields, user, consumers)
-        else 
-            return@withContext doUploadData(fields, user, consumers)
-    }
-    
-    private suspend fun doUploadData(
-        fields: List<FieldDomain>,
-        user: String,
-        consumers: List<String>,
-    ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO){
-        val dataJson = buildJsonStringFromFields(fields)
-        return@withContext buildLoad(dataJson, user, consumers)
-    }
-    
-    private suspend fun doUploadRequest(
-        fields: List<FieldDomain>,
-        user: String,
-        consumers: List<String>,
-    ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO){
-        val dataRequestJson = makeJsonStringFromRequestKeys(fields, user)
-        return@withContext buildLoad(dataRequestJson, user, consumers)
-    }
-    
-    private suspend fun buildLoad(
-        data: String,
-        user: String,
-        consumers: List<String>,
-    ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO){
-        // Owner identifiers/hashes
-        val userHash = hashMessageB64(user)
-
-        val username = session.getOwnerUsername()
-        val safePassword = session.getOwnerSafePassword() // base64 or the format you use
-        val appId = cryptographyManager.getAppId()
-
-        val results = mutableMapOf<String, StatusDataSentDb>()
-
-
-        consumers.forEach { consumer ->
-
-
-            // 1) Resolve consumer pubkey (X25519 PUBLIC) and validate
-            val consumerHash: String = hashMessageB64(consumer)
-            val consumerPubKeyB64: String = getPubKey(consumerHash)
-            val consumerPubKey: ByteArray = base64Decode(consumerPubKeyB64)
-
-            if (consumerPubKeyB64.isEmpty()) {
-                results[consumer] = StatusDataSentDb.ERROR
-                return@forEach
-            }
-
-
-
-            // 2) Build AAD (bind ciphertext to identities) and a fresh nonce for sender’s ephemeral
-            val aad = "shary:$userHash:$consumerHash".toByteArray(Charsets.UTF_8)
-            //val nonce = java.security.SecureRandom().generateSeed(32)
-
-            val encryptedData = cryptographyManager.encryptWithPeerPublic(
-                data.toByteArray(),
-                consumerPubKey,
-                aad
-            )
-
-            val payloadData = base64Encode(encryptedData)
-            val (signature, verification) = makeCredentials(listOf(userHash, consumerHash, hashMessageB64(data)))
-
-            val payload = mapOf(
-                "user" to userHash,
-                "consumer" to consumerHash,
-                "creation_at" to getCurrentUtcTimestamp().toString(),
-                "expires_at" to getTimestampAfterExpiry(TIME_ALIVE_DOCUMENT).toString(),
-                "data" to payloadData,
-                "verification" to verification,
-                "signature" to signature
-            )
-
-            val request = buildPostRequest(
-                ENDPOINT_SEND_DATA,
-                payload,
-                authHeader(session.getOwnerAuthToken())
-            )
-
-            try {
-                val client = OkHttpClient()
-                client.newCall(request).execute().use { response ->
-                    results[consumer] = evaluateStatusCode(response.code)
-                }
-            } catch (e: IOException) {
-                Log.e("CloudServiceImpl", "Upload data exception: ${e.message}")
-                results[consumer] = StatusDataSentDb.ERROR
-            }
-        }
-        return@withContext results
+        val safeUser = safeGetUser(owner)
+        if (isRequest) doUploadRequest(fields, safeUser, consumers)
+        else doUploadData(fields, safeUser, consumers)
     }
 
-    override suspend fun getPubKey(userHash: String):
-            String = withContext(Dispatchers.IO) {
-        return@withContext doGetPubKey(userHash)
-    }
+    override suspend fun updateUserFcmToken(token: String): Boolean = withContext(Dispatchers.IO) {
+        ensureAuth()
+        if (!isCloudReachable()) return@withContext false
 
-    private suspend fun doGetPubKey(userHash: String):
-            String = withContext(Dispatchers.IO) {
-        Log.d("GetPubKey Endpoint: ", "$ENDPOINT_GET_PUB_KEY?user=$userHash")
-        val request = Request.Builder()
-            .url("$ENDPOINT_GET_PUB_KEY?user=$userHash")
-            .addHeader("Authorization", "Bearer $session.authToken")
-            .build()
+        val safeUser = safeGetUser(cloudState.value.username)
+        val userHash = hashMessageB64(safeUser)
+        val (signature, verification) = makeCredentials(listOf(userHash, token))
+
+        val payload = mapOf(
+            "user" to userHash,
+            "fcmToken" to token,
+            "signature" to signature,
+            "verification" to verification,
+            "updated_at" to getCurrentUtcTimestamp().toString()
+        )
+
+        val request = buildPostRequest(
+            FIREBASE_ENDPOINT_STORE_USER, // reuse same endpoint!
+            payload,
+            authBearerHeader(cloudState.value.token)
+        )
 
         return@withContext try {
             val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val bodyString = response.body?.string() ?: ""
-                    val pubKey = Json.parseToJsonElement(bodyString)
-                        .jsonObject["pubkey"]
-                        ?.jsonPrimitive
-                        ?.content
-                        .toString()
-                    pubKey
+                    Log.d("CloudServiceImpl", "FCM token updated successfully")
+                    cloudState.value.fcmToken = token
+                    true
                 } else {
-                    ""
+                    Log.w("CloudServiceImpl", "Failed to update FCM token: ${response.code}")
+                    false
                 }
             }
-        } catch (e: IOException) {
-            Log.e("CloudServiceImpl", "Get pubKey exception: ${e.message}")
-            return@withContext ""
+        } catch (e: Exception) {
+            Log.e("CloudServiceImpl", "updateUserFcmToken exception: ${e.message}")
+            false
         }
     }
 
+
+    private suspend fun doUploadData(fields: List<FieldDomain>, user: String, consumers: List<UserDomain>) =
+        withContext(Dispatchers.IO) {
+            val dataJson = buildJsonStringFromFields(fields)
+            val emails = consumers.map { it.email }
+            buildLoad(dataJson, safeGetUser(user), emails)
+        }
+
+    private suspend fun doUploadRequest(fields: List<FieldDomain>, user: String, consumers: List<UserDomain>) =
+        withContext(Dispatchers.IO) {
+            val dataRequestJson = makeJsonStringFromRequestKeys(fields, safeGetUser(user))
+            val emails = consumers.map { it.email }
+            buildLoad(dataRequestJson, safeGetUser(user), emails)
+        }
+
+    /**
+     * Core logic for encrypting data for each consumer and sending via backend.
+     */
+    private suspend fun buildLoad(data: String, user: String, consumers: List<String>) =
+        withContext(Dispatchers.IO) {
+            ensureAuth()
+            val safeUser = safeGetUser(user)
+            val userHash = hashMessageB64(safeUser)
+            val results = mutableMapOf<String, StatusDataSentDb>()
+
+            val client = OkHttpClient()
+            consumers.forEach { consumer ->
+                val consumerHash = hashMessageB64(consumer)
+                val consumerPubKeyB64 = getPubKey(consumerHash)
+                if (consumerPubKeyB64.isEmpty()) {
+                    results[consumer] = StatusDataSentDb.ERROR
+                    return@forEach
+                }
+                val consumerPubKey = base64Decode(consumerPubKeyB64)
+                val aad = "shary:$userHash:$consumerHash".toByteArray(Charsets.UTF_8)
+
+                val encryptedData = cryptographyManager.encryptWithPeerPublic(
+                    data.toByteArray(),
+                    consumerPubKey,
+                    aad
+                )
+                val payloadData = base64Encode(encryptedData)
+                val (signature, verification) =
+                    makeCredentials(listOf(userHash, consumerHash, hashMessageB64(data)))
+
+                val payload = mapOf(
+                    "user" to userHash,
+                    "consumer" to consumerHash,
+                    "creation_at" to getCurrentUtcTimestamp().toString(),
+                    "expires_at" to getTimestampAfterExpiry(TIME_ALIVE_FIREBASE_DOCUMENT).toString(),
+                    "data" to payloadData,
+                    "verification" to verification,
+                    "signature" to signature
+                )
+                val request = buildPostRequest(FIREBASE_ENDPOINT_SEND_DATA, payload, authBearerHeader(cloudState.value.token))
+                try {
+                    client.newCall(request).execute().use { response ->
+                        results[consumer] = evaluateStatusCode(response.code)
+                    }
+                } catch (e: IOException) {
+                    Log.e("CloudServiceImpl", "Upload data exception: ${e.message}")
+                    results[consumer] = StatusDataSentDb.ERROR
+                }
+            }
+            results
+        }
+
+    /**
+     * Retrieves a public key for a given user hash.
+     */
+    override suspend fun getPubKey(userHash: String): String = withContext(Dispatchers.IO) {
+        ensureAuth()
+        val request = Request.Builder()
+            .url("$FIREBASE_ENDPOINT_GET_PUB_KEY?user=$userHash")
+            .addHeader("Authorization", "Bearer ${cloudState.value.token}")
+            .build()
+        return@withContext try {
+            val client = OkHttpClient()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    Json.parseToJsonElement(body).jsonObject["pubkey"]?.jsonPrimitive?.content.orEmpty()
+                } else ""
+            }
+        } catch (e: IOException) {
+            Log.e("CloudServiceImpl", "Get pubKey exception: ${e.message}")
+            ""
+        }
+    }
+
+    /**
+     * Creates signature + verification pair for a canonical list of fields.
+     */
     private fun makeCredentials(fields: List<String>): Pair<String, String> {
         val canonical = fields.joinToString(".")
         val rawHash = hashMessage(canonical)
-
-        val verificationB64 = base64Encode(rawHash)           // server can recompute this
-        val signatureB64 = base64Encode(cryptographyManager.signDetached(rawHash))        // proof (client private key)
-
+        val verificationB64 = base64Encode(rawHash)
+        val signatureB64 = base64Encode(cryptographyManager.signDetached(rawHash))
         return signatureB64 to verificationB64
     }
 
+    /** Check if backend is reachable (ping + cached state). */
     private suspend fun isCloudReachable(): Boolean =
-        session.getOwnerIsOnline() || sendPing()
+        cloudState.value.isOnline || sendPing()
 
-    private fun isEmptyArguments(
-        fields: List<FieldDomain>,
-        consumers: List<String>
-    ) = fields.isEmpty() || consumers.isEmpty()
+    private fun isEmptyArguments(fields: List<FieldDomain>, consumers: List<UserDomain>) =
+        fields.isEmpty() || consumers.isEmpty()
+
+    /** Returns provided user or fallback to Session.ownerUsername. */
+    private fun safeGetUser(user: String?): String =
+        if (user.isNullOrEmpty()) cloudState.value.username else user
+
+    suspend fun getAuthToken(): String? {
+        val user = FirebaseAuth.getInstance().currentUser ?: return null
+        return user.getIdToken(true).await().token
+    }
+
+    private fun setIsOnlineInCLoud(v: Boolean) { cloudState.value.isOnline = v }
 }

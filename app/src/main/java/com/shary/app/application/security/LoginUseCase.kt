@@ -3,7 +3,7 @@ package com.shary.app.application.security
 
 import com.shary.app.core.domain.interfaces.security.AuthBackend
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
-import com.shary.app.infrastructure.security.sign.Ed25519Signer
+import com.shary.app.infrastructure.security.digitalSignature.Ed25519Signer
 
 class LoginUseCase(
     private val cryptographyManager: CryptographyManager,

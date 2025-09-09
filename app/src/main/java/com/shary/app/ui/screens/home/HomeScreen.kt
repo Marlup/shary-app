@@ -7,27 +7,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.shary.app.core.domain.interfaces.navigator.HomeDepsEntryPoint
-import com.shary.app.core.session.Session
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.AppTopBar
-import dagger.hilt.EntryPoints
 
 @SuppressLint("StateFlowValueCalledInComposition")
 @Composable
 fun HomeScreen(navController: NavHostController) {
-
-    val context = LocalContext.current
-    val session: Session = remember {
-        val ep = EntryPoints.get(context.applicationContext, HomeDepsEntryPoint::class.java)
-        ep.session()
-    }
 
     Scaffold(
         topBar = { AppTopBar(navController) },

@@ -59,7 +59,7 @@ fun InputWithSuggestions(
                     textFieldBounds.value = position
                 },
 
-            label = { Text("Enter text") },
+            label = { Text("Enter input") },
             singleLine = true
         )
 

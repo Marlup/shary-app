@@ -1,13 +1,11 @@
 package com.shary.app.viewmodels.field
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.session.Session
+import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
-import com.shary.app.core.domain.interfaces.repositories.TagRepository // <- simple abstraction: addCustomTag(name)
+import com.shary.app.core.domain.interfaces.services.CacheService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.time.Instant
@@ -21,8 +19,7 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class FieldViewModel @Inject constructor(
     private val fieldRepository: FieldRepository,
-    private val tagRepository: TagRepository, // wrap your TagViewModel or implement repo
-    private val session: Session
+    private val cacheSelection: CacheService,
 ) : ViewModel() {
 
     // Domain state exposed to UI
@@ -43,11 +40,14 @@ class FieldViewModel @Inject constructor(
     // Serialize writes to avoid concurrent edits on the same store
     private val writeMutex = Mutex()
 
-    init { refresh() }
+    init {
+        refresh()
+    }
 
     // ------------------- Public API (called from Screen) -------------------
 
-    fun anyFieldCached() = session.isAnyFieldCached()
+    fun getCachedFields(): List<FieldDomain> = cacheSelection.getFields()
+    fun anyFieldCached() = cacheSelection.isAnyFieldCached()
     fun anySelectedField() = _selectedFields.value.isNotEmpty()
 
     /** Add a new field. Handles custom tag persistence and de-duplication. */
@@ -57,21 +57,12 @@ class FieldViewModel @Inject constructor(
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
-                        val normalizedFiedl = normalize(field)
-                        // persist custom tag if needed
-                        if (normalizedFiedl.tag is UiFieldTag.Custom) {
-                            val name = normalizedFiedl.tag.toTagString()
-                            tagRepository.addCustomTag(name)
-                        }
-                        // save if not exists
-                        Log.w("FieldViewModel", "before - saveFieldIfNotExists in" +
-                                " addField: $normalizedFiedl")
-                        fieldRepository.saveFieldIfNotExists(normalizedFiedl)
+                        val normalized = normalize(field)
+                        fieldRepository.saveFieldIfNotExists(normalized)
                     }
                 }
             }
             _isLoading.value = false
-
             result.onSuccess { created ->
                 if (created) {
                     _events.tryEmit(FieldEvent.Saved(field))
@@ -85,6 +76,7 @@ class FieldViewModel @Inject constructor(
         }
     }
 
+
     fun deleteField(field: FieldDomain) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -97,6 +89,28 @@ class FieldViewModel @Inject constructor(
 
             result.onSuccess {
                 _events.tryEmit(FieldEvent.Deleted(field.key))
+                refresh()
+            }.onFailure { e ->
+                _events.tryEmit(FieldEvent.Error(e))
+            }
+        }
+    }
+
+    fun deleteFields(fields: List<FieldDomain>) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock {
+                        val keys = fields.map { it.key }
+                        fieldRepository.deleteFields(keys)
+                    }
+                }
+            }
+            _isLoading.value = false
+
+            result.onSuccess {
+                _events.tryEmit(FieldEvent.MultiDeleted(fields))
                 refresh()
             }.onFailure { e ->
                 _events.tryEmit(FieldEvent.Error(e))
@@ -144,17 +158,14 @@ class FieldViewModel @Inject constructor(
         }
     }
 
-    fun updateTag(field: FieldDomain, tag: UiFieldTag) {
+    fun updateTag(field: FieldDomain, tag: Tag) {
         if (field.tag == tag) return
         viewModelScope.launch {
             _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
-                        // ensure custom tag is registered before updating
-                        if (tag is UiFieldTag.Custom) {
-                            tagRepository.addCustomTag(tag.toTagString())
-                        }
+                        // ❌ no tagRepository here
                         fieldRepository.updateTag(field.key, tag)
                     }
                 }
@@ -170,13 +181,13 @@ class FieldViewModel @Inject constructor(
         }
     }
 
-    fun setSelectedFields(fields: List<FieldDomain>) {
-        _selectedFields.value = fields.distinctBy { it.key.lowercase() }
-        session.setCachedFields(_selectedFields.value) // <— persistencia cross-screen
+    fun setSelectedFields() {
+        val selectedFields = _selectedFields.value.distinctBy { it.key.lowercase() }
+        cacheSelection.cacheFields(selectedFields) // <— persistencia cross-screen
     }
 
     fun clearSelectedFields() {
-        session.resetCachedFields()
+        cacheSelection.clearCachedFields()
         _selectedFields.value = emptyList()
     }
 
@@ -215,14 +226,15 @@ class FieldViewModel @Inject constructor(
      * - Emits specific events for each changed attribute.
      * - Refreshes only once at the end if something changed.
      */
-    fun updateField(field: FieldDomain, newValue: String, newAlias: String) {
+    fun updateField(field: FieldDomain, newValue: String, newAlias: String, newTag: Tag) {
         val valueTrimmed = newValue.trim()
         val aliasTrimmed = newAlias.trim()
 
         val shouldUpdateValue = field.value != valueTrimmed
         val shouldUpdateAlias = field.keyAlias.orEmpty() != aliasTrimmed
+        val shouldUpdateTag = field.tag != newTag
 
-        if (!shouldUpdateValue && !shouldUpdateAlias) return
+        if (!shouldUpdateValue && !shouldUpdateAlias && !shouldUpdateTag) return
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -235,6 +247,9 @@ class FieldViewModel @Inject constructor(
                         }
                         if (shouldUpdateAlias) {
                             fieldRepository.updateAlias(field.key, aliasTrimmed)
+                        }
+                        if (shouldUpdateTag) {
+                            fieldRepository.updateTag(field.key, newTag)
                         }
                     }
                 }
@@ -259,8 +274,9 @@ sealed interface FieldEvent {
     data class Saved(val field: FieldDomain) : FieldEvent
     data class AlreadyExists(val key: String) : FieldEvent
     data class Deleted(val key: String) : FieldEvent
+    data class MultiDeleted(val keys: List<FieldDomain>) : FieldEvent
     data class ValueUpdated(val key: String) : FieldEvent
     data class AliasUpdated(val key: String) : FieldEvent
-    data class TagUpdated(val key: String, val tag: UiFieldTag) : FieldEvent
+    data class TagUpdated(val key: String, val tag: Tag) : FieldEvent
     data class Error(val throwable: Throwable) : FieldEvent
 }

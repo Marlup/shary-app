@@ -5,8 +5,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,19 +22,27 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.core.domain.types.enums.UiFieldTag
+import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.models.FieldDomain
+import com.shary.app.ui.screens.field.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
 import com.shary.app.ui.screens.request.utils.SendRequestDialog
-import com.shary.app.ui.screens.utils.GoBackButton
-import com.shary.app.ui.screens.utils.SelectableRow
-import com.shary.app.viewmodels.request.RequestListViewModel
+import com.shary.app.viewmodels.communication.CloudViewModel
+import com.shary.app.viewmodels.communication.EmailViewModel
+import com.shary.app.viewmodels.field.FieldViewModel
+import com.shary.app.viewmodels.user.UserViewModel
 import java.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RequestsScreen(navController: NavHostController) {
-    val requestViewModel: RequestListViewModel = hiltViewModel()
+
+    // ---------------- ViewModels ----------------
+    val fieldViewModel: FieldViewModel = hiltViewModel()
+    val userViewModel: UserViewModel = hiltViewModel()
+    val emailViewModel: EmailViewModel = hiltViewModel()
+    val cloudViewModel: CloudViewModel = hiltViewModel()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -42,7 +53,8 @@ fun RequestsScreen(navController: NavHostController) {
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var openSendDialog by remember { mutableStateOf(false) }
 
-    val selectedKeys = remember { mutableStateListOf<String>() }
+    // ---- Checked rows (Domain) ----
+    val selectedFields by fieldViewModel.selectedFields.collectAsState()
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
@@ -58,8 +70,7 @@ fun RequestsScreen(navController: NavHostController) {
             if (event == Lifecycle.Event.ON_STOP) {
                 // Persist a Request built from the current local list
                 if (requestFields.isNotEmpty()) {
-                    requestViewModel.addRequestFromFields(requestFields.toList())
-                    requestFields.clear()
+                    TODO()
                 }
             }
         }
@@ -68,6 +79,7 @@ fun RequestsScreen(navController: NavHostController) {
         onDispose { lifecycle.removeObserver(observer) }
     }
 
+    // ---------------- UI ----------------
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -76,37 +88,78 @@ fun RequestsScreen(navController: NavHostController) {
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
-                expandedHeight = 30.dp
+                expandedHeight = 64.dp
             )
         },
         floatingActionButton = {
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
-            ) {
-                // Back
-                GoBackButton(navController)
 
-                // Add field to the current request
-                FloatingActionButton(onClick = { openAddDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Request Field")
+            HorizontalDivider(thickness = 1.dp)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // ---- Left: Delete ----
+                Box(
+                    modifier = Modifier
+                        .weight(0.15f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CompactActionButton(
+                        onClick = {
+                            if (selectedFields.isNotEmpty()) {
+                                fieldViewModel.deleteFields(selectedFields)
+                                fieldViewModel.clearSelectedFields()
+                                snackbarMessage = "Deleted ${selectedFields.size} fields"
+                            }
+                        },
+                        backgroundColor = colorScheme.error,
+                        icon = Icons.Default.Delete,
+                        contentDescription = "Delete Fields",
+                        enabled = selectedFields.isNotEmpty()
+                    )
                 }
 
-                // Delete selected fields from the current request
-                val isEnabled = selectedKeys.isNotEmpty()
-                FloatingActionButton(
-                    onClick = {
-                        if (isEnabled) {
-                            requestFields.removeAll { it.key in selectedKeys }
-                            selectedKeys.clear()
-                        }
-                    },
-                    containerColor = if (isEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
-                    contentColor = if (isEnabled) Color.White else Color.LightGray,
-                    modifier = Modifier.alpha(if (isEnabled) 1f else 0.6f)
+                // ---- Center: Add + Users ----
+                Row(
+                    modifier = Modifier.weight(0.70f),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                    CompactActionButton(
+                        onClick = { openAddDialog = true },
+                        icon = Icons.Default.Add,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Add Field"
+                    )
+
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.Users.route) },
+                        icon = Icons.Default.Person,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Send to Users"
+                    )
+                }
+
+                // ---- Right: Summary ----
+                Box(
+                    modifier = Modifier
+                        .weight(0.15f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CompactActionButton(
+                        onClick = {
+                            if (userViewModel.anyUserCached() && selectedFields.isNotEmpty()) {
+                                navController.navigate(Screen.Summary.route)
+                            }
+                        },
+                        icon = Icons.Default.AssignmentTurnedIn,
+                        backgroundColor = colorScheme.tertiary,
+                        contentDescription = "Summary",
+                        enabled = selectedFields.isNotEmpty() && userViewModel.anyUserCached()
+                    )
                 }
             }
         },
@@ -151,38 +204,55 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     itemsIndexed(
                         items = requestFields,
-                        key = { _, field -> field.key } // stable
+                        key = { _, field -> field.key } // stable key
                     ) { index, field ->
-                        val isSelected = field.key in selectedKeys
+                        val isSelected = field in selectedFields
 
+                        // background colors
                         val backgroundColor = when {
-                            isSelected -> MaterialTheme.colorScheme.secondaryContainer // highlight selection
-                            index % 2 == 0 -> MaterialTheme.colorScheme.surface
-                                else -> MaterialTheme.colorScheme.surfaceVariant
-                            }
-
-                        val rowBackgroundColor = when {
-                            isSelected -> Color.LightGray // ← selection color
-                            index % 2 == 0 -> MaterialTheme.colorScheme.surface                     // alternate / tag color
-                            else -> MaterialTheme.colorScheme.secondaryContainer
+                            isSelected -> colorScheme.secondaryContainer
+                            index % 2 == 0 -> colorScheme.surface
+                            else -> colorScheme.surfaceVariant
                         }
 
-                        SelectableRow(
-                            item = field,
-                            index = index,
-                            backgroundColorProvider = { backgroundColor },
-                            onToggle = {
-                                if (isSelected) selectedKeys.remove(field.key)
-                                else selectedKeys.add(field.key)
-                            }
-                        ) { fieldItem ->
-                            Row(Modifier.fillMaxWidth()) {
-                                Text(fieldItem.key, Modifier.weight(1f))
-                                Text(fieldItem.keyAlias.orEmpty(), Modifier.weight(1f))
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentHeight()
+                                .alpha(if (isSelected) 1f else 0.9f),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = backgroundColor
+                            ),
+                            onClick = {
+                                if (selectedFields.isNotEmpty()) {
+                                    fieldViewModel.deleteFields(selectedFields)
+                                    fieldViewModel.clearSelectedFields()
+                                    snackbarMessage = "Deleted ${selectedFields.size} fields"
+                                }
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    field.key,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    field.keyAlias.orEmpty(),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Gray
+                                )
                             }
                         }
                     }
                 }
+
             } else {
                 Box(
                     modifier = Modifier
@@ -206,7 +276,7 @@ fun RequestsScreen(navController: NavHostController) {
                             key = key.trim(),
                             keyAlias = keyAlias.trim().ifBlank { null },
                             value = "", // requests only need the key; keep value empty
-                            tag = UiFieldTag.Unknown,
+                            tag = Tag.Unknown,
                             dateAdded = Instant.now()
                         )
                         requestFields.add(field)
@@ -225,7 +295,14 @@ fun RequestsScreen(navController: NavHostController) {
                 onDismiss = { openSendDialog = false },
                 onSend = {
                     openSendDialog = false
-                    // TODO: Implement email sending
+                    userViewModel.getOwnerEmail()?.let {
+                        cloudViewModel.uploadData(
+                            selectedFields,
+                            it,
+                            userViewModel.getCachedUsers(),
+                            true
+                        )
+                    }
                 }
             )
         }

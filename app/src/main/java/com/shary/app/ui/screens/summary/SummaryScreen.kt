@@ -4,6 +4,9 @@ import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,28 +22,29 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import com.shary.app.core.domain.interfaces.navigator.HomeDepsEntryPoint
-import com.shary.app.core.session.Session
+import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.SendOption
-import com.shary.app.ui.screens.home.utils.SendServiceDialog
-import com.shary.app.ui.screens.home.utils.ShareFieldsGenericButton
+import com.shary.app.ui.screens.home.utils.SendCommunicationDialog
+import com.shary.app.ui.screens.home.utils.SendFieldsGenericButton
 import com.shary.app.ui.screens.summary.utils.SummaryTopAppBar
-import com.shary.app.ui.screens.utils.GoBackButton
-import com.shary.app.viewmodels.EmailViewModel
-import dagger.hilt.EntryPoints
+import com.shary.app.ui.screens.utils.GoToScreen
+import com.shary.app.viewmodels.communication.CloudViewModel
+import com.shary.app.viewmodels.communication.EmailViewModel
+import com.shary.app.viewmodels.field.FieldViewModel
+import com.shary.app.viewmodels.user.UserViewModel
 
 @Composable
 fun SummaryScreen(navController: NavHostController) {
     val context = LocalContext.current
-    val session: Session = remember {
-        val ep = EntryPoints.get(context.applicationContext, HomeDepsEntryPoint::class.java)
-        ep.session()
-    }
 
+    // ---------------- ViewModels ----------------
     val emailViewModel: EmailViewModel = hiltViewModel()
+    val cloudViewModel: CloudViewModel = hiltViewModel()
+    val fieldViewModel: FieldViewModel = hiltViewModel()
+    val userViewModel: UserViewModel = hiltViewModel()
 
     var sendOption by remember { mutableStateOf<SendOption?>(null) }
-    var showSendDialog by remember { mutableStateOf(false) }
+    var openSendDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         emailViewModel.intent.collect { intent ->
@@ -55,38 +59,57 @@ fun SummaryScreen(navController: NavHostController) {
         modifier = Modifier.background(color = Color(0xFFF7F3FF)),
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GoBackButton(navController)
-                ShareFieldsGenericButton(
-                    session.getCachedFields(),
-                    onClick = { showSendDialog = true }
+
+                // Go back to Fields button
+                GoToScreen(
+                    navController,
+                    Screen.Fields,
+                    Icons.Filled.TextFields
+                )
+
+                // Go back to Users button
+                GoToScreen(
+                    navController,
+                    Screen.Users,
+                    Icons.Filled.Person
+                )
+
+                SendFieldsGenericButton(
+                    fieldViewModel.getCachedFields(),
+                    onClick = { openSendDialog = true }
                 )
             }
         }
     ) { padding ->
 
-        if (showSendDialog) {
-            SendServiceDialog(
+        if (openSendDialog) {
+            SendCommunicationDialog(
                 options = SendOption.all,
                 onOptionSelected = { sendOption = it },
-                onSendConfirmed = {
-                    showSendDialog = false
+                onSend = {
+                    openSendDialog = false
                     when (sendOption) {
 
                         SendOption.Email -> {
-                            emailViewModel.send(
-                                session.getCachedFields(),
-                                session.getCachedEmails()
+                            emailViewModel.sendResponse(
+                                fieldViewModel.getCachedFields(),
+                                userViewModel.getCachedUsers()
                             )
                         }
 
                         SendOption.Cloud -> {
-                            TODO()
+                            cloudViewModel.uploadData(
+                                fieldViewModel.getCachedFields(),
+                                userViewModel.getOwnerEmail(),
+                                userViewModel.getCachedUsers(),
+                                false
+                            )
                         }
 
                         null -> TODO()
                     }
                 },
-                onCancel = { showSendDialog = false }
+                onDismiss = { openSendDialog = false }
             )
         }
 
@@ -129,8 +152,8 @@ fun SummaryScreen(navController: NavHostController) {
             HorizontalDivider()
 
             // ==== Table Rows ====
-            val emails = session.getCachedEmails()
-            val fields = session.getCachedFields()
+            val fields = fieldViewModel.getCachedFields()
+            val emails = userViewModel.getCachedUsers().map { it.email }
             val maxRows = maxOf(emails.size, fields.size)
 
             LazyColumn {

@@ -1,14 +1,23 @@
 package com.shary.app.ui.screens.user
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Summarize
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,13 +32,12 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.enums.AddFlow
 import com.shary.app.core.domain.types.enums.UserAttribute
+import com.shary.app.ui.screens.field.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
 import com.shary.app.ui.screens.utils.GoToScreen
 import com.shary.app.ui.screens.utils.RowSearcher
-import com.shary.app.ui.screens.utils.SelectableRow
-import com.shary.app.ui.screens.utils.UserItemRow
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.user.UserEvent
 import com.shary.app.viewmodels.user.UserViewModel
@@ -44,7 +52,6 @@ fun UsersScreen(navController: NavHostController) {
     // ---- State from VM ----
     val userList by userViewModel.users.collectAsState()
     val selectedUsers by userViewModel.selectedUsers.collectAsState()
-    val selectedPhoneNumber by userViewModel.selectedPhoneNumber.collectAsState()
     val isLoading by userViewModel.isLoading.collectAsState()
 
     // ---- UI state ----
@@ -53,7 +60,6 @@ fun UsersScreen(navController: NavHostController) {
     var openAddUserCopyDialog by remember { mutableStateOf(false) }
     var targetAddUserCopy by remember { mutableStateOf<UserDomain?>(null) }
     var editingUser by remember { mutableStateOf<UserDomain?>(null) }
-    var editedValue by remember { mutableStateOf("") }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
     //  ---- Search Users ----
@@ -61,8 +67,7 @@ fun UsersScreen(navController: NavHostController) {
     var userSearchAttribute by remember { mutableStateOf(UserAttribute.Username) }
 
     val filteredUsers = remember(userList, searchCriteria, userSearchAttribute) {
-        userList.filter { filterUsersBy(it, searchCriteria, userSearchAttribute)
-        }.toMutableList()
+        userList.filter { it.matchBy(searchCriteria, userSearchAttribute) }.toMutableList()
     }
 
     // ---- Event-driven UX ----
@@ -123,102 +128,120 @@ fun UsersScreen(navController: NavHostController) {
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    // ---- UI ----
+    // ---------------- UI ----------------
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Users") },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
-                expandedHeight = 30.dp
-            )
-        },
-        floatingActionButton = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp)
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 64.dp),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    //GoToScreen(navController, Screen.Fields) { userViewModel.clearSelectedUsers() }
 
-                // Back to home button
-                GoToScreen(navController, Screen.Home) { userViewModel.clearSelectedUsers() }
+                }
+                RowSearcher(
+                    searchText = searchCriteria,
+                    onSearchTextChange = { searchCriteria = it },
+                    currentAttribute = userSearchAttribute,
+                    onAttributeChange = { userSearchAttribute = it },
+                    availableAttributes = UserAttribute.entries,
+                    resolveOptionText = { userSearchAttribute = it; it.name }
+                )
+            }
+        },
 
-                FloatingActionButton(
-                    onClick = { openAddDialog = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
-                ) { Icon(Icons.Default.Add, contentDescription = "Add User") }
+        floatingActionButtonPosition = FabPosition.Center,
 
-                val anySelectedUsers = selectedUsers.isNotEmpty()
-                FloatingActionButton(
-                    onClick = {
-                        if (anySelectedUsers) {
-                            // delete selected
-                            selectedUsers.toList().forEach { user ->
-                                userViewModel.deleteUser(user)
+        // Components at the bottom
+        floatingActionButton = {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // ---- Left: Delete ----
+                Box(
+                    modifier = Modifier
+                        .weight(0.15f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CompactActionButton(
+                        onClick = {
+                            if (selectedUsers.isNotEmpty()) {
+                                userViewModel.deleteUsers(selectedUsers)
+                                userViewModel.clearSelectedUsers()
+                                snackbarMessage = "Deleted ${selectedUsers.size} fields"
                             }
-                            userViewModel.clearSelectedUsers()
-                            snackbarMessage = "Deleted ${selectedUsers.size} user(s)"
-                        }
-                    },
-                    containerColor = if (anySelectedUsers) MaterialTheme.colorScheme.primary else Color.Gray,
-                    contentColor = if (anySelectedUsers) Color.White else Color.LightGray,
-                    modifier = Modifier.alpha(if (anySelectedUsers) 1f else 0.6f)
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete users")
+                        },
+                        backgroundColor = colorScheme.error,
+                        icon = Icons.Default.Delete,
+                        contentDescription = "Delete Users",
+                        enabled = selectedUsers.isNotEmpty()
+                    )
                 }
 
-                // Send the fields to the users
-                FloatingActionButton(
-                    onClick = {
-                        if (fieldViewModel.anyFieldCached() && anySelectedUsers)
-                        navController.navigate(Screen.Summary.route)
-                              },
-                    containerColor = if (anySelectedUsers) MaterialTheme.colorScheme.primary else Color.Gray,
-                    contentColor = if (anySelectedUsers) Color.White else Color.LightGray,
-                    modifier = Modifier.alpha(1f)
+                // ---- Center: Add + Fields ----
+                Row(
+                    modifier = Modifier.weight(0.70f),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Summarize, contentDescription = "Field Selection")
+                    CompactActionButton(
+                        onClick = { openAddDialog = true },
+                        icon = Icons.Default.Add,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Add Field"
+                    )
+
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.Fields.route) },
+                        icon = Icons.Default.TextFields,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Send to Users"
+                    )
                 }
 
-                // Forward to fields screen for sending pipeline
-                FloatingActionButton(
-                    onClick = {
-                        if (anySelectedUsers)
-                            navController.navigate(Screen.Fields.route)
-                              },
-                    containerColor = if (anySelectedUsers) MaterialTheme.colorScheme.primary else Color.Gray,
-                    contentColor = if (anySelectedUsers) Color.White else Color.LightGray,
-                    modifier = Modifier.alpha(if (anySelectedUsers) 1f else 0.6f)
+                // ---- Right: Summary ----
+                Box(
+                    modifier = Modifier
+                        .weight(0.15f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.TextFields, contentDescription = "Summarization")
+                    CompactActionButton(
+                        onClick = {
+                            if (fieldViewModel.anyFieldCached() && selectedUsers.isNotEmpty()) {
+                                navController.navigate(Screen.Summary.route)
+                            }
+                        },
+                        icon = Icons.Default.AssignmentTurnedIn,
+                        backgroundColor = colorScheme.tertiary,
+                        contentDescription = "Summary",
+                        enabled = selectedUsers.isNotEmpty() && fieldViewModel.anyFieldCached()
+                    )
                 }
             }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = {
+            SnackbarHost(
+                snackbarHostState,
+                modifier = Modifier.background(colorScheme.inverseSurface)
+            )
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(8.dp)
                 .fillMaxWidth()
-                .fillMaxHeight(0.90f),
+                .fillMaxHeight(0.9f),
             horizontalAlignment = Alignment.Start
         ) {
-
-            // Search header
-            RowSearcher(
-                searchText = searchCriteria,
-                onSearchTextChange = { searchCriteria = it },
-                currentAttribute = userSearchAttribute,
-                onAttributeChange = { userSearchAttribute = it },
-                availableAttributes = UserAttribute.entries,
-                resolveOptionText = { userAttribute ->
-                    userSearchAttribute = userAttribute
-                    userAttribute.name
-                }
-            )
 
             if (isLoading) {
                 Box(
@@ -229,49 +252,103 @@ fun UsersScreen(navController: NavHostController) {
                 ) { CircularProgressIndicator() }
             } else if (filteredUsers.isNotEmpty()) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                        .padding(start=16.dp, end=16.dp),
                 ) {
                     itemsIndexed(
                         items = filteredUsers,
                         key = { _, user -> user.email }
                     ) { index, user ->
-                        val isSelected = selectedUsers.contains(user)
 
-                        val rowBackgroundColor = when {
-                            isSelected -> Color.LightGray // ← selection color
-                            index % 2 == 0 -> MaterialTheme.colorScheme.surface                     // alternate / tag color
-                            else -> MaterialTheme.colorScheme.secondaryContainer
-                        }
+                        val isSelected = selectedUsers.any { it == user } // comparar por key
 
-                        SelectableRow(
-                            item = user,
-                            index = index,
-                            backgroundColorProvider = { rowBackgroundColor },
-                            onToggle = { userViewModel.toggleUser(user) }
-                        ) { userItem ->
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                                .border(
+                                    width = if (isSelected) 6.dp else 4.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = Color.White //field.tag.safeColor().copy(alpha = 1.0f)
+                            ),
+                            onClick = { userViewModel.toggleUser(user) }
+                        ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.95f)
-                                    .padding(vertical = 8.dp),
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                UserItemRow(
-                                    user = userItem,
-                                    titleColor = rowBackgroundColor,
-                                    onEditClick = {
-                                        editingUser = userItem
-                                        editedValue = userItem.email
-                                    },
-                                    onAddItemCopyClick = {
-                                        openAddUserCopyDialog = true
-                                        targetAddUserCopy = userItem
-                                    },
-                                )
+                                Column(Modifier.weight(1f)) {
+                                    // key text
+                                    Text(
+                                        user.username,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1
+                                    )
+                                    // value text
+                                    Text(
+                                        user.email,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
+                                    )
+                                }
+
+                                // --- Three dots menu ---
+                                var expanded by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { expanded = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreHoriz,
+                                            contentDescription = "Options"
+                                        )
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expanded,
+                                        onDismissRequest = { expanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy User Content")
+                                                Text("Copy")
+                                                   },
+                                            onClick = {
+                                                expanded = false
+                                                // Direct copy to clipboard or VM
+                                                snackbarMessage = "User '${user.username}' copied"
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Icon(Icons.Default.CopyAll, contentDescription = "Add Copy from User Content")
+                                                Text("Add Copy")
+                                                   },
+                                            onClick = {
+                                                expanded = false
+                                                openAddUserCopyDialog = true
+                                                targetAddUserCopy = user
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Icon(Icons.Default.Edit, contentDescription = "Edit User Content")
+                                                Text("Edit")
+                                                   },
+                                            onClick = {
+                                                expanded = false
+                                                editingUser = user
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
-
                     }
                 }
             } else {
@@ -282,39 +359,29 @@ fun UsersScreen(navController: NavHostController) {
                     contentAlignment = Alignment.Center
                 ) { Text("No users available", style = MaterialTheme.typography.bodyMedium) }
             }
-
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
         }
+        HorizontalDivider(thickness = 1.dp, color = Color.Gray)
+    }
 
-        // ---- Add User Dialog ----
-        if (openAddDialog) {
-            AddUserDialog(
-                onDismiss = { openAddDialog = false },
-                onAddUser = { newUser ->
-                    userViewModel.saveUser(newUser) // el VM orquesta corutinas, eventos y refresh
-                }
-            )
-        }
+    // ---- Add User Dialog ----
+    if (openAddDialog) {
+        AddUserDialog(
+            onDismiss = { openAddDialog = false },
+            onAddUser = { newUser ->
+                userViewModel.saveUser(newUser) // el VM orquesta corutinas, eventos y refresh
+            }
+        )
+    }
 
-        // ---- Add Copy User Dialog ----
-        if (openAddUserCopyDialog && targetAddUserCopy != null) {
-            AddCopyUserDialog(
-                targetUser = targetAddUserCopy!!,
-                onDismiss = { openAddUserCopyDialog = false },
-                onAddUser = { newUser ->
-                    userViewModel.saveUser(newUser)
-                }
-            )
-        }
+    // ---- Add Copy User Dialog ----
+    if (openAddUserCopyDialog && targetAddUserCopy != null) {
+        AddCopyUserDialog(
+            targetUser = targetAddUserCopy!!,
+            onDismiss = { openAddUserCopyDialog = false },
+            onAddUser = { newUser ->
+                userViewModel.saveUser(newUser)
+            }
+        )
     }
 }
 
-fun filterUsersBy(candidateUser: UserDomain, criteria: String, userSearchBy: UserAttribute): Boolean {
-    val isValidUser = when (userSearchBy) {
-        UserAttribute.Username ->
-            candidateUser.username.contains(criteria, ignoreCase = true)
-        UserAttribute.Email ->
-            candidateUser.email.orEmpty().contains(criteria, ignoreCase = true)
-    }
-    return isValidUser
-}

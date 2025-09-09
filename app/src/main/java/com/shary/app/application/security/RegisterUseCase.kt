@@ -1,7 +1,6 @@
 package com.shary.app.application.security
 
 import com.shary.app.core.domain.interfaces.security.AuthBackend
-import com.shary.app.core.domain.interfaces.security.AuthService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 
 

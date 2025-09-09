@@ -2,10 +2,11 @@ package com.shary.app.infrastructure.di
 
 
 import android.content.Context
+import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.security.Kdf
-import com.shary.app.infrastructure.security.kdf.Pbkdf2Kdf
-import com.shary.app.infrastructure.security.hkdf.HkdfSha256
-import com.shary.app.infrastructure.security.cipher.AesGcmCipher
+import com.shary.app.infrastructure.security.derivation.kdf.Pbkdf2Kdf
+import com.shary.app.infrastructure.security.derivation.hkdf.HkdfSha256
+import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
 import com.shary.app.infrastructure.security.box.AesGcmBox
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
@@ -13,12 +14,11 @@ import com.shary.app.core.domain.interfaces.security.DetachedVerifier
 import com.shary.app.core.domain.interfaces.security.Ed25519Factory
 import com.shary.app.core.domain.interfaces.security.FieldCodec
 import com.shary.app.core.domain.security.Box
-import com.shary.app.core.session.Session
 import com.shary.app.infrastructure.security.local.FieldCodecVault
 import com.shary.app.infrastructure.security.local.LocalVault
 import com.shary.app.infrastructure.security.manager.CryptographyManagerImpl
-import com.shary.app.infrastructure.security.sign.BcEd25519Factory
-import com.shary.app.infrastructure.security.sign.Ed25519DetachedVerifier
+import com.shary.app.infrastructure.security.digitalSignature.BcEd25519Factory
+import com.shary.app.infrastructure.security.digitalSignature.Ed25519DetachedVerifier
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -76,6 +76,6 @@ object CryptoModule {
 
     @Provides @Singleton fun provideFieldCodecVault(
         vault: LocalVault,
-        session: Session
-    ): FieldCodec = FieldCodecVault(vault, session)
+        authenticationService: AuthenticationService
+    ): FieldCodec = FieldCodecVault(vault, authenticationService)
 }

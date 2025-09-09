@@ -1,6 +1,8 @@
 package com.shary.app.core.domain.models
 
-import com.shary.app.core.domain.types.enums.UiFieldTag
+import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.Tag
+import com.shary.app.core.domain.types.enums.safeColor
 import java.time.Instant
 
 // --------------------
@@ -10,17 +12,16 @@ data class FieldDomain(
     val key: String,
     val value: String,
     val keyAlias: String? = null,
-    val tag: UiFieldTag = UiFieldTag.Unknown,
+    val tag: Tag = Tag.Unknown,
     val dateAdded: Instant
 ) {
-    val tagColor get() = tag.toColor()
 
     companion object {
         fun create(
             key: String,
             value: String,
             keyAlias: String? = null,
-            tag: UiFieldTag = UiFieldTag.Unknown
+            tag: Tag = Tag.Unknown
         ): FieldDomain {
             return FieldDomain(
                 key = key.trim(),
@@ -36,9 +37,18 @@ data class FieldDomain(
                 key = "",
                 value = "",
                 keyAlias = null,
-                tag = UiFieldTag.Unknown,
+                tag = Tag.Unknown,
                 dateAdded = Instant.EPOCH // will be replaced on confirm
             )
+        }
+    }
+
+    fun matchBy(criteria: String, searchBy: FieldAttribute): Boolean {
+        return when (searchBy) {
+            FieldAttribute.Key -> key.contains(criteria, ignoreCase = true)
+            FieldAttribute.Alias -> keyAlias.orEmpty().contains(criteria, ignoreCase = true)
+            FieldAttribute.Tag -> tag.toString().orEmpty().contains(criteria, ignoreCase = true)
+            FieldAttribute.Date -> dateAdded.toString().contains(criteria, ignoreCase = true)
         }
     }
 }

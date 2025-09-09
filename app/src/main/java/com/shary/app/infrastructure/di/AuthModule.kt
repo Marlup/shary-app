@@ -1,13 +1,13 @@
 package com.shary.app.infrastructure.di
 
 import android.content.Context
-import com.shary.app.core.domain.interfaces.security.AuthService
+import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.application.security.LoginUseCase
 import com.shary.app.application.security.RegisterUseCase
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.core.domain.interfaces.security.AuthBackend
 import com.shary.app.infrastructure.persistance.credentials.FileCredentialsStore
-import com.shary.app.infrastructure.security.auth.AuthServiceImpl
+import com.shary.app.infrastructure.security.auth.AuthenticationServiceImpl
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.infrastructure.security.auth.InMemoryAuthBackend
 import dagger.Module
@@ -40,8 +40,7 @@ object AuthModule {
     @Provides @Singleton fun provideAuthService(
         crypto: CryptographyManager,
         fileCredentialsStore: FileCredentialsStore,
-        backend: AuthBackend
-    ): AuthService = AuthServiceImpl(crypto, fileCredentialsStore, backend)
+    ): AuthenticationService = AuthenticationServiceImpl(crypto, fileCredentialsStore)
 
     @Provides @Singleton fun provideAuthBackend(
         crypto: CryptographyManager

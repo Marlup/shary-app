@@ -1,10 +1,12 @@
 package com.shary.app.ui.screens.utils
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
 
@@ -12,8 +14,9 @@ import com.shary.app.ui.screens.home.utils.Screen
 @Composable
 fun GoToScreen(
     navController: NavHostController,
-    targetScreen: Screen,
-    onExit: () -> Unit
+    targetScreen: Screen = Screen.Login,
+    buttonIcon: ImageVector = Icons.AutoMirrored.Default.Login,
+    onExit: () -> Unit = {  }
 ) {
     Button(onClick = {
         onExit()
@@ -23,7 +26,7 @@ fun GoToScreen(
         }
     }) {
         Icon(
-            Icons.Filled.Home,
+            buttonIcon,
             contentDescription = "Go to Screen button"
         )
     }

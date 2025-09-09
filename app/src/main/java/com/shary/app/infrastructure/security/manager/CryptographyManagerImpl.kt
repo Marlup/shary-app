@@ -9,10 +9,10 @@ import com.shary.app.core.domain.interfaces.security.Ed25519Factory
 import com.shary.app.core.domain.interfaces.states.Identity
 import com.shary.app.core.domain.security.Box
 import com.shary.app.infrastructure.security.box.AesGcmBox
-import com.shary.app.infrastructure.security.cipher.AesGcmCipher
+import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
-import com.shary.app.infrastructure.security.kex.X25519KeyPair
-import com.shary.app.infrastructure.security.sign.Ed25519Signer
+import com.shary.app.infrastructure.security.shared.keyExchange.X25519KeyPair
+import com.shary.app.infrastructure.security.digitalSignature.Ed25519Signer
 import com.shary.app.infrastructure.security.helper.SecurityUtils
 import com.shary.app.infrastructure.security.local.LocalVault
 import org.json.JSONObject
@@ -127,7 +127,7 @@ class CryptographyManagerImpl(
         }.getKexPublic()
 
     /**
-     * Firma Ed25519 (detached). Se recrea el signer desde la seed derivada.
+     * Firma Ed25519 (detached). Rebuilds the signer from the derived seed.
      */
     override fun signDetached(message: ByteArray): ByteArray {
         val identity = requireNotNull(cachedIdentity) { "Keys not initialized. Call initializeKeysWithUser first." }

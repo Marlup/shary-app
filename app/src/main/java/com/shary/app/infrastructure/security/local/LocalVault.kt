@@ -3,7 +3,7 @@ package com.shary.app.infrastructure.security.local
 import android.util.Base64
 import android.util.Log
 import com.shary.app.core.domain.types.valueobjects.Purpose
-import com.shary.app.infrastructure.security.cipher.AesGcmCipher
+import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
 import org.json.JSONObject
 

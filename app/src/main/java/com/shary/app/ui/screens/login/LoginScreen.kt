@@ -3,111 +3,151 @@ package com.shary.app.ui.screens.login
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
+import com.shary.app.core.domain.types.enums.AppTheme
 import com.shary.app.ui.screens.home.utils.Screen
-import com.shary.app.viewmodels.authentication.AuthEvent
+import com.shary.app.ui.screens.utils.PasswordTextField
+import com.shary.app.viewmodels.authentication.AuthenticationEvent
 import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
 
 // Optional: small Hilt entry point if you still want to check registration on the cloud
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
-import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
-import dagger.hilt.EntryPoints
-
+/*
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface LoginScreenEntryPoints {
     fun cloudService(): CloudServiceImpl
 }
+ */
+
+/**
+ * UI should only react to states and events from the ViewModel, being
+ * agnostic (not knowing) about services and dependencies of the data layer.
+ * */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(navController: NavHostController) {
-
+fun LoginScreen(
+    navController: NavHostController,
+    onThemeChosen: (AppTheme) -> Unit = {} // optional callback for theme switching
+) {
+    // ---------------- ViewModels ----------------
     val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
-    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.LOGIN) }
-
     val context = LocalContext.current
-    val activity = context as FragmentActivity
     val scope = rememberCoroutineScope()
 
-    // VM state
-    val form by authenticationViewModel.form.collectAsState()
+    // ---------------- States ----------------
+    val loginForm by authenticationViewModel.logForm.collectAsState()
     val loading by authenticationViewModel.loading.collectAsState()
-
     val snackbarHostState = remember { SnackbarHostState() }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Collect one-shot auth events
+    // ---------------- Init ----------------
+    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.LOGIN) }
+
+    // ---------------- Events ----------------
     LaunchedEffect(Unit) {
         authenticationViewModel.events.collect { ev ->
             when (ev) {
-                is AuthEvent.Success -> {
-                    // OPTIONAL: after successful login, check cloud registration
-                    val deps = EntryPoints.get(context.applicationContext, LoginScreenEntryPoints::class.java)
-                    val cloudService = deps.cloudService()
-                    scope.launch {
-                        val email = authenticationViewModel.authState.value.email
-                        val registered = runCatching { cloudService.isUserRegistered(email) }.getOrDefault(false)
-                        val msg = if (registered) "User is registered in Cloud" else "User is NOT registered in Cloud"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                    // Navigate to Home
-                    navController.navigate(Screen.Home.route) {
+                is AuthenticationEvent.Success -> {
+                    scope.launch { authenticationViewModel.onLoginSuccess(loginForm.email) }
+                    navController.navigate(Screen.Fields.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
-                is AuthEvent.Error -> {
-                    snackbarHostState.showSnackbar(ev.message)
+                is AuthenticationEvent.CloudSignedOut -> {
+                    Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Fields.route) { inclusive = true }
+                    }
                 }
+                is AuthenticationEvent.Error -> snackbarHostState.showSnackbar(ev.message)
+                else -> Unit
             }
         }
     }
 
-    // Clear text fields when screen goes to background, like you had
-    fun clearStates() {
-        authenticationViewModel.setUsername("")
-        authenticationViewModel.setPassword("")
-    }
+    // ---------------- Lifecycle cleanup ----------------
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) clearStates()
+            if (event == Lifecycle.Event.ON_STOP) authenticationViewModel.clearLogFormStates()
         }
         val lifecycle = lifecycleOwner.value.lifecycle
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
 
+    // ---------------- Theme Menu (TopRight) + Logout (TopLeft) ----------------
+    var expanded by remember { mutableStateOf(false) }
+    var selectedTheme by remember { mutableStateOf(AppTheme.Pastel) }
+
     Scaffold(
         topBar = {
-            Column(Modifier.fillMaxWidth()) {
-                CenterAlignedTopAppBar(
-                    title = { Text("Shary", style = MaterialTheme.typography.headlineMedium) },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.primary,
-                    ),
-                    expandedHeight = 64.dp,
-                    modifier = Modifier.padding(bottom = 16.dp)
+            CenterAlignedTopAppBar(
+
+                title = {
+                    Text(
+                        text = "Shary: Login",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                        },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        authenticationViewModel.signOutCloud()
+                        navController.navigate(Screen.Logup.route)
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = "Logout"
+                        )
+                    }
+                },
+                actions = {
+                    // Theme menu button
+                    Box {
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = "Choose Theme"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            AppTheme.entries.forEach { theme ->
+                                DropdownMenuItem(
+                                    text = { Text(theme.name) },
+                                    onClick = {
+                                        selectedTheme = theme
+                                        expanded = false
+                                        onThemeChosen(theme)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
                 )
-                CenterAlignedTopAppBar(title = { Text("Login") })
-            }
+            )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
@@ -120,8 +160,8 @@ fun LoginScreen(navController: NavHostController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             OutlinedTextField(
-                value = form.username,
-                onValueChange = authenticationViewModel::setUsername,
+                value = loginForm.username,
+                onValueChange = { authenticationViewModel.updateUsername(it) },
                 label = { Text("Username") },
                 singleLine = true,
                 enabled = !loading,
@@ -130,14 +170,10 @@ fun LoginScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
-                value = form.password,
-                onValueChange = authenticationViewModel::setPassword,
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                enabled = !loading,
-                modifier = Modifier.fillMaxWidth()
+            PasswordTextField(
+                password = loginForm.password,
+                onPasswordChange = { authenticationViewModel.updatePassword(it) },
+                enabled = !loading
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -149,42 +185,6 @@ fun LoginScreen(navController: NavHostController) {
             ) {
                 Text(if (loading) "Checking..." else "Login")
             }
-
-            /*
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Biometric Login (kept like your original; you can wire it to auth if desired)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Button(
-                    onClick = {
-                        val biometricManager = BiometricAuthManager(
-                            context = context,
-                            activity = activity,
-                            onAuthSuccess = {
-                                // On biometric success, go Home.
-                                // If you want biometric to actually sign in, call authenticationViewModel.submit(context) or provide a biometric path.
-                                navController.navigate(Screen.Home.route) {
-                                    popUpTo(Screen.Login.route) { inclusive = true }
-                                }
-                            }
-                        )
-                        val error = biometricManager.authenticate()
-                        if (error != null) errorMessage = error
-                    },
-                    enabled = !loading,
-                    modifier = Modifier.size(200.dp, 50.dp),
-                ) { Text("Biometric Login") }
-
-                errorMessage?.let {
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text(text = it, color = MaterialTheme.colorScheme.error)
-                }
-            }
-
-             */
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.shary.app.infrastructure.di
 
 import com.shary.app.core.domain.interfaces.ports.CloudStatusDataSource
-import com.shary.app.core.domain.interfaces.ports.ConnectivityPort
 import com.shary.app.infrastructure.services.connectivity.*
 import dagger.Binds
 import dagger.Module

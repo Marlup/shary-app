@@ -5,6 +5,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -14,7 +15,8 @@ fun SummaryTopAppBar(navController: NavHostController) {
     TopAppBar(
         title = {
             CenterAlignedTopAppBar(
-                title = { Text("Summary") }
+                title = { Text("Summary") },
+                expandedHeight = 64.dp
             )
         },
     )

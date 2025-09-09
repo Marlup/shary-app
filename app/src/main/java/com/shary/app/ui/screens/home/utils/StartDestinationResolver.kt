@@ -22,7 +22,7 @@ object StartDestinationResolver {
         return when {
             !hasSignature -> StartDestination.LOGUP
             !hasCredentials -> StartDestination.LOGIN
-            else -> StartDestination.HOME
+            else -> StartDestination.LOGUP
         }
     }
 }
