@@ -13,15 +13,12 @@ import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Summarize
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -32,11 +29,10 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.enums.AddFlow
 import com.shary.app.core.domain.types.enums.UserAttribute
-import com.shary.app.ui.screens.field.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
-import com.shary.app.ui.screens.utils.GoToScreen
 import com.shary.app.ui.screens.utils.RowSearcher
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.user.UserEvent
@@ -145,8 +141,8 @@ fun UsersScreen(navController: NavHostController) {
 
                 }
                 RowSearcher(
-                    searchText = searchCriteria,
-                    onSearchTextChange = { searchCriteria = it },
+                    queryText = searchCriteria,
+                    onQueryTextChange = { searchCriteria = it },
                     currentAttribute = userSearchAttribute,
                     onAttributeChange = { userSearchAttribute = it },
                     availableAttributes = UserAttribute.entries,

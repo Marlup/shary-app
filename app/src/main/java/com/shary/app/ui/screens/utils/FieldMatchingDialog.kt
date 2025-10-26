@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.safeColor
-import com.shary.app.ui.screens.field.utils.AddFieldDialog
+import com.shary.app.ui.screens.field.components.AddFieldDialog
 
 
 @Composable

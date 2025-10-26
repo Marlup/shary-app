@@ -1,6 +1,7 @@
 package com.shary.app.ui.screens.field
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Details
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Lens
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
@@ -33,16 +35,17 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.AddFlow
-import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.SearchFieldBy
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.enums.safeColor
 import com.shary.app.core.domain.types.enums.safeTagString
-import com.shary.app.ui.screens.field.utils.AddCopyFieldDialog
-import com.shary.app.ui.screens.field.utils.AddFieldDialog
-import com.shary.app.ui.screens.field.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.screens.field.components.TagPicker
+import com.shary.app.ui.screens.field.components.AddCopyFieldDialog
+import com.shary.app.ui.screens.field.components.AddFieldDialog
+import com.shary.app.ui.screens.field.components.SortMenu
+import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.RowSearcher
-import com.shary.app.ui.screens.utils.components.TagPicker
 import com.shary.app.utils.DateUtils
 import com.shary.app.viewmodels.field.FieldEvent
 import com.shary.app.viewmodels.field.FieldViewModel
@@ -58,8 +61,11 @@ fun FieldsScreen(navController: NavHostController) {
     val userViewModel: UserViewModel = hiltViewModel()
 
     // ---- Table and DB rows (Domain) ----
-    val fieldList by fieldViewModel.fields.collectAsState()
+    //val fieldList by fieldViewModel.fields.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // ---- Add Searcher input cell ----
+    var showSearch by remember { mutableStateOf(false) }
 
     // ---- Add dialogs ----
     var openAddDialog by remember { mutableStateOf(false) }
@@ -78,16 +84,22 @@ fun FieldsScreen(navController: NavHostController) {
     var editedTag: Tag by remember { mutableStateOf(Tag.Unknown) }
 
     // ---- Checked rows (Domain) ----
+    //val selectedFields by fieldViewModel.selectedFields.collectAsState()
     val selectedFields by fieldViewModel.selectedFields.collectAsState()
 
     // ---- Search Fields ----
-    var searchCriteria by remember { mutableStateOf("") }
-    var fieldSearchAttribute by remember { mutableStateOf(FieldAttribute.Key) }
+    var searchQuery by remember { mutableStateOf("") }
+    val searchFieldBy by fieldViewModel.searchFieldBy.collectAsState()
 
     // Safe filtering (keyAlias is nullable in domain)
-    val filteredFields = remember(fieldList, searchCriteria, fieldSearchAttribute) {
-        fieldList.filter { it.matchBy(searchCriteria, fieldSearchAttribute) }.toMutableList()
-    }
+    //val filteredFields = remember(fieldList, searchQuery, searchFieldBy) {
+    //    fieldList.filter { it.matchBy(searchQuery, searchFieldBy) }.toMutableList()
+    //}
+    val filteredFields by fieldViewModel.filteredFields.collectAsState()
+
+    // ======== Sort Fields Parameters ========
+    val sortBy by fieldViewModel.sortFieldBy.collectAsState()
+    val descending by fieldViewModel.descending.collectAsState()
 
     // Collect VM events exactly once
     LaunchedEffect(Unit) {
@@ -133,7 +145,7 @@ fun FieldsScreen(navController: NavHostController) {
         }
     }
 
-    // Show snackbars driven by state
+    // Show snack bars driven by state
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -147,8 +159,8 @@ fun FieldsScreen(navController: NavHostController) {
         editedValue = ""
         editedAlias = ""
         editedTag = Tag.Unknown
-        searchCriteria = ""
-        filteredFields.clear()
+        searchQuery = ""
+        //filteredFields.clear()
     }
 
     // Persist selection on lifecycle stop
@@ -179,36 +191,52 @@ fun FieldsScreen(navController: NavHostController) {
             ) {
                 var expanded by remember { mutableStateOf(false) }
 
-                // --- FieldSearcher below the buttons ---
-                RowSearcher(
-                    searchText = searchCriteria,
-                    onSearchTextChange = { searchCriteria = it },
-                    currentAttribute = fieldSearchAttribute,
-                    onAttributeChange = { fieldSearchAttribute = it },
-                    availableAttributes = FieldAttribute.entries,
-                    resolveOptionText = { fieldSearchAttribute = it; it.name }
+                if (showSearch) {
+                    // ---- FieldSearcher below the buttons ----
+                    AnimatedVisibility(
+                        visible = true,
+                        modifier = Modifier.weight(1f))
+                    {
+                        RowSearcher(
+                            queryText = searchQuery,
+                            onQueryTextChange = { searchQuery = it },
+                            currentAttribute = searchFieldBy,
+                            onAttributeChange = { fieldViewModel.updateSearchField(it) },
+                            availableAttributes = SearchFieldBy.entries,
+                            resolveOptionText = {
+                                fieldViewModel.updateSearchField(it);
+                                searchFieldBy.name
+                            }
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                SortMenu(
+                    currentSort = sortBy,
+                    isDescending = descending,
+                    onSortChange = { s, desc ->
+                        fieldViewModel.updateSort(s, desc)
+                    }
                 )
                 Box {
                     IconButton(
                         onClick = { expanded = true },
-                        modifier = Modifier.padding(start=32.dp)
+                        //modifier = Modifier.padding(start=32.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
                             contentDescription = "Menu"
                         )
                     }
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         DropdownMenuItem(
                             text = { Text("Request") },
                             onClick = {
                                 expanded = false
                                 navController.navigate(Screen.Requests.route)
                             },
-                            leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) }
+                            leadingIcon = { Icon(Icons.Default.Description, null) }
                         )
 
                         DropdownMenuItem(
@@ -217,7 +245,7 @@ fun FieldsScreen(navController: NavHostController) {
                                 expanded = false
                                 navController.navigate(Screen.FileVisualizer.route)
                             },
-                            leadingIcon = { Icon(Icons.Default.FolderOpen, contentDescription = null) }
+                            leadingIcon = { Icon(Icons.Default.FolderOpen, null) }
                         )
 
                         DropdownMenuItem(
@@ -225,9 +253,9 @@ fun FieldsScreen(navController: NavHostController) {
                             onClick = {
                                 expanded = false
                                 fieldViewModel.clearSelectedFields()
-                                navController.navigate(Screen.Fields.route)
+                                navController.navigate(Screen.Login.route)
                             },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) }
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) }
                         )
                     }
                 }
@@ -245,7 +273,9 @@ fun FieldsScreen(navController: NavHostController) {
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // ---- Left: Delete ----
+
+                // ======== Left: Delete ========
+
                 Box(
                     modifier = Modifier
                         .weight(0.15f),
@@ -266,7 +296,8 @@ fun FieldsScreen(navController: NavHostController) {
                     )
                 }
 
-                // ---- Center: Add + Users ----
+                // ======== Center: Add + Search bar + Users ========
+
                 Row(
                     modifier = Modifier.weight(0.70f),
                     horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
@@ -280,6 +311,13 @@ fun FieldsScreen(navController: NavHostController) {
                     )
 
                     CompactActionButton(
+                        onClick = { showSearch = !showSearch },
+                        icon = Icons.Default.Lens,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Show Search Bar"
+                    )
+
+                    CompactActionButton(
                         onClick = { navController.navigate(Screen.Users.route) },
                         icon = Icons.Default.Person,
                         backgroundColor = colorScheme.primary,
@@ -287,7 +325,8 @@ fun FieldsScreen(navController: NavHostController) {
                     )
                 }
 
-                // ---- Right: Summary ----
+                // ======== Right: Summary ========
+
                 Box(
                     modifier = Modifier
                         .weight(0.15f),
@@ -316,23 +355,24 @@ fun FieldsScreen(navController: NavHostController) {
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f),
+                .fillMaxWidth(),
+                //.fillMaxHeight(0.9f),
             horizontalAlignment = Alignment.Start,
         ) {
 
-            if (filteredFields.isNotEmpty()) {
+            //if (filteredFields.isNotEmpty()) {
+            if (fieldViewModel.isFilteredFieldsNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .padding(start = 16.dp, end = 16.dp),
+                        .padding(vertical = 8.dp, horizontal = 16.dp),
+                        //.padding(start = 16.dp, end = 16.dp),
                 ) {
                     itemsIndexed(
                         items = filteredFields,
                         key = { _, field -> field.key }
                     ) { _, field ->
-                        val isSelected = selectedFields.any { it.key == field.key } // comparar por key
+                        val isSelected = field in selectedFields // Compare by key
 
                         ElevatedCard(
                             modifier = Modifier
@@ -365,14 +405,14 @@ fun FieldsScreen(navController: NavHostController) {
                                     // key text
                                     Text(
                                         field.key,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        color = colorScheme.onSurface,
                                         style = MaterialTheme.typography.titleMedium,
                                         maxLines = 1
                                     )
                                     // value text
                                     Text(
                                         field.value,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 1
                                     )

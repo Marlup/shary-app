@@ -24,7 +24,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.ui.screens.field.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
 import com.shary.app.ui.screens.request.utils.SendRequestDialog

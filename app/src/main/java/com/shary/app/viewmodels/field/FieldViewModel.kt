@@ -6,6 +6,9 @@ import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.SearchFieldBy
+import com.shary.app.core.domain.types.enums.SortFieldBy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.time.Instant
@@ -35,7 +38,42 @@ class FieldViewModel @Inject constructor(
 
     // One-shot events (snackbar/toast/navigation)
     private val _events = MutableSharedFlow<FieldEvent>(extraBufferCapacity = 1)
+
+    private val _searchCriteria = MutableStateFlow("")
+    val searchCriteria: StateFlow<String> = _searchCriteria.asStateFlow()
+
+    private val _searchFieldBy = MutableStateFlow(SearchFieldBy.KEY)
+    val searchFieldBy: StateFlow<SearchFieldBy> = _searchFieldBy.asStateFlow()
+
+    private val _sortFieldBy = MutableStateFlow(SortFieldBy.KEY)
+    val sortFieldBy: StateFlow<SortFieldBy> = _sortFieldBy.asStateFlow()
+
+    private val _selectedKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    private val _descending = MutableStateFlow(false)
+    val descending: StateFlow<Boolean> = _descending.asStateFlow()
+
     val events: SharedFlow<FieldEvent> = _events.asSharedFlow()
+
+    /** Combined filtering + sorting logic **/
+    val filteredFields: StateFlow<List<FieldDomain>> =
+        combine(
+            _fields,
+            _searchCriteria,
+            _searchFieldBy,
+            _sortFieldBy,
+            _descending
+        ) { list, query, attribute, _sortFieldBy, desc ->
+            list.filter { it.matchBy(query, attribute) }
+                .sortedWith(compareBy<FieldDomain> {
+                    when (_sortFieldBy) {
+                        SortFieldBy.KEY ->  it.dateAdded
+                        SortFieldBy.TAG -> it.tag.toString()
+                        else -> it.key
+                    }
+                }.let { if (desc) it.reversed() else it })
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
 
     // Serialize writes to avoid concurrent edits on the same store
     private val writeMutex = Mutex()
@@ -194,6 +232,27 @@ class FieldViewModel @Inject constructor(
     fun toggleFieldSelection(field: FieldDomain) {
         _selectedFields.update { current -> if (field in current) current - field else current + field }
     }
+
+    fun updateSearch(query: String, attribute: SearchFieldBy) {
+        _searchCriteria.value = query
+        _searchFieldBy.value = attribute
+    }
+    fun updateSearchField(searchFieldBy: SearchFieldBy) {
+        _searchFieldBy.value = searchFieldBy
+    }
+
+    fun updateSort(sortFieldBy: SortFieldBy, descending: Boolean) {
+        _sortFieldBy.value = sortFieldBy
+        _descending.value = descending
+    }
+
+    fun toggleSelection(field: FieldDomain) {
+        _selectedKeys.value = _selectedKeys.value.toMutableSet().apply {
+            if (!add(field.key)) remove(field.key)
+        }
+    }
+
+    fun isFilteredFieldsNotEmpty():Boolean = filteredFields.value.isNotEmpty()
 
     // ----------------------------- Internals --------------------------------
 

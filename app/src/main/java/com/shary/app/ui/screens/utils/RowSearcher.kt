@@ -12,8 +12,8 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun <A> RowSearcher(
-    searchText: String,
-    onSearchTextChange: (String) -> Unit,
+    queryText: String,
+    onQueryTextChange: (String) -> Unit,
     currentAttribute: A,
     onAttributeChange: (A) -> Unit,
     availableAttributes: List<A>,
@@ -23,8 +23,8 @@ fun <A> RowSearcher(
         val optionText = resolveOptionText(currentAttribute)
 
         TextField(
-            value = searchText,
-            onValueChange = onSearchTextChange,
+            value = queryText,
+            onValueChange = onQueryTextChange,
             label = {
                 Text(
                     text = "Search by ${optionText.lowercase()}",

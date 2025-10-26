@@ -129,7 +129,6 @@ fun LogupScreen(navController: NavHostController) {
         }
     }
 
-
     // Clear fields when screen goes to background (keeps your previous behavior)
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
     DisposableEffect(lifecycleOwner.value) {

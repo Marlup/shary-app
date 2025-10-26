@@ -70,8 +70,8 @@ fun LoginScreen(
                 }
                 is AuthenticationEvent.CloudSignedOut -> {
                     Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Fields.route) { inclusive = true }
+                    navController.navigate(Screen.Logup.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
                 is AuthenticationEvent.Error -> snackbarHostState.showSnackbar(ev.message)

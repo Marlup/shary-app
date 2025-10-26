@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.field.utils
+package com.shary.app.ui.screens.utils
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
@@ -27,18 +27,18 @@ object SpecialComponents {
         IconButton(
             onClick = onClick,
             enabled = enabled,
-            modifier = Modifier
+            modifier = Modifier.Companion
                 .size(44.dp) // círculo pequeño
                 .background(
-                    color = if (enabled) backgroundColor else Color.Gray,
+                    color = if (enabled) backgroundColor else Color.Companion.Gray,
                     shape = iconShape
                 )
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = if (enabled) Color.White else Color.LightGray,
-                modifier = Modifier.size(28.dp) // icono más grande dentro
+                tint = if (enabled) Color.Companion.White else Color.Companion.LightGray,
+                modifier = Modifier.Companion.size(28.dp) // icono más grande dentro
             )
         }
     }

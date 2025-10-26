@@ -9,6 +9,8 @@ import com.shary.app.Field as FieldProto
 import com.shary.app.Request as RequestProto
 import com.shary.app.User as UserProto
 import com.shary.app.core.domain.types.enums.Tag
+import com.shary.app.core.domain.types.enums.deserialize
+import com.shary.app.core.domain.types.enums.serialize
 import com.shary.app.core.domain.types.valueobjects.Purpose
 import java.time.Instant
 
@@ -16,21 +18,28 @@ import java.time.Instant
 // Field ↔ Domain (encrypted at-rest / in-store via LocalVault)
 // ======================================================================
 
-/** Decrypts a Field proto into the domain model using LocalVault (on-the-fly derivation). */
-fun FieldProto.toDomain(
-    codec: FieldCodec
-): FieldDomain = try {
 
-    FieldDomain(
-        key       = codec.decode(key, Purpose.Key),
-        value     = codec.decode(value, Purpose.Value),
-        keyAlias  = codec.decode(keyAlias, Purpose.Alias).ifBlank { null },
-        tag       = Tag.fromString(
-            name=codec.decode(tag, Purpose.Tag).ifBlank { "unknown" },
-            color=Tag.Unknown.toColor()
-        ),
-        dateAdded = Instant.ofEpochMilli(dateAdded)
-    )
+/** Encrypts a domain Field into proto using LocalVault (on-the-fly derivation). */
+fun FieldDomain.toProto(codec: FieldCodec): FieldProto =
+    FieldProto.newBuilder()
+        .setKey(codec.encode(key, Purpose.Key))
+        .setValue(codec.encode(value, Purpose.Value))
+        .setKeyAlias(codec.encode(keyAlias.orEmpty(), Purpose.Alias))
+        .setTag(codec.encode(tag.serialize(), Purpose.Tag)) // Saves name + color
+        .setDateAdded(dateAdded.toEpochMilli())
+        .build()
+
+/** Decrypts a Field proto into the domain model using LocalVault (on-the-fly derivation). */
+fun FieldProto.toDomain(codec: FieldCodec): FieldDomain =
+    try {
+        val raw = codec.decode(tag, Purpose.Tag).ifBlank { "Unknown" }
+        FieldDomain(
+            key       = codec.decode(key, Purpose.Key),
+            value     = codec.decode(value, Purpose.Value),
+            keyAlias  = codec.decode(keyAlias, Purpose.Alias).ifBlank { null },
+            tag       = Tag.deserialize(raw), // recover name + color
+            dateAdded = Instant.ofEpochMilli(dateAdded)
+        )
 } catch (_: Exception) {
     // Fallback for corrupted registers or invalid credentials: avoids breaking the flow
     FieldDomain(
@@ -40,29 +49,6 @@ fun FieldProto.toDomain(
         tag       = Tag.Unknown,
         dateAdded = Instant.ofEpochMilli(dateAdded)
     )
-}
-
-/** Encrypts a domain Field into proto using LocalVault (on-the-fly derivation). */
-fun FieldDomain.toProto(codec: FieldCodec): FieldProto {
-    Log.w("FieldDomain", "at start - toProto: $this")
-    //val cleanKey = key.trim()
-    val cleanKey = key
-    //val cleanAlias = keyAlias?.trim().orEmpty()
-    val cleanAlias = keyAlias.orEmpty()
-    val tagStr = tag.toTagString()
-
-    Log.w("FieldDomain", "before encryption - toProto: $this")
-
-    val newField = FieldProto.newBuilder()
-        .setKey(codec.encode(cleanKey, Purpose.Key))
-        .setValue(codec.encode(value, Purpose.Value))
-        .setKeyAlias(codec.encode(cleanAlias, Purpose.Alias))
-        .setTag(codec.encode(tagStr, Purpose.Tag))
-        .setDateAdded(dateAdded.toEpochMilli())
-        .build()
-
-    Log.w("FieldDomain", "after encryption and ToProto - toProto: $newField")
-    return newField
 }
 
 // Convenience para colecciones

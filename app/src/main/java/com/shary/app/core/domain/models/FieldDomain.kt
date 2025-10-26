@@ -1,8 +1,8 @@
 package com.shary.app.core.domain.models
 
 import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.SearchFieldBy
 import com.shary.app.core.domain.types.enums.Tag
-import com.shary.app.core.domain.types.enums.safeColor
 import java.time.Instant
 
 // --------------------
@@ -43,12 +43,12 @@ data class FieldDomain(
         }
     }
 
-    fun matchBy(criteria: String, searchBy: FieldAttribute): Boolean {
+    fun matchBy(queryCriteria: String, searchBy: SearchFieldBy): Boolean {
         return when (searchBy) {
-            FieldAttribute.Key -> key.contains(criteria, ignoreCase = true)
-            FieldAttribute.Alias -> keyAlias.orEmpty().contains(criteria, ignoreCase = true)
-            FieldAttribute.Tag -> tag.toString().orEmpty().contains(criteria, ignoreCase = true)
-            FieldAttribute.Date -> dateAdded.toString().contains(criteria, ignoreCase = true)
+            SearchFieldBy.KEY -> key.contains(queryCriteria, ignoreCase = true)
+            SearchFieldBy.ALIAS -> keyAlias.orEmpty().contains(queryCriteria, ignoreCase = true)
+            SearchFieldBy.TAG -> tag.toString().orEmpty().contains(queryCriteria, ignoreCase = true)
+            SearchFieldBy.DATE_ADDED -> dateAdded.toString().contains(queryCriteria, ignoreCase = true)
         }
     }
 }

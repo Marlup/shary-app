@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.field.utils
+package com.shary.app.ui.screens.field.components
 
 import androidx.compose.runtime.Composable
 import com.shary.app.core.domain.models.FieldDomain
@@ -12,7 +12,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.shary.app.core.domain.types.enums.PredefinedKey
-import com.shary.app.ui.screens.utils.components.TagPicker
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

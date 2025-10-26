@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.utils.components
+package com.shary.app.ui.screens.field.components
 
 import android.util.Log
 import androidx.compose.foundation.background

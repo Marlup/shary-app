@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.field.utils
+package com.shary.app.ui.screens.field.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -46,7 +46,7 @@ fun InputWithSuggestions(
             onValueChange = {
                 onKeyChange(it)
 
-                showSuggestions = it.length >= 1
+                showSuggestions = it.isNotEmpty()
                 filteredSuggestions = predefinedKeys.filter { suggestion ->
                     suggestion.contains(it, ignoreCase = true)
                 }

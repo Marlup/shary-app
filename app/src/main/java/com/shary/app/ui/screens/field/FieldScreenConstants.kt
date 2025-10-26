@@ -1,6 +1,6 @@
-package com.shary.app.ui.screens.field.utils
+package com.shary.app.ui.screens.field
 
-object Constants {
+object FieldScreenConstants {
     val MESSAGING_SERVICES =  listOf("Email", "Cloud")
     val SERVICES_ON_DEVELOPMENT =  listOf("Cloud")
 }

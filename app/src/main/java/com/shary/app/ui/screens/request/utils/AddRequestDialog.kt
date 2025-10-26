@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.shary.app.core.domain.types.enums.PredefinedKey
-import com.shary.app.ui.screens.field.utils.InputWithSuggestions
+import com.shary.app.ui.screens.field.components.InputWithSuggestions
 
 @Composable
 fun AddRequestDialog(

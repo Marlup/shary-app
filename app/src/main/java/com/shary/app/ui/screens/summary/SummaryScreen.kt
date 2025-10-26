@@ -120,7 +120,7 @@ fun SummaryScreen(navController: NavHostController) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "Summary before sending",
+                text = "You Are Going to Send:",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = 12.dp)
             )

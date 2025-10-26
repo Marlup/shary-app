@@ -1,4 +1,4 @@
-package com.shary.app.ui.screens.utils.components
+package com.shary.app.ui.screens.field.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
