@@ -5,10 +5,13 @@ import android.util.Log
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
+import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.interfaces.states.AuthState
 import com.shary.app.core.domain.types.valueobjects.Purpose
 import com.shary.app.infrastructure.security.helper.SecurityUtils
 import com.shary.app.infrastructure.security.helper.SecurityUtils.base64Encode
+import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +34,8 @@ import javax.inject.Singleton
 class AuthenticationServiceImpl @Inject constructor(
     private val crypto: CryptographyManager,
     private val store: CredentialsStore,
+    private val cloud: CloudService,
+    private val cache: CacheService,
 ) : AuthenticationService {
 
     private val DELAY_TIME_SECONDS = 40L
@@ -68,14 +73,38 @@ class AuthenticationServiceImpl @Inject constructor(
      */
     override suspend fun signUp(context: Context, username: String, email: String, password: String) = runCatching {
         val safe = computeSafePassword(username, password)
+        Log.d("AuthenticationServiceImpl", "signUp - username: $username")
+
+        // Initialize keys locally
         crypto.initializeKeysWithUser(context, username, safe)
         crypto.saveSignature(context, username, email, safe)
 
         //val signPub = crypto.getSignPublic()
         //val kexPub  = crypto.getKexPublic()
-        // TODO: send signPub + kexPub to real backend if required
 
-        cacheCredentials(username, email, safe)
+        // --- CLOUD REGISTRATION ---
+        val cloudReachable = cloud.sendPing()
+        Log.w("AuthenticationServiceImpl", "Cloud registration launched")
+        if (cloudReachable) {
+            val registered = cloud.isUserRegisteredInCloud(username)
+        Log.w("AuthenticationServiceImpl", "Cloud isUserRegisteredInCloud launched")
+            if (!registered) {
+                val token = cloud.uploadUser(username)
+                if (token.isNotEmpty()) {
+                    Log.d("AuthenticationServiceImpl", "Cloud user uploaded, token received.")
+                    setAuthToken(token)
+                } else {
+                    Log.w("AuthenticationServiceImpl", "Cloud upload failed, using local only.")
+                }
+            } else {
+                Log.w("AuthenticationServiceImpl", "User already exists in cloud.")
+            }
+        } else {
+            Log.w("AuthenticationServiceImpl", "Cloud unreachable, continuing offline sign-up.")
+        }
+
+        // Persist locally
+        cacheCredentials(username, email, safe,getAuthToken())
         persistCredentials(context)
         preLoadLocalKeys(username, safe)
     }
@@ -88,19 +117,42 @@ class AuthenticationServiceImpl @Inject constructor(
      * 4) Verify that provided username + password match stored credentials.
      */
     override suspend fun signIn(context: Context, username: String, password: String) = runCatching {
-        val safe = computeSafePassword(username, password)
-        crypto.initializeKeysWithUser(context, username, safe)
+        val safePassword = computeSafePassword(username, password)
+        crypto.initializeKeysWithUser(context, username, safePassword)
+        preLoadLocalKeys(username, safePassword)
 
-        preLoadLocalKeys(username, safe)
-        loadCredentials(context, username, safe)
-        check(isAuthenticated(username, safe)) { "Invalid credentials" }
+        loadCredentials(context, username, safePassword)
+        check(isAuthenticated(username, safePassword)) { "Invalid credentials" }
 
-        // TODO: If connected to real backend, perform challenge/response here
+        // --- CLOUD VERIFICATION ---
+        val online = cloud.sendPing()
+        Log.w("AuthenticationServiceImpl", "Cloud verification launched")
+        if (online) {
+            val isRegistered = cloud.isUserRegisteredInCloud(username)
+            Log.w("AuthenticationServiceImpl", "Cloud isUserRegisteredInCloud launched")
+            if (!isRegistered) {
+                Log.w("AuthenticationServiceImpl", "After ping: User not found in cloud, forcing re-upload.")
+                cloud.uploadUser(username)
+            } else {
+                Log.d("AuthenticationServiceImpl", "After ping: User verified in cloud.")
+            }
+
+            // Obtain/refresh token for cloud sync
+            val refreshed = cloud.refreshIdToken().getOrNull()
+            if (!refreshed.isNullOrEmpty()) {
+                setAuthToken(refreshed)
+            } else {
+                Log.w("AuthenticationServiceImpl", "Failed to refresh ID token from cloud.")
+            }
+        } else {
+            Log.w("AuthenticationServiceImpl", "Cloud offline, continuing local sign-in.")
+        }
     }
 
     /** Clears in-memory state and deletes the encrypted credentials file. */
-    override fun signOut(context: Context) {
+    override suspend fun signOut(context: Context) {
         _state.value = AuthState()
+        cloud.signOutCloud()
         store.deleteCredentials(context)
     }
 
@@ -139,11 +191,13 @@ class AuthenticationServiceImpl @Inject constructor(
             json
         )
         store.writeCredentials(context, bytes)
+        cache.cacheOwnerUsername(s.username)
+        cache.cacheOwnerEmail(s.email)
         Log.d("Auth", "Encrypted credentials stored (${bytes.size} bytes).")
     }
 
     /** Loads credentials JSON from encrypted storage and updates AuthState. */
-    private fun loadCredentials(context: Context, username: String, safe: String) {
+    private fun loadCredentials(context: Context, username: String, safePassword: String) {
         val encrypted = store.readCredentials(context) ?: error("Credentials file not found")
         val data = crypto.decryptCredentials(
             username,
@@ -151,12 +205,16 @@ class AuthenticationServiceImpl @Inject constructor(
             encrypted
         )
         Log.d("AuthenticationServiceImpl", "loadCredentials - username: ${data.optString("user_username")}")
+        val username = data.optString("user_username");
+        val email = data.optString("user_email");
         cacheCredentials(
             username = data.optString("user_username"),
             email    = data.optString("user_email"),
             safe     = data.optString("user_safe_password"),
             token    = data.optString("user_validation_token")
         )
+        cache.cacheOwnerUsername(username)
+        cache.cacheOwnerEmail(email)
         Log.d("AuthenticationServiceImpl", "Encrypted credentials loaded (${encrypted.size} bytes).")
     }
 

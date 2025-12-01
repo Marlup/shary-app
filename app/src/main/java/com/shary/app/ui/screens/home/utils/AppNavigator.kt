@@ -3,7 +3,8 @@ package com.shary.app.ui.screens.home.utils
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.navigation.compose.hiltViewModel
+//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -13,7 +14,6 @@ import com.shary.app.core.domain.types.enums.AppTheme
 import com.shary.app.core.domain.types.enums.StartDestination
 import com.shary.app.ui.screens.field.FieldsScreen
 import com.shary.app.ui.screens.fileVisualizer.FileVisualizerScreen
-import com.shary.app.ui.screens.home.HomeScreen
 import com.shary.app.ui.screens.login.LoginScreen
 import com.shary.app.ui.screens.logup.LogupScreen
 import com.shary.app.ui.screens.request.RequestsScreen

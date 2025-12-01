@@ -9,6 +9,8 @@ import com.shary.app.core.domain.interfaces.security.AuthBackend
 import com.shary.app.infrastructure.persistance.credentials.FileCredentialsStore
 import com.shary.app.infrastructure.security.auth.AuthenticationServiceImpl
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
+import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.infrastructure.security.auth.InMemoryAuthBackend
 import dagger.Module
 import dagger.Provides
@@ -40,7 +42,14 @@ object AuthModule {
     @Provides @Singleton fun provideAuthService(
         crypto: CryptographyManager,
         fileCredentialsStore: FileCredentialsStore,
-    ): AuthenticationService = AuthenticationServiceImpl(crypto, fileCredentialsStore)
+        cloudService: CloudService,
+        cacheService: CacheService
+    ): AuthenticationService = AuthenticationServiceImpl(
+        crypto,
+        fileCredentialsStore,
+        cloudService,
+        cacheService
+    )
 
     @Provides @Singleton fun provideAuthBackend(
         crypto: CryptographyManager

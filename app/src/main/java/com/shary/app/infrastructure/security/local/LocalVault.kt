@@ -34,9 +34,9 @@ class LocalVault(
         password: CharArray,
         purpose: String = Purpose.Key.code
     ): ByteArray {
-        Log.w("LocalVault", "deriveLocalKey - username: $username")
-        Log.w("LocalVault", "deriveLocalKey - password: $password")
-        Log.w("LocalVault", "deriveLocalKey - purpose: $purpose")
+        //Log.w("LocalVault", "deriveLocalKey - username: $username")
+        //Log.w("LocalVault", "deriveLocalKey - password: $password")
+        //Log.w("LocalVault", "deriveLocalKey - purpose: $purpose")
         val master = kd.masterSeed(username, password, appId)
         return kd.hkdf.expand(master, info = "shary:local:$purpose".toByteArray(), len = 32)
     }

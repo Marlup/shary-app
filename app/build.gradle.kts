@@ -6,22 +6,22 @@ plugins {
     alias(libs.plugins.protobuf)
     id("org.jetbrains.kotlin.kapt") /**
 
-    “plugin is already on the classpath with an unknown version”, because the Kotlin plugin
-    already brings kapt. So you cannot apply kapt with a version alias — it must be applied
-    without version. Use plain id, no alias. And in libs.versions.toml, remove this block:
+“plugin is already on the classpath with an unknown version”, because the Kotlin plugin
+already brings kapt. So you cannot apply kapt with a version alias — it must be applied
+without version. Use plain id, no alias. And in libs.versions.toml, remove this block:
 
-    kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 
-    Why is that?
+Why is that?
 
-    - kotlin {} plugins (android, jvm, multiplatform, kapt) are all shipped together.
+- kotlin {} plugins (android, jvm, multiplatform, kapt) are all shipped together.
 
-    - Only org.jetbrains.kotlin.android and org.jetbrains.kotlin.plugin.* (compose, serialization)
-    need version alignment.
+- Only org.jetbrains.kotlin.android and org.jetbrains.kotlin.plugin.* (compose, serialization)
+need version alignment.
 
-    - kapt is always applied using just id("org.jetbrains.kotlin.kapt").
+- kapt is always applied using just id("org.jetbrains.kotlin.kapt").
 
-    **/
+ **/
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.google.services)
 }
@@ -102,7 +102,7 @@ dependencies {
     Eso no corresponde con las claves del TOML.
     Gradle interpreta libs.firebase.auth.ktx como un “bundle” pero no existe, por eso queda vacío (:).
 
-     Solución: En app/build.gradle.kts, se deben usar los nombres tal cual están en el TOML:
+    Solución: En app/build.gradle.kts, se deben usar los nombres tal cual están en el TOML:
 
     implementation(libs.firebase.auth.ktx)       // ❌ incorrecto
     implementation(libs.firebase.firestore.ktx) // ❌ incorrecto
@@ -114,6 +114,8 @@ dependencies {
     implementation(libs.google.firebase.auth)
     implementation(libs.google.firebase.firestore)
     implementation(libs.google.firebase.analytics)
+    // FIX: Changed from implementation(libs.firebase.functions.ktx) to correct camelCase for TOML flat key
+    //implementation(libs.firebaseFunctionsKtx)
 
 
     // Core AndroidX

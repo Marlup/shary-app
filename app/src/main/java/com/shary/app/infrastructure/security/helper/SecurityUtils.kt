@@ -3,6 +3,7 @@ package com.shary.app.infrastructure.security.helper
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
+import android.util.Log
 import com.shary.app.core.constants.Constants.PATH_AUTHENTICATION
 import com.shary.app.core.constants.Constants.PATH_AUTH_SIGNATURE
 import org.json.JSONObject
@@ -62,7 +63,11 @@ object SecurityUtils {
     fun hashPasswordB64(username: String, password: CharArray, appId: String): String =
         base64Encode(hashPassword(username, password, appId))
 
-    fun hashMessageB64(message: String): String = base64Encode(hashMessage(message))
+    fun hashMessageB64(message: String): String {
+        val hashB64 = base64Encode(hashMessage(message))
+        Log.i("SecurityUtils", "hashMessageB64() - message: $message to hash: $hashB64")
+        return hashB64
+    }
 
     fun hashSaltedMessage(message: String, salt: String): ByteArray {
         return runCatching {

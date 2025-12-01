@@ -37,11 +37,17 @@ class SelectionCacheService @Inject constructor(
     /** Cached users, exposed as reactive flow */
     private val _users  = MutableStateFlow<List<UserDomain>>(emptyList())
 
+    /** Optional Owner as Userdomain structure as cached alongside fields/users */
+    private val _owner  = MutableStateFlow(UserDomain())
+
     /** Optional phone number cached alongside fields/users */
     private val _ownerPhone  = MutableStateFlow<String?>(null)
 
     /** Optional phone number cached alongside fields/users */
-    private val _ownerEmail  = MutableStateFlow<String?>(null)
+    private val _ownerEmail  = MutableStateFlow<String?>(null)    /** Optional phone number cached alongside fields/users */
+
+    /** Optional username cached alongside fields/users */
+    private val _ownerUsername  = MutableStateFlow<String?>(null)
 
     // -------------------- Public Flows --------------------
 
@@ -92,9 +98,21 @@ class SelectionCacheService @Inject constructor(
     override fun cachePhoneNumber(number: String?) { _ownerPhone.value = number }
     override fun getPhoneNumber(): String? = _ownerPhone.value
 
-    /** Sets or clears cached email */
-    override fun cacheOwnerEmail(email: String?) { _ownerEmail.value = email }
-    override fun getOwnerEmail(): String? = _ownerEmail.value
+    /** Sets or clears cached email and username*/
+    override fun cacheOwner(owner: UserDomain) { _owner.value = owner }
+    override fun cacheOwnerUsername(username: String?) {
+        if (username != null) {
+            _owner.value.username = username
+        }
+    }
+    override fun cacheOwnerEmail(email: String?) {
+        if (email != null) {
+            _owner.value.email = email
+        }
+    }
+    override fun getOwner(): UserDomain = _owner.value
+    override fun getOwnerUsername(): String? = _owner.value.username
+    override fun getOwnerEmail(): String? = _owner.value.email
 
     // -------------------- Thread-safe variants --------------------
 

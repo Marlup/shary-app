@@ -11,10 +11,11 @@ internal class FirebaseAnonymousAuthAdapter(
     suspend fun ensureSession(): String {
         val user = auth.currentUser ?: auth.signInAnonymously().await().user
         ?: error("Anonymous sign-in returned null user")
+        Log.d("FirebaseAnonymousAuthAdapter", "ensureSession() - user, uid: ${user.uid}")
 
         // Guardamos token en Session para tus headers (true => forceRefresh)
         val token = user.getIdToken(true).await().token ?: ""
-        Log.d("FirebaseAnonymousAuthAdapter", "ensureSession() - $token")
+        Log.d("FirebaseAnonymousAuthAdapter", "ensureSession() - token $token")
         return user.uid
     }
 

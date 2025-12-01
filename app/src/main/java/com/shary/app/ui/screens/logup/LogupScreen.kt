@@ -10,7 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -62,7 +63,7 @@ fun LogupScreen(navController: NavHostController) {
             when (ev) {
                 is AuthenticationEvent.Success -> {
                     scope.launch {
-                        authenticationViewModel.onLoginSuccess(signupForm.email)
+                        authenticationViewModel.onLoginSuccess(signupForm.username)
                         val authToken = authenticationViewModel.getToken()
                         if (authToken.isNullOrEmpty()) {
                             Toast.makeText(
@@ -91,7 +92,7 @@ fun LogupScreen(navController: NavHostController) {
                     Log.i("LogupEvents", msg)
                     // Optional: automatically upload user after anonymous session
                     scope.launch {
-                        cloudViewModel.uploadUser(signupForm.email)
+                        cloudViewModel.uploadUser(signupForm.username)
                         val authToken = authenticationViewModel.getToken()
                             if (authToken.isNullOrEmpty()) {
                             Log.i("LogupEvents", "User uploaded after anonymous connect")

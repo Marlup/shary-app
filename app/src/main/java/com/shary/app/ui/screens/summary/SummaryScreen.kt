@@ -1,6 +1,7 @@
 package com.shary.app.ui.screens.summary
 
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.SendOption
@@ -98,14 +100,15 @@ fun SummaryScreen(navController: NavHostController) {
                         }
 
                         SendOption.Cloud -> {
+                            Log.d("SummaryScreen", "Sending to cloud: " + "username: ${userViewModel.getOwnerUsername()}")
+                            Log.d("SummaryScreen", "Sending to cloud: " + "email: ${userViewModel.getOwnerEmail()}")
                             cloudViewModel.uploadData(
                                 fieldViewModel.getCachedFields(),
-                                userViewModel.getOwnerEmail(),
+                                userViewModel.getOwner(),
                                 userViewModel.getCachedUsers(),
                                 false
                             )
                         }
-
                         null -> TODO()
                     }
                 },

@@ -28,7 +28,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -334,14 +335,14 @@ fun FieldsScreen(navController: NavHostController) {
                 ) {
                     CompactActionButton(
                         onClick = {
-                            if (userViewModel.anyUserCached() && selectedFields.isNotEmpty()) {
+                            if (userViewModel.anyCachedUser() && selectedFields.isNotEmpty()) {
                                 navController.navigate(Screen.Summary.route)
                             }
                         },
                         icon = Icons.Default.AssignmentTurnedIn,
                         backgroundColor = colorScheme.tertiary,
                         contentDescription = "Summary",
-                        enabled = selectedFields.isNotEmpty() && userViewModel.anyUserCached()
+                        enabled = selectedFields.isNotEmpty() && userViewModel.anyCachedUser()
                     )
                 }
             }
@@ -384,7 +385,7 @@ fun FieldsScreen(navController: NavHostController) {
                                         colorScheme.primary
                                     }
                                     else{
-                                        Log.d("FieldsScreen()", "field : ${field.tag.safeColor()}")
+                                        //Log.d("FieldsScreen()", "field : ${field.tag.safeColor()}")
                                         field.tag.safeColor()
                                     },
                                     shape = MaterialTheme.shapes.medium

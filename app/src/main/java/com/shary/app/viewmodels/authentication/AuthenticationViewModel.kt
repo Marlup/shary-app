@@ -150,13 +150,18 @@ class AuthenticationViewModel @Inject constructor(
 
         // Launch login/signup in background
         viewModelScope.launch {
+
+            Log.i("AuthenticationViewModel", "submit: $f")
             _loading.value = true
             val result = withContext(Dispatchers.IO) {
                 when (_logForm.value.mode) {
                     AuthenticationMode.LOGIN ->
                         authService.signIn(context, f.username, f.password)
-                    AuthenticationMode.SIGNUP ->
+                    AuthenticationMode.SIGNUP -> {
+                        // Pre sign out to safety avoid preloaded user uid and tokens.
+                        authService.signOut(context)
                         authService.signUp(context, f.username, f.email, f.password)
+                    }
                 }
             }
             _loading.value = false
@@ -229,14 +234,16 @@ class AuthenticationViewModel @Inject constructor(
         }
     }
 
-    fun onLoginSuccess(email: String) {
+    fun onLoginSuccess(username: String) {
         viewModelScope.launch {
-            val registered = runCatching { cloudService.isUserRegisteredInCloud(email) }
+            val registered = runCatching { cloudService.isUserRegisteredInCloud(username) }
                 .getOrDefault(false)
 
             if (registered) {
+                Log.d("AuthenticationViewModel", "User already registered in Cloud")
                 _events.trySend(AuthenticationEvent.UserRegisteredInCloud)
             } else {
+                Log.d("AuthenticationViewModel", "User is not registered in Cloud")
                 _events.trySend(AuthenticationEvent.UserNotRegisteredInCloud)
             }
         }
@@ -257,8 +264,9 @@ class AuthenticationViewModel @Inject constructor(
             else -> null
         }
 
-    private fun validateSignup(username: String, email: String, password: String, confirm: String): String? =
-        when {
+    private fun validateSignup(username: String, email: String, password: String, confirm: String): String? {
+        Log.i("AuthenticationViewModel", "validateSignup: $username, $email, $password, $confirm")
+        return when {
             username.isBlank() -> "Username required"
             email.isBlank() -> "Email required"
             !email.contains("@") -> "Invalid email"
@@ -266,4 +274,5 @@ class AuthenticationViewModel @Inject constructor(
             password != confirm -> "Passwords don’t match"
             else -> null
         }
+    }
 }

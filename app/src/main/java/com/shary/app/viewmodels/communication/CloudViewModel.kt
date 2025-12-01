@@ -1,6 +1,7 @@
 package com.shary.app.viewmodels.communication
 
 import CloudEvent
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.services.CloudService
@@ -39,27 +40,27 @@ class CloudViewModel @Inject constructor(
     }
 
     /** Check if the user is registered in the backend. */
-    fun checkUserRegistered(email: String) {
+    fun checkUserRegistered(username: String) {
         viewModelScope.launch {
             _isLoading.value = true
             val registered = runCatching {
-                withContext(Dispatchers.IO) { cloudService.isUserRegisteredInCloud(email) }
+                withContext(Dispatchers.IO) { cloudService.isUserRegisteredInCloud(username) }
             }.getOrElse { false }
             _isLoading.value = false
-            _events.tryEmit(CloudEvent.UserRegisteredResult(email, registered))
+            _events.tryEmit(CloudEvent.UserRegisteredResult(username, registered))
         }
     }
 
     /** Upload the user to the backend. */
-    fun uploadUser(email: String) {
+    fun uploadUser(username: String) {
         viewModelScope.launch {
             _isLoading.value = true
             val token = runCatching {
-                withContext(Dispatchers.IO) { cloudService.uploadUser(email) }
+                withContext(Dispatchers.IO) { cloudService.uploadUser(username) }
             }.getOrDefault("")
             _isLoading.value = false
             if (token.isNotBlank()) {
-                _events.tryEmit(CloudEvent.UserUploaded(email, token))
+                _events.tryEmit(CloudEvent.UserUploaded(username, token))
             } else {
                 _events.tryEmit(CloudEvent.Error(Exception("Upload failed")))
             }
@@ -67,15 +68,15 @@ class CloudViewModel @Inject constructor(
     }
 
     /** Delete the user from the backend. */
-    fun deleteUser(email: String) {
+    fun deleteUser(username: String) {
         viewModelScope.launch {
             _isLoading.value = true
             val deleted = runCatching {
-                withContext(Dispatchers.IO) { cloudService.deleteUser(email) }
+                withContext(Dispatchers.IO) { cloudService.deleteUser(username) }
             }.getOrElse { false }
             _isLoading.value = false
             if (deleted) {
-                _events.tryEmit(CloudEvent.UserDeleted(email))
+                _events.tryEmit(CloudEvent.UserDeleted(username))
             } else {
                 _events.tryEmit(CloudEvent.Error(Exception("Delete failed")))
             }
@@ -85,7 +86,7 @@ class CloudViewModel @Inject constructor(
     /** Upload data to the backend. */
     fun uploadData(
         fields: List<FieldDomain>,
-        ownerEmail: String?,
+        owner: UserDomain,
         consumers: List<UserDomain>,
         isRequest: Boolean
     ) {
@@ -93,7 +94,8 @@ class CloudViewModel @Inject constructor(
             _isLoading.value = true
             val resultMap = runCatching {
                 withContext(Dispatchers.IO) {
-                    cloudService.uploadData(fields, ownerEmail, consumers, isRequest)
+                    Log.d("CloudViewModel", "uploadData() - ownerUsername: ${owner.username}")
+                    cloudService.uploadData(fields, owner, consumers, isRequest)
                 }
             }.getOrDefault(emptyMap())
             _isLoading.value = false
@@ -102,15 +104,15 @@ class CloudViewModel @Inject constructor(
     }
 
     /** Fetch the public key for the user. */
-    fun getPubKey(userHash: String) {
+    fun getPubKey(usernameHash: String) {
         viewModelScope.launch {
             _isLoading.value = true
             val pubKey = runCatching {
-                withContext(Dispatchers.IO) { cloudService.getPubKey(userHash) }
+                withContext(Dispatchers.IO) { cloudService.getPubKey(usernameHash) }
             }.getOrNull()
             _isLoading.value = false
             if (!pubKey.isNullOrBlank()) {
-                _events.tryEmit(CloudEvent.PubKeyFetched(userHash, pubKey))
+                _events.tryEmit(CloudEvent.PubKeyFetched(usernameHash, pubKey))
             } else {
                 _events.tryEmit(CloudEvent.Error(Exception("No pubkey found")))
             }

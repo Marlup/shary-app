@@ -31,9 +31,13 @@ interface CacheService {
 
 
     // Owner
+    fun cacheOwner(owner: UserDomain)
+    fun cacheOwnerUsername(username: String?)
     fun cacheOwnerEmail(email: String?)
-    fun getOwnerEmail(): String?
     fun cachePhoneNumber(number: String?)
+    fun getOwner(): UserDomain
+    fun getOwnerUsername(): String?
+    fun getOwnerEmail(): String?
     fun getPhoneNumber(): String?
 
     // General

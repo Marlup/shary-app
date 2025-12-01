@@ -11,23 +11,11 @@ object Utils {
     fun authBearerHeader(token: String?): Map<String, String> =
         mapOf("Authorization" to "Bearer $token")
 
-    fun buildPostRequest(
-        url: String,
-        body: Map<String, String>,
-        headers: Map<String, String> = emptyMap()
-    ): Request {
-        val json = Json.encodeToString(body)
-        //val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
-
-        val builder = Request
-            .Builder()
-            .url(url)
-            .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
-
-        headers.forEach { (key, value) ->
-            builder.addHeader(key, value)
-        }
-
+    fun buildPostRequest(url: String, payload: Map<String, String>, headers: Map<String, String>): Request {
+        val json = Json.encodeToString(payload)
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val builder = Request.Builder().url(url).post(body)
+        headers.forEach { (k, v) -> builder.addHeader(k, v) }
         return builder.build()
     }
 
