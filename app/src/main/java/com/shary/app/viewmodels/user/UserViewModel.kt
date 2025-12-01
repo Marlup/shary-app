@@ -3,8 +3,8 @@ package com.shary.app.viewmodels.user
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.models.UserDomain
-import com.shary.app.core.session.Session
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
+import com.shary.app.core.domain.interfaces.services.CacheService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -17,15 +17,15 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class UserViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val session: Session
+    private val appCache: CacheService
 ) : ViewModel() {
 
     // Domain state exposed to UI
     private val _users = MutableStateFlow<List<UserDomain>>(emptyList())
     val users: StateFlow<List<UserDomain>> = _users.asStateFlow()
 
-    private val _selectedUsers = MutableStateFlow<List<UserDomain>>(emptyList())
-    val selectedUsers: StateFlow<List<UserDomain>> = _selectedUsers.asStateFlow()
+    private val _cachedUsers = MutableStateFlow<List<UserDomain>>(emptyList())
+    val selectedUsers: StateFlow<List<UserDomain>> = _cachedUsers.asStateFlow()
 
     private val _selectedPhoneNumber = MutableStateFlow<String?>(null)
     val selectedPhoneNumber: StateFlow<String?> = _selectedPhoneNumber.asStateFlow()
@@ -41,29 +41,30 @@ class UserViewModel @Inject constructor(
     private val writeMutex = Mutex()
 
     init { refresh() }
-    // If you prefer reactive updates:
-    // init {
-    //   viewModelScope.launch {
-    //     userRepository.users.collect { _users.value = it }
-    //   }
-    // }
 
     // ------------------------- Selection helpers -------------------------
 
-    fun toggleUser(user: UserDomain) = _selectedUsers.update { current ->
+    fun anyCachedUser() = appCache.isAnyUserCached()
+    fun getOwner() = appCache.getOwner()
+    fun getOwnerEmail() = appCache.getOwnerEmail()
+    fun getOwnerUsername() = appCache.getOwnerUsername()
+
+    fun toggleUser(user: UserDomain) = _cachedUsers.update { current ->
         if (user in current) current - user else current + user
     }
 
-    fun setSelectedUsers(users: List<UserDomain>) {
-        _selectedUsers.value = users.distinctBy { it.email.trim().lowercase() }
-        session.setSelectedUsers(_selectedUsers.value) // <— persistencia cross-screen
+    fun cacheUsers(users: List<UserDomain>) {
+        _cachedUsers.value = users.distinctBy { it.email.trim().lowercase() }
+        appCache.cacheUsers(_cachedUsers.value) // <— persistencia cross-screen
     }
+
+    fun getCachedUsers(): List<UserDomain> = appCache.getUsers()
 
     fun setPhoneNumber(number: String?) {
         _selectedPhoneNumber.value = number
-        session.setSelectedPhoneNumber(number) // opcional para WhatsApp/Telegram
+        appCache.cachePhoneNumber(number) // opcional para WhatsApp/Telegram
     }
-    fun clearSelectedUsers() { session.resetSelectedUsers() }
+    fun clearSelectedUsers() { appCache.clearCachedUsers() }
 
     // ----------------------------- Loading -------------------------------
 

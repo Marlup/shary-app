@@ -6,5 +6,6 @@ data class AuthState(
     var username: String = "",
     var safePassword: String = "",
     var authToken: String = "",
+    var localKeys: MutableMap<String, ByteArray> = mutableMapOf(),
     var isOnline: Boolean = false
 )

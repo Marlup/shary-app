@@ -1,12 +1,13 @@
 package com.shary.app.infrastructure.security.box
 
 import com.shary.app.core.domain.security.Box
-import com.shary.app.infrastructure.security.cipher.AesGcmCipher
-import com.shary.app.infrastructure.security.hkdf.HkdfSha256
-import com.shary.app.infrastructure.security.kex.X25519KeyPair
+import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
+import com.shary.app.infrastructure.security.derivation.hkdf.HkdfSha256
+import com.shary.app.infrastructure.security.shared.keyExchange.X25519KeyPair
+import javax.inject.Inject
 
 
-class AesGcmBox(
+class AesGcmBox @Inject constructor(
     private val hkdf: HkdfSha256,
     private val cipher: AesGcmCipher
 ) : Box {

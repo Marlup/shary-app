@@ -1,5 +1,6 @@
 package com.shary.app.infrastructure.mappers
 
+import android.util.Log
 import com.shary.app.core.domain.interfaces.security.FieldCodec
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
@@ -7,54 +8,47 @@ import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.Field as FieldProto
 import com.shary.app.Request as RequestProto
 import com.shary.app.User as UserProto
-import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.domain.security.CredentialsProvider
+import com.shary.app.core.domain.types.enums.Tag
+import com.shary.app.core.domain.types.enums.deserialize
+import com.shary.app.core.domain.types.enums.serialize
 import com.shary.app.core.domain.types.valueobjects.Purpose
-import com.shary.app.infrastructure.security.local.LocalVault
 import java.time.Instant
 
 // ======================================================================
 // Field ↔ Domain (encrypted at-rest / in-store via LocalVault)
 // ======================================================================
 
-/** Decrypts a Field proto into the domain model using LocalVault (on-the-fly derivation). */
-fun FieldProto.toDomain(
-    codec: FieldCodec
-): FieldDomain = try {
-
-    FieldDomain(
-        key       = codec.decode(key, Purpose.Key.code).trim(),
-        value     = codec.decode(value, Purpose.Value.code),
-        keyAlias  = codec.decode(keyAlias, Purpose.Alias.code).ifBlank { null }?.trim(),
-        tag       = UiFieldTag.fromString(
-            codec.decode(tag, Purpose.Tag.code).ifBlank { "unknown" }
-        ),
-        dateAdded = Instant.ofEpochMilli(dateAdded)
-    )
-} catch (_: Exception) {
-    // Fallback para registros dañados o credenciales no válidas: no romper flujo
-    FieldDomain(
-        key       = key,                     // seguirá cifrado (útil para diagnóstico)
-        value     = value,
-        keyAlias  = keyAlias.ifBlank { null },
-        tag       = UiFieldTag.Unknown,
-        dateAdded = Instant.ofEpochMilli(dateAdded)
-    )
-}
 
 /** Encrypts a domain Field into proto using LocalVault (on-the-fly derivation). */
-fun FieldDomain.toProto(codec: FieldCodec): FieldProto {
-    val cleanKey = key.trim()
-    val cleanAlias = keyAlias?.trim().orEmpty()
-    val tagStr = UiFieldTag.toString(tag)
-
-    return FieldProto.newBuilder()
-        .setKey(codec.encode(cleanKey, Purpose.Key.code))
-        .setValue(codec.encode(value, Purpose.Value.code))
-        .setKeyAlias(codec.encode(cleanAlias, Purpose.Alias.code))
-        .setTag(codec.encode(tagStr, Purpose.Tag.code))
+fun FieldDomain.toProto(codec: FieldCodec): FieldProto =
+    FieldProto.newBuilder()
+        .setKey(codec.encode(key, Purpose.Key))
+        .setValue(codec.encode(value, Purpose.Value))
+        .setKeyAlias(codec.encode(keyAlias.orEmpty(), Purpose.Alias))
+        .setTag(codec.encode(tag.serialize(), Purpose.Tag)) // Saves name + color
         .setDateAdded(dateAdded.toEpochMilli())
         .build()
+
+/** Decrypts a Field proto into the domain model using LocalVault (on-the-fly derivation). */
+fun FieldProto.toDomain(codec: FieldCodec): FieldDomain =
+    try {
+        val raw = codec.decode(tag, Purpose.Tag).ifBlank { "Unknown" }
+        FieldDomain(
+            key       = codec.decode(key, Purpose.Key),
+            value     = codec.decode(value, Purpose.Value),
+            keyAlias  = codec.decode(keyAlias, Purpose.Alias).ifBlank { null },
+            tag       = Tag.deserialize(raw), // recover name + color
+            dateAdded = Instant.ofEpochMilli(dateAdded)
+        )
+} catch (_: Exception) {
+    // Fallback for corrupted registers or invalid credentials: avoids breaking the flow
+    FieldDomain(
+        key       = key,                     // it will remain encrypted (useful for diagnostics)
+        value     = value,
+        keyAlias  = keyAlias.ifBlank { null },
+        tag       = Tag.Unknown,
+        dateAdded = Instant.ofEpochMilli(dateAdded)
+    )
 }
 
 // Convenience para colecciones

@@ -17,19 +17,29 @@ interface CacheService {
 
 
     // Fields
-    fun clearFields()
+    fun clearCachedFields()
     fun cacheFields(fields: List<FieldDomain>)
-    fun readFields(): List<FieldDomain>
+    fun getFields(): List<FieldDomain>
+    fun isAnyFieldCached(): Boolean
 
 
     // Users
-    fun clearUsers()
+    fun clearCachedUsers()
     fun cacheUsers(users: List<UserDomain>)
-    fun readUsers(): List<UserDomain>
+    fun getUsers(): List<UserDomain>
+    fun isAnyUserCached(): Boolean
 
 
-    // Extras opcionales (por si usas teléfono en WhatsApp/Telegram)
-    fun setPhoneNumber(number: String?)
+    // Owner
+    fun cacheOwner(owner: UserDomain)
+    fun cacheOwnerUsername(username: String?)
+    fun cacheOwnerEmail(email: String?)
+    fun cachePhoneNumber(number: String?)
+    fun getOwner(): UserDomain
+    fun getOwnerUsername(): String?
+    fun getOwnerEmail(): String?
     fun getPhoneNumber(): String?
-    fun clearAll()
+
+    // General
+    fun clearAllCaches()
 }

@@ -15,20 +15,19 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FilterBox(
     title: String,
-    isSelected: Boolean,
     onClick: () -> Unit,
-    width: Int = 75,
+    width: Int = 45,
     height: Int = 45
 ) {
     Surface(
         onClick = onClick,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = Color.White,
         shape = MaterialTheme.shapes.medium,
-        shadowElevation = if (isSelected) 4.dp else 0.dp,
+        shadowElevation = 4.dp,
         modifier = Modifier
             .size(width.dp, height.dp)
-            .fillMaxWidth(0.2f)
+            .fillMaxWidth(0.15f)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(text = title, style = MaterialTheme.typography.bodyMedium)

@@ -10,46 +10,122 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/**
+ * SelectionCacheService
+ *
+ * In-memory cache for selected fields, users, and phone numbers.
+ *
+ * Responsibilities:
+ * - Keeps cached lists of FieldDomain and UserDomain objects.
+ * - Provides reactive flows for UI components to observe cache changes.
+ * - Deduplicates entries on cache insertions (by key/email).
+ * - Offers both fast (non-synchronized) and safe (Mutex-locked) cache updates.
+ * - Can be reset or cleared selectively (fields, users, all).
+ *
+ * This service is a singleton; it is not persisted across app restarts.
+ */
 @Singleton
 class SelectionCacheService @Inject constructor(
 ) : CacheService {
+
+    /** Used to serialize writes when calling safe methods */
     private val lock = Mutex()
 
+    /** Cached fields, exposed as reactive flow */
     private val _fields = MutableStateFlow<List<FieldDomain>>(emptyList())
+
+    /** Cached users, exposed as reactive flow */
     private val _users  = MutableStateFlow<List<UserDomain>>(emptyList())
-    private val _phone  = MutableStateFlow<String?>(null)
+
+    /** Optional Owner as Userdomain structure as cached alongside fields/users */
+    private val _owner  = MutableStateFlow(UserDomain())
+
+    /** Optional phone number cached alongside fields/users */
+    private val _ownerPhone  = MutableStateFlow<String?>(null)
+
+    /** Optional phone number cached alongside fields/users */
+    private val _ownerEmail  = MutableStateFlow<String?>(null)    /** Optional phone number cached alongside fields/users */
+
+    /** Optional username cached alongside fields/users */
+    private val _ownerUsername  = MutableStateFlow<String?>(null)
+
+    // -------------------- Public Flows --------------------
 
     override val fieldsFlow: StateFlow<List<FieldDomain>> get() = _fields
     override val usersFlow: StateFlow<List<UserDomain>> get() = _users
 
-    override fun readFields(): List<FieldDomain> = _fields.value
-    override fun readUsers(): List<UserDomain> = _users.value
-    override fun getPhoneNumber(): String? = _phone.value
+    // -------------------- Read-only accessors --------------------
 
+    override fun getFields(): List<FieldDomain> = _fields.value
+    override fun getUsers(): List<UserDomain> = _users.value
 
+    // -------------------- Cache mutations --------------------
+
+    /**
+     * Replaces cached fields with new list, deduplicated by key (case-insensitive).
+     */
     override fun cacheFields(fields: List<FieldDomain>) {
-        // dedup por key
         val unique = fields.distinctBy { it.key.trim().lowercase() }
         _fields.value = unique
     }
 
+    override fun isAnyFieldCached(): Boolean = getFields().isNotEmpty()
+
+    /**
+     * Replaces cached users with new list, deduplicated by normalized email.
+     */
     override fun cacheUsers(users: List<UserDomain>) {
-        // dedup por email normalizado
         val unique = users.distinctBy { it.email.trim().lowercase() }
         _users.value = unique
     }
 
-    override fun clearFields() { _fields.value = emptyList() }
-    override fun clearUsers()  { _users.value = emptyList() }
-    override fun clearAll() {
+    override fun isAnyUserCached(): Boolean = getUsers().isNotEmpty()
+
+    /** Clears only fields */
+    override fun clearCachedFields() { _fields.value = emptyList() }
+
+    /** Clears only users */
+    override fun clearCachedUsers()  { _users.value = emptyList() }
+
+    /** Clears all cached values (fields, users, phone) */
+    override fun clearAllCaches() {
         _fields.value = emptyList()
         _users.value = emptyList()
-        _phone.value = null
+        _ownerPhone.value = null
     }
 
-    override fun setPhoneNumber(number: String?) { _phone.value = number }
+    /** Sets or clears cached phone number */
+    override fun cachePhoneNumber(number: String?) { _ownerPhone.value = number }
+    override fun getPhoneNumber(): String? = _ownerPhone.value
 
-    // Si prefieres serializar escrituras:
-    suspend fun cacheFieldsSafe(fields: List<FieldDomain>) = lock.withLock { cacheFields(fields) }
-    suspend fun cacheUsersSafe(users: List<UserDomain>)   = lock.withLock { cacheUsers(users) }
+    /** Sets or clears cached email and username*/
+    override fun cacheOwner(owner: UserDomain) { _owner.value = owner }
+    override fun cacheOwnerUsername(username: String?) {
+        if (username != null) {
+            _owner.value.username = username
+        }
+    }
+    override fun cacheOwnerEmail(email: String?) {
+        if (email != null) {
+            _owner.value.email = email
+        }
+    }
+    override fun getOwner(): UserDomain = _owner.value
+    override fun getOwnerUsername(): String? = _owner.value.username
+    override fun getOwnerEmail(): String? = _owner.value.email
+
+    // -------------------- Thread-safe variants --------------------
+
+    /**
+     * Safe version of cacheFields() that serializes writes using Mutex.
+     * Prefer when multiple coroutines might update cache concurrently.
+     */
+    suspend fun cacheFieldsSafe(fields: List<FieldDomain>) =
+        lock.withLock { cacheFields(fields) }
+
+    /**
+     * Safe version of cacheUsers() that serializes writes using Mutex.
+     */
+    suspend fun cacheUsersSafe(users: List<UserDomain>) =
+        lock.withLock { cacheUsers(users) }
 }

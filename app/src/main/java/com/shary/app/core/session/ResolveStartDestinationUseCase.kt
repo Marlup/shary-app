@@ -20,7 +20,6 @@ class ResolveStartDestinationUseCase(
         val hasSig = repo.hasActiveSignature()
 
         return when {
-            hasCreds && hasSig -> StartDestination.HOME
             hasCreds && !hasSig -> StartDestination.LOGIN
             else -> StartDestination.LOGUP
         }

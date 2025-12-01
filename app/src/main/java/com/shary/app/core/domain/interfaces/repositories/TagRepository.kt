@@ -1,23 +1,19 @@
-// com/shary/app/repositories/tags/TagRepository.kt
 package com.shary.app.core.domain.interfaces.repositories
 
-import com.shary.app.core.domain.types.enums.UiFieldTag
+import androidx.compose.ui.graphics.Color
+import com.shary.app.core.domain.types.enums.Tag
 import kotlinx.coroutines.flow.Flow
 
 interface TagRepository {
-    /** Built‑ins + custom, as UiFieldTag */
-    val allTags: Flow<List<UiFieldTag>>
+    /** Built-ins + custom tags */
+    val allTags: Flow<List<Tag>>
 
-    /** Only custom tag names (strings) */
-    val customTags: Flow<List<String>>
+    /** Add a custom tag name (no-op if invalid or already exists, case-insensitive) */
+    suspend fun addTag(name: String, color: Color)
 
-    /** Add a custom tag name (no‑op if invalid or already exists, case‑insensitive) */
-    suspend fun addCustomTag(name: String)
+    /** Update a custom tag name (case-insensitive match) */
+    suspend fun updateTag(name: String, color: Color)
 
-    /** Remove a custom tag name (case‑insensitive match) */
-    suspend fun removeCustomTag(name: String)
-
-    /** Optional helpers */
-    suspend fun clearCustomTags()
-    suspend fun renameCustomTag(oldName: String, newName: String): Boolean
+    /** Remove a custom tag name (case-insensitive match) */
+    suspend fun removeTag(name: String)
 }

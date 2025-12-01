@@ -3,6 +3,7 @@ package com.shary.app.viewmodels.request
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
@@ -22,7 +23,8 @@ import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class RequestListViewModel @Inject constructor(
-    private val requestRepository: RequestRepository
+    private val requestRepository: RequestRepository,
+    private val fieldRepository: FieldRepository
 ) : ViewModel() {
 
     // Exposed state to UI

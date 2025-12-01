@@ -1,7 +1,7 @@
 package com.shary.app.infrastructure.security.derivation
 
 import com.shary.app.core.domain.security.Kdf
-import com.shary.app.infrastructure.security.hkdf.HkdfSha256
+import com.shary.app.infrastructure.security.derivation.hkdf.HkdfSha256
 
 
 class KeyDerivation(private val kdf: Kdf, val hkdf: HkdfSha256) {

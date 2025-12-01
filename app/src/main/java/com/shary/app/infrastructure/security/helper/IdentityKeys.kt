@@ -1,7 +1,7 @@
 package com.shary.app.infrastructure.security.helper
 
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
-import com.shary.app.infrastructure.security.sign.Ed25519Signer
+import com.shary.app.infrastructure.security.digitalSignature.Ed25519Signer
 
 class IdentityKeys(
     private val kd: KeyDerivation

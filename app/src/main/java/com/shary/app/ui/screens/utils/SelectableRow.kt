@@ -14,10 +14,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun <T> SelectableRow(
     item: T,
-    background: Color,
+    index: Int,
+    backgroundColorProvider: @Composable (Int) -> Color,
     onToggle: () -> Unit,
     content: @Composable (T) -> Unit
 ) {
+    val background = backgroundColorProvider(index)
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

@@ -1,7 +1,8 @@
 package com.shary.app.core.domain.models
 
-import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.domain.types.enums.tagColor
+import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.SearchFieldBy
+import com.shary.app.core.domain.types.enums.Tag
 import java.time.Instant
 
 // --------------------
@@ -11,17 +12,16 @@ data class FieldDomain(
     val key: String,
     val value: String,
     val keyAlias: String? = null,
-    val tag: UiFieldTag = UiFieldTag.Unknown,
+    val tag: Tag = Tag.Unknown,
     val dateAdded: Instant
 ) {
-    val tagColor get() = tagColor(tag)
 
     companion object {
         fun create(
             key: String,
             value: String,
             keyAlias: String? = null,
-            tag: UiFieldTag = UiFieldTag.Unknown
+            tag: Tag = Tag.Unknown
         ): FieldDomain {
             return FieldDomain(
                 key = key.trim(),
@@ -37,9 +37,18 @@ data class FieldDomain(
                 key = "",
                 value = "",
                 keyAlias = null,
-                tag = UiFieldTag.Unknown,
+                tag = Tag.Unknown,
                 dateAdded = Instant.EPOCH // will be replaced on confirm
             )
+        }
+    }
+
+    fun matchBy(queryCriteria: String, searchBy: SearchFieldBy): Boolean {
+        return when (searchBy) {
+            SearchFieldBy.KEY -> key.contains(queryCriteria, ignoreCase = true)
+            SearchFieldBy.ALIAS -> keyAlias.orEmpty().contains(queryCriteria, ignoreCase = true)
+            SearchFieldBy.TAG -> tag.toString().orEmpty().contains(queryCriteria, ignoreCase = true)
+            SearchFieldBy.DATE_ADDED -> dateAdded.toString().contains(queryCriteria, ignoreCase = true)
         }
     }
 }

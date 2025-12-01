@@ -3,10 +3,12 @@ package com.shary.app.viewmodels.field
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.domain.types.enums.UiFieldTag
-import com.shary.app.core.session.Session
+import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
-import com.shary.app.core.domain.interfaces.repositories.TagRepository // <- simple abstraction: addCustomTag(name)
+import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.types.enums.FieldAttribute
+import com.shary.app.core.domain.types.enums.SearchFieldBy
+import com.shary.app.core.domain.types.enums.SortFieldBy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.time.Instant
@@ -20,8 +22,7 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class FieldViewModel @Inject constructor(
     private val fieldRepository: FieldRepository,
-    private val tagRepository: TagRepository, // wrap your TagViewModel or implement repo
-    private val session: Session
+    private val cacheSelection: CacheService,
 ) : ViewModel() {
 
     // Domain state exposed to UI
@@ -31,23 +32,61 @@ class FieldViewModel @Inject constructor(
     private val _selectedFields = MutableStateFlow<List<FieldDomain>>(emptyList())
     val selectedFields: StateFlow<List<FieldDomain>> = _selectedFields.asStateFlow()
 
-    private val _selectedKeys = MutableStateFlow<List<String>>(emptyList())
-    val selectedKeys: StateFlow<List<String>> = _selectedKeys.asStateFlow()
-
     // Loading flag for long-running operations
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    //val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     // One-shot events (snackbar/toast/navigation)
     private val _events = MutableSharedFlow<FieldEvent>(extraBufferCapacity = 1)
+
+    private val _searchCriteria = MutableStateFlow("")
+    val searchCriteria: StateFlow<String> = _searchCriteria.asStateFlow()
+
+    private val _searchFieldBy = MutableStateFlow(SearchFieldBy.KEY)
+    val searchFieldBy: StateFlow<SearchFieldBy> = _searchFieldBy.asStateFlow()
+
+    private val _sortFieldBy = MutableStateFlow(SortFieldBy.KEY)
+    val sortFieldBy: StateFlow<SortFieldBy> = _sortFieldBy.asStateFlow()
+
+    private val _selectedKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    private val _descending = MutableStateFlow(false)
+    val descending: StateFlow<Boolean> = _descending.asStateFlow()
+
     val events: SharedFlow<FieldEvent> = _events.asSharedFlow()
+
+    /** Combined filtering + sorting logic **/
+    val filteredFields: StateFlow<List<FieldDomain>> =
+        combine(
+            _fields,
+            _searchCriteria,
+            _searchFieldBy,
+            _sortFieldBy,
+            _descending
+        ) { list, query, attribute, _sortFieldBy, desc ->
+            list.filter { it.matchBy(query, attribute) }
+                .sortedWith(compareBy<FieldDomain> {
+                    when (_sortFieldBy) {
+                        SortFieldBy.KEY ->  it.dateAdded
+                        SortFieldBy.TAG -> it.tag.toString()
+                        else -> it.key
+                    }
+                }.let { if (desc) it.reversed() else it })
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
 
     // Serialize writes to avoid concurrent edits on the same store
     private val writeMutex = Mutex()
 
-    init { refresh() }
+    init {
+        refresh()
+    }
 
     // ------------------- Public API (called from Screen) -------------------
+
+    fun getCachedFields(): List<FieldDomain> = cacheSelection.getFields()
+    fun anyFieldCached() = cacheSelection.isAnyFieldCached()
+    fun anySelectedField() = _selectedFields.value.isNotEmpty()
 
     /** Add a new field. Handles custom tag persistence and de-duplication. */
     fun addField(field: FieldDomain) {
@@ -57,18 +96,11 @@ class FieldViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
                         val normalized = normalize(field)
-                        // persist custom tag if needed
-                        if (normalized.tag is UiFieldTag.Custom) {
-                            val name = UiFieldTag.toString(normalized.tag)
-                            tagRepository.addCustomTag(name)
-                        }
-                        // save if not exists
                         fieldRepository.saveFieldIfNotExists(normalized)
                     }
                 }
             }
             _isLoading.value = false
-
             result.onSuccess { created ->
                 if (created) {
                     _events.tryEmit(FieldEvent.Saved(field))
@@ -82,6 +114,7 @@ class FieldViewModel @Inject constructor(
         }
     }
 
+
     fun deleteField(field: FieldDomain) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -94,6 +127,28 @@ class FieldViewModel @Inject constructor(
 
             result.onSuccess {
                 _events.tryEmit(FieldEvent.Deleted(field.key))
+                refresh()
+            }.onFailure { e ->
+                _events.tryEmit(FieldEvent.Error(e))
+            }
+        }
+    }
+
+    fun deleteFields(fields: List<FieldDomain>) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock {
+                        val keys = fields.map { it.key }
+                        fieldRepository.deleteFields(keys)
+                    }
+                }
+            }
+            _isLoading.value = false
+
+            result.onSuccess {
+                _events.tryEmit(FieldEvent.MultiDeleted(fields))
                 refresh()
             }.onFailure { e ->
                 _events.tryEmit(FieldEvent.Error(e))
@@ -141,17 +196,14 @@ class FieldViewModel @Inject constructor(
         }
     }
 
-    fun updateTag(field: FieldDomain, tag: UiFieldTag) {
+    fun updateTag(field: FieldDomain, tag: Tag) {
         if (field.tag == tag) return
         viewModelScope.launch {
             _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
-                        // ensure custom tag is registered before updating
-                        if (tag is UiFieldTag.Custom) {
-                            tagRepository.addCustomTag(UiFieldTag.toString(tag))
-                        }
+                        // ❌ no tagRepository here
                         fieldRepository.updateTag(field.key, tag)
                     }
                 }
@@ -167,17 +219,40 @@ class FieldViewModel @Inject constructor(
         }
     }
 
-    fun setSelectedFields(fields: List<FieldDomain>) {
-        _selectedFields.value = fields.distinctBy { it.key.lowercase() }
-        session.setSelectedFields(_selectedFields.value) // <— persistencia cross-screen
+    fun setSelectedFields() {
+        val selectedFields = _selectedFields.value.distinctBy { it.key.lowercase() }
+        cacheSelection.cacheFields(selectedFields) // <— persistencia cross-screen
     }
 
-    fun clearSelectedFields() { session.resetSelectedFields() }
-
-    fun toggleFieldSelection(key: String) {
-        _selectedKeys.update { current -> if (key in current) current - key else current + key }
+    fun clearSelectedFields() {
+        cacheSelection.clearCachedFields()
+        _selectedFields.value = emptyList()
     }
-    fun clearSelectedKeys() { _selectedKeys.value = emptyList() }
+
+    fun toggleFieldSelection(field: FieldDomain) {
+        _selectedFields.update { current -> if (field in current) current - field else current + field }
+    }
+
+    fun updateSearch(query: String, attribute: SearchFieldBy) {
+        _searchCriteria.value = query
+        _searchFieldBy.value = attribute
+    }
+    fun updateSearchField(searchFieldBy: SearchFieldBy) {
+        _searchFieldBy.value = searchFieldBy
+    }
+
+    fun updateSort(sortFieldBy: SortFieldBy, descending: Boolean) {
+        _sortFieldBy.value = sortFieldBy
+        _descending.value = descending
+    }
+
+    fun toggleSelection(field: FieldDomain) {
+        _selectedKeys.value = _selectedKeys.value.toMutableSet().apply {
+            if (!add(field.key)) remove(field.key)
+        }
+    }
+
+    fun isFilteredFieldsNotEmpty():Boolean = filteredFields.value.isNotEmpty()
 
     // ----------------------------- Internals --------------------------------
 
@@ -210,14 +285,15 @@ class FieldViewModel @Inject constructor(
      * - Emits specific events for each changed attribute.
      * - Refreshes only once at the end if something changed.
      */
-    fun updateField(field: FieldDomain, newValue: String, newAlias: String) {
+    fun updateField(field: FieldDomain, newValue: String, newAlias: String, newTag: Tag) {
         val valueTrimmed = newValue.trim()
         val aliasTrimmed = newAlias.trim()
 
         val shouldUpdateValue = field.value != valueTrimmed
         val shouldUpdateAlias = field.keyAlias.orEmpty() != aliasTrimmed
+        val shouldUpdateTag = field.tag != newTag
 
-        if (!shouldUpdateValue && !shouldUpdateAlias) return
+        if (!shouldUpdateValue && !shouldUpdateAlias && !shouldUpdateTag) return
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -230,6 +306,9 @@ class FieldViewModel @Inject constructor(
                         }
                         if (shouldUpdateAlias) {
                             fieldRepository.updateAlias(field.key, aliasTrimmed)
+                        }
+                        if (shouldUpdateTag) {
+                            fieldRepository.updateTag(field.key, newTag)
                         }
                     }
                 }
@@ -254,8 +333,9 @@ sealed interface FieldEvent {
     data class Saved(val field: FieldDomain) : FieldEvent
     data class AlreadyExists(val key: String) : FieldEvent
     data class Deleted(val key: String) : FieldEvent
+    data class MultiDeleted(val keys: List<FieldDomain>) : FieldEvent
     data class ValueUpdated(val key: String) : FieldEvent
     data class AliasUpdated(val key: String) : FieldEvent
-    data class TagUpdated(val key: String, val tag: UiFieldTag) : FieldEvent
+    data class TagUpdated(val key: String, val tag: Tag) : FieldEvent
     data class Error(val throwable: Throwable) : FieldEvent
 }

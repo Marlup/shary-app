@@ -1,13 +1,16 @@
 package com.shary.app.ui.screens.utils
 
 import android.content.ClipData
+import android.graphics.drawable.shapes.Shape
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -31,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +51,7 @@ fun ItemRowBase(
     subtitle: String,
     tooltip: String = "",
     copyText: String = "$title: $subtitle",
+    titleColor: Color = Color.Unspecified,
     onEditClick: () -> Unit,
     onAddItemCopyClick: (() -> Unit)? = null // null hides "Add Copy"
 ) {
@@ -73,14 +78,22 @@ fun ItemRowBase(
         Column(
             modifier = Modifier
                 .weight(0.6f)
-                .padding(end = 4.dp)
+                .padding(end = 8.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Surface(
+                shape = CircleShape,
+                color = titleColor,
+                modifier = Modifier.padding(bottom = 2.dp) // spacing below, optional
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp) // <<< padding INSIDE
+                )
+            }
+
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,

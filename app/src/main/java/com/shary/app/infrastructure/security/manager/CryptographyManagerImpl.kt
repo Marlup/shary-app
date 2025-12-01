@@ -2,23 +2,22 @@ package com.shary.app.infrastructure.security.manager
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.security.DetachedVerifier
 import com.shary.app.core.domain.interfaces.security.Ed25519Factory
 import com.shary.app.core.domain.interfaces.states.Identity
 import com.shary.app.core.domain.security.Box
 import com.shary.app.infrastructure.security.box.AesGcmBox
-import com.shary.app.infrastructure.security.cipher.AesGcmCipher
+import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
-import com.shary.app.infrastructure.security.kex.X25519KeyPair
-import com.shary.app.infrastructure.security.sign.Ed25519Signer
+import com.shary.app.infrastructure.security.shared.keyExchange.X25519KeyPair
+import com.shary.app.infrastructure.security.digitalSignature.Ed25519Signer
 import com.shary.app.infrastructure.security.helper.SecurityUtils
 import com.shary.app.infrastructure.security.local.LocalVault
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
-import java.security.KeyFactory
 import java.security.MessageDigest
-import java.security.spec.X509EncodedKeySpec
 
 
 /**
@@ -128,11 +127,12 @@ class CryptographyManagerImpl(
         }.getKexPublic()
 
     /**
-     * Firma Ed25519 (detached). Se recrea el signer desde la seed derivada.
+     * Firma Ed25519 (detached). Rebuilds the signer from the derived seed.
      */
     override fun signDetached(message: ByteArray): ByteArray {
         val identity = requireNotNull(cachedIdentity) { "Keys not initialized. Call initializeKeysWithUser first." }
         //val signer = Ed25519Signer.fromSeed(identity.getSignSeed())
+        Log.d("CryptographyManagerImpl", "signDetached - SignSeed: ${identity.getSignSeed()}")
         val signer = factory.signerFromSeed(identity.getSignSeed()) // short‑lived
         return signer.sign(message)
     }
@@ -159,13 +159,23 @@ class CryptographyManagerImpl(
      * @param aad           AAD opcional; si es null, se usa username bytes.
      * @return              Blob opaco listo para persistir.
      */
-    override fun encryptCredentialsJson(
+    override fun encryptCredentials(
         username: String,
-        safePassword: String,
+        localKey: ByteArray,
         json: JSONObject,
         aad: ByteArray?
     ): ByteArray {
-        return localVault.encryptCredentialsJson(username, safePassword, json, aad)
+        return localVault.encryptCredentials(username, localKey, json, aad)
+    }
+
+    override fun encryptCredentialsByDerivation(
+        username: String,
+        p: String,
+        purpose: String,
+        json: JSONObject,
+        aad: ByteArray?
+    ): ByteArray {
+        return localVault.encryptCredentialsByDerivation(username, p, json, aad)
     }
 
     /**
@@ -174,13 +184,23 @@ class CryptographyManagerImpl(
      *
      * @throws SecurityException si falla la autenticación (GCM tag) o el formato no es válido.
      */
-    override fun decryptCredentialsJson(
+    override fun decryptCredentials(
         username: String,
-        safePassword: String,
+        localKey: ByteArray,
         encrypted: ByteArray,
         aad: ByteArray?
     ): JSONObject {
-        return localVault.decryptCredentialsJson(username, safePassword, encrypted, aad)
+        return localVault.decryptCredentials(username, localKey, encrypted, aad)
+    }
+
+    override fun decryptCredentialsByDerivation(
+        username: String,
+        p: String,
+        purpose: String,
+        encrypted: ByteArray,
+        aad: ByteArray?
+    ): JSONObject {
+        return localVault.decryptCredentialsByDerivation(username, p, encrypted, aad)
     }
 
     // =====================================================================================
@@ -311,25 +331,15 @@ class CryptographyManagerImpl(
         return cipher.decrypt(sharedKey, iv, body, tag, aad)
     }
 
+    override fun deriveLocalKey(username: String, password: CharArray, purpose: String): ByteArray {
+        return localVault.deriveLocalKey(username, password, purpose)
+    }
 
     // =====================================================================================
     // Helpers internos
     // =====================================================================================
 
     override fun getAppId(): String = SecurityUtils.appId(context)
-
-    /**
-     * Deriva la clave simétrica de almacenamiento local desde (username, safePassword, appId).
-     * Convención típica:
-     *   master = kd.masterSeed(username, safePassword.toCharArray(), getAppId(context))
-     *   key    = kd.localStorageKey(master)   // o kd.storageKey(master)
-     */
-    fun localStorageKey(username: String, safePassword: String): ByteArray {
-        //val master = kd.masterSeed(username, safePassword.toCharArray(), getAppId(context))
-        //return runCatching { kd.localStorageKey(master) }
-        //    .getOrElse { kd.storageKey(master) } // usa el nombre que tengas en tu implementación
-        return localVault.deriveLocalKey(username, safePassword.toCharArray())
-    }
 
     /** Empaqueta el resultado de AES-GCM como: iv(12) || body || tag(16) */
     private fun pack(iv: ByteArray, body: ByteArray, tag: ByteArray): ByteArray {

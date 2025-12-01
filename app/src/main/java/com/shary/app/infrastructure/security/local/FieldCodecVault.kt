@@ -1,19 +1,24 @@
 package com.shary.app.infrastructure.security.local
 
+import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.security.FieldCodec
-import com.shary.app.core.domain.security.CredentialsProvider
+import com.shary.app.core.domain.types.valueobjects.Purpose
+import javax.inject.Inject
 
 
-class FieldCodecVault(
+class FieldCodecVault @Inject constructor(
     private val vault: LocalVault,
-    private val creds: CredentialsProvider
+    private val authenticationService: AuthenticationService
 ) : FieldCodec {
-    private val u get() = creds.username()
-    private val p get() = creds.password()
+    //private val u get() = session.getOwnerUsername()
+    //private val p get() = session.getOwnerSafePassword().toCharArray()
 
-    override fun encode(message: String, purposeString: String): String =
-        vault.encryptToString(message, u, p, purposeString, null)
+    override fun encode(message: String, purpose: Purpose): String =
+        vault.encryptToString(message, getLocalKeyByPurpose(purpose), null)
 
-    override fun decode(message: String, purposeString: String): String =
-        vault.decryptToString(message, u, p, purposeString, null)
+    override fun decode(message: String, purpose: Purpose): String =
+        vault.decryptToString(message, getLocalKeyByPurpose(purpose), null)
+
+    private fun getLocalKeyByPurpose(purpose: Purpose): ByteArray =
+        authenticationService.getLocalKeyByPurpose(purpose) ?: throw Exception("No local key for purpose: $purpose")
 }

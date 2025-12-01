@@ -3,6 +3,7 @@ package com.shary.app.core.domain.interfaces.security
 import android.content.Context
 import com.shary.app.core.domain.interfaces.states.Identity
 import com.shary.app.core.domain.security.Box
+import com.shary.app.core.domain.types.valueobjects.Purpose
 import org.json.JSONObject
 
 interface CryptographyManager {
@@ -54,32 +55,48 @@ interface CryptographyManager {
      * and (optionally) AAD binding (e.g., username).
      *
      * @param username       Owner username (used for AAD/binding and/or salt derivation).
-     * @param safePassword   Base64-encoded result of hashPassword(password, username) (the app's “safe”).
+     * @param localKey   Base64-encoded result of hashPassword(password, username) (the app's “safe”).
      * @param json           JSON to encrypt.
      * @param aad            Optional AAD to bind; default: username bytes. Can be ignored if impl does not use AAD.
      * @return Opaque ciphertext blob ready to write to disk.
      */
-    fun encryptCredentialsJson(
+    fun encryptCredentials(
         username: String,
-        safePassword: String,
+        localKey: ByteArray,
+        json: JSONObject,
+        aad: ByteArray? = username.toByteArray()
+    ): ByteArray
+
+    fun encryptCredentialsByDerivation(
+        username: String,
+        p: String,
+        purpose: String,
         json: JSONObject,
         aad: ByteArray? = username.toByteArray()
     ): ByteArray
 
     /**
-     * Decrypt a credentials blob produced by [encryptCredentialsJson].
+     * Decrypt a credentials blob produced by [encryptCredentials].
      * Must support migration/legacy decoding if you still have older blobs.
      *
      * @param username       Owner username (used for AAD/binding and/or salt derivation).
-     * @param safePassword   Base64-encoded result of hashPassword(password, username).
+     * @param localKey   Base64-encoded result of hashPassword(password, username).
      * @param encrypted      Ciphertext blob read from disk.
      * @param aad            Optional AAD used on encryption; default matches username.
      * @return Decrypted credentials JSON.
      * @throws SecurityException if authentication/tag check fails or format is invalid.
      */
-    fun decryptCredentialsJson(
+    fun decryptCredentials(
         username: String,
-        safePassword: String,
+        localKey: ByteArray,
+        encrypted: ByteArray,
+        aad: ByteArray? = username.toByteArray()
+    ): JSONObject
+
+    fun decryptCredentialsByDerivation(
+        username: String,
+        p: String,
+        purpose: String,
         encrypted: ByteArray,
         aad: ByteArray? = username.toByteArray()
     ): JSONObject
@@ -96,5 +113,11 @@ interface CryptographyManager {
         encrypted: ByteArray,
         peerKexPublic: ByteArray,
         aad: ByteArray? = null
+    ): ByteArray
+
+    fun deriveLocalKey(
+        username: String,
+        password: CharArray,
+        purpose: String = Purpose.Key.code
     ): ByteArray
 }
