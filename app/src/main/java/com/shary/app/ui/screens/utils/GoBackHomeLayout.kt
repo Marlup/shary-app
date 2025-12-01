@@ -1,29 +1,34 @@
 package com.shary.app.ui.screens.utils
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
 
-@OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
-fun GoBackHomeLayout(navController: NavHostController) {
-    Column(
-        modifier = Modifier
-            .padding(24.dp)
-            .fillMaxSize()
-    ) {
-        Spacer(modifier = Modifier.height(16.dp))
-        GoBackButton(navController)
+fun GoToScreen(
+    navController: NavHostController,
+    targetScreen: Screen = Screen.Login,
+    buttonIcon: ImageVector = Icons.AutoMirrored.Default.Login,
+    onExit: () -> Unit = {  }
+) {
+    Button(onClick = {
+        onExit()
+        navController.navigate(targetScreen.route) {
+            popUpTo(targetScreen.route) { inclusive = true }
+            launchSingleTop = true
+        }
+    }) {
+        Icon(
+            buttonIcon,
+            contentDescription = "Go to Screen button"
+        )
     }
 }
 
@@ -35,6 +40,9 @@ fun GoBackButton(navController: NavHostController) {
             launchSingleTop = true
         }
     }) {
-        Text("Go Back Home")
+        Icon(
+            Icons.Filled.Home,
+            contentDescription = "Go back button"
+        )
     }
 }

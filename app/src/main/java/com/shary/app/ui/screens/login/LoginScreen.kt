@@ -1,85 +1,156 @@
 // --- LoginScreen.kt ---
-
 package com.shary.app.ui.screens.login
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
+//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.core.Session
-import com.shary.app.core.dependencyContainer.DependencyContainer
-import com.shary.app.services.cloud.CloudService
+import com.shary.app.core.domain.types.enums.AppTheme
 import com.shary.app.ui.screens.home.utils.Screen
-import com.shary.app.utils.BiometricAuthManager
-import com.shary.app.utils.ValidationUtils.validateLoginCredentials
+import com.shary.app.ui.screens.utils.PasswordTextField
+import com.shary.app.viewmodels.authentication.AuthenticationEvent
+import com.shary.app.viewmodels.authentication.AuthenticationMode
+import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
+
+// Optional: small Hilt entry point if you still want to check registration on the cloud
+/*
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface LoginScreenEntryPoints {
+    fun cloudService(): CloudServiceImpl
+}
+ */
+
+/**
+ * UI should only react to states and events from the ViewModel, being
+ * agnostic (not knowing) about services and dependencies of the data layer.
+ * */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     navController: NavHostController,
-    session: Session,
-    cloudService: CloudService
+    onThemeChosen: (AppTheme) -> Unit = {} // optional callback for theme switching
 ) {
+    // ---------------- ViewModels ----------------
+    val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
     val context = LocalContext.current
-    val activity = context as FragmentActivity //
-    //val executor = remember { ContextCompat.getMainExecutor(context) }
     val scope = rememberCoroutineScope()
-    val errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-
+    // ---------------- States ----------------
+    val loginForm by authenticationViewModel.logForm.collectAsState()
+    val loading by authenticationViewModel.loading.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    fun showError(message: String) {
-        scope.launch {
-            snackbarHostState.showSnackbar(message)
-        }
-    }
+    // ---------------- Init ----------------
+    LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.LOGIN) }
 
-    // ⚠️ Clear dependencies when this screen loads
+    // ---------------- Events ----------------
     LaunchedEffect(Unit) {
-        DependencyContainer.initAll(context)
-    }
-
-    fun clearStates() {
-        username = ""
-        password = ""
-    }
-
-    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
-
-    DisposableEffect(lifecycleOwner.value) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                clearStates()
+        authenticationViewModel.events.collect { ev ->
+            when (ev) {
+                is AuthenticationEvent.Success -> {
+                    scope.launch { authenticationViewModel.onLoginSuccess(loginForm.username) }
+                    navController.navigate(Screen.Fields.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+                is AuthenticationEvent.CloudSignedOut -> {
+                    Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
+                    navController.navigate(Screen.Logup.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+                is AuthenticationEvent.Error -> snackbarHostState.showSnackbar(ev.message)
+                else -> Unit
             }
         }
+    }
 
+    // ---------------- Lifecycle cleanup ----------------
+    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+    DisposableEffect(lifecycleOwner.value) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) authenticationViewModel.clearLogFormStates()
+        }
         val lifecycle = lifecycleOwner.value.lifecycle
         lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycle.removeObserver(observer) }
     }
+
+    // ---------------- Theme Menu (TopRight) + Logout (TopLeft) ----------------
+    var expanded by remember { mutableStateOf(false) }
+    var selectedTheme by remember { mutableStateOf(AppTheme.Pastel) }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(title = { Text("Login") })
-        }
+            CenterAlignedTopAppBar(
+
+                title = {
+                    Text(
+                        text = "Shary: Login",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                        },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        authenticationViewModel.signOutCloud()
+                        navController.navigate(Screen.Logup.route)
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = "Logout"
+                        )
+                    }
+                },
+                actions = {
+                    // Theme menu button
+                    Box {
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = "Choose Theme"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            AppTheme.entries.forEach { theme ->
+                                DropdownMenuItem(
+                                    text = { Text(theme.name) },
+                                    onClick = {
+                                        selectedTheme = theme
+                                        expanded = false
+                                        onThemeChosen(theme)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                )
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -90,99 +161,30 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
+                value = loginForm.username,
+                onValueChange = { authenticationViewModel.updateUsername(it) },
                 label = { Text("Username") },
                 singleLine = true,
+                enabled = !loading,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
+            PasswordTextField(
+                password = loginForm.password,
+                onPasswordChange = { authenticationViewModel.updatePassword(it) },
+                enabled = !loading
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    val message = validateLoginCredentials(username, password)
-                    if (message.isBlank()) {
-                        // Generate keys on the fly
-                        session.generateKeys(password, username)
-
-                        // Try to login (check credentials)
-                        if (session.tryLogin(context, username, password)) {
-                            scope.launch {
-                                val email = session.email.toString()
-
-                                if (cloudService.isUserRegistered(email)) {
-                                    Toast.makeText(
-                                        context,
-                                        "User was registered on Cloud ",
-                                        Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        "User was not registered on Cloud ",
-                                        Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            navController.navigate(Screen.Home.route)
-                        } else {
-                            Toast.makeText(context, "Invalid credentials", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    else {
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier
-                    //.fillMaxWidth(0.5f)
-                    .size(200.dp, 50.dp)
+                onClick = { authenticationViewModel.submit(context) },
+                enabled = !loading,
+                modifier = Modifier.size(200.dp, 50.dp)
             ) {
-                Text("Login")
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // UI: button for launching authentication
-            Column(
-                //modifier = Modifier.size(200.dp, 50.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Button(onClick = {
-                    Log.d("Biometric", "Entering biometric")
-                    val biometricManager = BiometricAuthManager(
-                        context = context,
-                        activity = activity,
-                        onAuthSuccess = {
-                            // 🔓 Successful Authentication → Continue
-                            navController.navigate("Home")
-                        },
-                    )
-
-                    val error = biometricManager.authenticate()
-                    if (error != null) {
-                        showError(error)
-                    }
-                },
-                    modifier = Modifier.size(200.dp, 50.dp),
-                ) {
-                    Text("Biometric Login")
-                }
-
-                errorMessage?.let {
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text(text = it, color = MaterialTheme.colorScheme.error)
-                }
+                Text(if (loading) "Checking..." else "Login")
             }
         }
     }

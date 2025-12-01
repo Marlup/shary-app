@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option java_package = "com.shary.app";
+option java_multiple_files = true;
+
+import "field.proto";
+
+message Request {
+  string id = 1;
+  repeated Field fields = 2;
+  int64 dateAdded = 3;
+}
+
+message RequestList {
+  repeated Request requests = 1;
+}

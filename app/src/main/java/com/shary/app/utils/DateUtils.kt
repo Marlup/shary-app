@@ -1,12 +1,9 @@
 package com.shary.app.utils
 
 import android.annotation.SuppressLint
-import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
-
 
 object DateUtils {
 

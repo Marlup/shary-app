@@ -33,6 +33,7 @@ object Constants {
     const val SCREEN_NAME_USERS = "users"
     const val SCREEN_NAME_USER_CREATION = "user_creation"
     const val APPLICATION_NAME = "Shary"
+    val VALID_METADATA_FILENAMES = arrayOf("metadata.txt", "meta.txt")
 
     // Network (HTTP, SMTP)
     const val SMTP_SERVER = "smtp.gmail.com"
