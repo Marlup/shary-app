@@ -61,21 +61,42 @@ class CloudServiceImpl @Inject constructor(
      * If the Session has no token (or expired), refreshes it via FirebaseAuth.
      */
     private suspend fun ensureAuth(): Unit = withContext(Dispatchers.IO) {
-        if (cloudState.value.token.isNullOrEmpty())
-            cloudState.value.token = authAdapter.ensureSession()
-        else setIsOnlineInCLoud(true)
+        if (cloudState.value.token.isNullOrEmpty()) {
+            val session = authAdapter.ensureSession()
+            cloudState.value = cloudState.value.copy(
+                username = session.uid,
+                token = session.idToken
+            )
+            setIsOnlineInCLoud(true)
+        } else setIsOnlineInCLoud(true)
     }
 
     override suspend fun ensureAnonymousSession(): Result<String> = runCatching {
-        withContext(Dispatchers.IO) { authAdapter.ensureSession() }
+        withContext(Dispatchers.IO) {
+            val session = authAdapter.ensureSession()
+            cloudState.value = cloudState.value.copy(
+                username = session.uid,
+                token = session.idToken
+            )
+            session.uid
+        }
     }
 
     override suspend fun refreshIdToken(): Result<String> = runCatching {
-        withContext(Dispatchers.IO) { authAdapter.refreshToken() }
+        withContext(Dispatchers.IO) {
+            val token = authAdapter.refreshToken()
+            cloudState.value = cloudState.value.copy(token = token)
+            token
+        }
     }
 
     override suspend fun signOutCloud(): Result<Unit> = runCatching {
         authAdapter.signOut()
+        cloudState.value = cloudState.value.copy(
+            username = "",
+            token = "",
+            isOnline = false
+        )
     }
 
     // -------------------- EXISTING FUNCTIONALITY --------------------
