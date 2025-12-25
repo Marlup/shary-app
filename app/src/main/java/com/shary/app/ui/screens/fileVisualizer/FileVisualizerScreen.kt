@@ -28,6 +28,7 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.AddFlow
 import com.shary.app.core.domain.types.enums.DataFileMode
+import com.shary.app.core.domain.types.valueobjects.ParsedJson
 import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.FieldMatchingDialog
@@ -46,7 +47,7 @@ fun FileVisualizerScreen(navController: NavHostController) {
     val items by fileVisualizerViewModel.items.collectAsState()
     val isLoading by fileVisualizerViewModel.isLoading.collectAsState()
 
-    var selected by remember { mutableStateOf<FileVisualizerViewModel.ParsedJson?>(null) }
+    var selected by remember { mutableStateOf<ParsedJson?>(null) }
     var isMatchingOpen by remember { mutableStateOf(false) }
 
     var lastSubmittedKey by remember { mutableStateOf<String?>(null) }

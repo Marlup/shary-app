@@ -1,13 +1,10 @@
 package com.shary.app.core.domain.security
 
+import com.shary.app.core.domain.types.valueobjects.Sealed
+
 
 interface Box {
-    data class Sealed(
-        val ephPublicKey: ByteArray,
-        val iv: ByteArray,
-        val ciphertext: ByteArray,
-        val tag: ByteArray
-    )
+
     fun seal(
         plain: ByteArray,
         myPrivate: ByteArray,

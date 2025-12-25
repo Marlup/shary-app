@@ -7,9 +7,5 @@ import dagger.hilt.android.HiltAndroidApp
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-
-        // INITIATE SERVICES
-        //DependencyInjector.initAll(this)
-        //println("Dependency injections")
     }
 }

@@ -18,10 +18,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
+import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
 import com.shary.app.core.domain.types.enums.AppTheme
 import com.shary.app.ui.screens.home.utils.Screen
+import com.shary.app.ui.screens.utils.LoadingOverlay
 import com.shary.app.ui.screens.utils.PasswordTextField
-import com.shary.app.viewmodels.authentication.AuthenticationEvent
 import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
@@ -96,95 +97,98 @@ fun LoginScreen(
     var expanded by remember { mutableStateOf(false) }
     var selectedTheme by remember { mutableStateOf(AppTheme.Pastel) }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
 
-                title = {
-                    Text(
-                        text = "Shary: Login",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                        },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        authenticationViewModel.signOutCloud()
-                        navController.navigate(Screen.Logup.route)
-                    }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Logout,
-                            contentDescription = "Logout"
+    LoadingOverlay(isLoading = loading) {
+        Scaffold(
+            topBar = {
+                CenterAlignedTopAppBar(
+
+                    title = {
+                        Text(
+                            text = "Shary",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.secondary
                         )
-                    }
-                },
-                actions = {
-                    // Theme menu button
-                    Box {
-                        IconButton(onClick = { expanded = true }) {
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            authenticationViewModel.signOutCloud()
+                            navController.navigate(Screen.Logup.route)
+                        }) {
                             Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = "Choose Theme"
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = "Logout"
                             )
                         }
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            AppTheme.entries.forEach { theme ->
-                                DropdownMenuItem(
-                                    text = { Text(theme.name) },
-                                    onClick = {
-                                        selectedTheme = theme
-                                        expanded = false
-                                        onThemeChosen(theme)
-                                    }
+                    },
+                    actions = {
+                        // Theme menu button
+                        Box {
+                            IconButton(onClick = { expanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = "Choose Theme"
                                 )
                             }
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                AppTheme.entries.forEach { theme ->
+                                    DropdownMenuItem(
+                                        text = { Text(theme.name) },
+                                        onClick = {
+                                            selectedTheme = theme
+                                            expanded = false
+                                            onThemeChosen(theme)
+                                        }
+                                    )
+                                }
+                            }
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.primary,
+                    )
                 )
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            OutlinedTextField(
-                value = loginForm.username,
-                onValueChange = { authenticationViewModel.updateUsername(it) },
-                label = { Text("Username") },
-                singleLine = true,
-                enabled = !loading,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            PasswordTextField(
-                password = loginForm.password,
-                onPasswordChange = { authenticationViewModel.updatePassword(it) },
-                enabled = !loading
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = { authenticationViewModel.submit(context) },
-                enabled = !loading,
-                modifier = Modifier.size(200.dp, 50.dp)
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(if (loading) "Checking..." else "Login")
+                OutlinedTextField(
+                    value = loginForm.username,
+                    onValueChange = { authenticationViewModel.updateUsername(it) },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                PasswordTextField(
+                    password = loginForm.password,
+                    onPasswordChange = { authenticationViewModel.updatePassword(it) },
+                    enabled = !loading
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = { authenticationViewModel.submit(context) },
+                    enabled = !loading,
+                    modifier = Modifier.size(200.dp, 50.dp)
+                ) {
+                    Text(if (loading) "Checking..." else "Login")
+                }
             }
         }
     }

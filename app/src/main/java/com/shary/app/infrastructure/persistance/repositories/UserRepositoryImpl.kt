@@ -1,4 +1,4 @@
-package com.shary.app.infrastructure.repositories
+package com.shary.app.infrastructure.persistance.repositories
 
 import androidx.datastore.core.DataStore
 import com.shary.app.UserList
@@ -12,8 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class UserRepositoryImpl(
-    private val dataStore: DataStore<UserList>,
-    //private val codec: FieldCodec
+    private val dataStore: DataStore<UserList>
 ) : UserRepository {
 
     // --------------------------- Public API (Domain) ------------------------

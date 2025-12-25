@@ -11,8 +11,4 @@ import javax.inject.Inject
 class NotificationViewModel @Inject constructor() : ViewModel() {
     private val _events = MutableSharedFlow<Map<String, String>>()
     val events: SharedFlow<Map<String, String>> = _events
-
-    fun handleMessage(data: Map<String, String>) {
-        viewModelScope.launch { _events.emit(data) }
-    }
 }

@@ -77,6 +77,10 @@ class UserViewModel @Inject constructor(
         }
     }
 
+    fun refreshUsers() {
+        refresh()
+    }
+
     // ----------------------------- Commands ------------------------------
 
     /** Save user if not exists. Screen calls this method directly (no coroutines in UI). */

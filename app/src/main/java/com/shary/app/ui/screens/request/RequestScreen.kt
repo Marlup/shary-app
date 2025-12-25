@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -23,15 +24,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
+import com.shary.app.core.domain.models.reset
+import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
 import com.shary.app.ui.screens.request.utils.SendRequestDialog
+import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.viewmodels.communication.CloudViewModel
 import com.shary.app.viewmodels.communication.EmailViewModel
 import com.shary.app.viewmodels.field.FieldViewModel
+import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserViewModel
 import java.time.Instant
 
@@ -44,11 +47,12 @@ fun RequestsScreen(navController: NavHostController) {
     val userViewModel: UserViewModel = hiltViewModel()
     val emailViewModel: EmailViewModel = hiltViewModel()
     val cloudViewModel: CloudViewModel = hiltViewModel()
+    val requestViewModel: RequestViewModel = hiltViewModel()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Local working list of requested fields (Domain)
-    val requestFields = remember { mutableStateListOf<FieldDomain>() }
+    val requestFields by requestViewModel.requests.collectAsState()
 
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -64,15 +68,33 @@ fun RequestsScreen(navController: NavHostController) {
         }
     }
 
+    // Collect RequestViewModel events
+    LaunchedEffect(Unit) {
+        requestViewModel.events.collect { event ->
+            when (event) {
+                is com.shary.app.core.domain.interfaces.events.RequestEvent.FetchedFromCloud -> {
+                    snackbarMessage = "Fetched and matched ${event.matchedCount} fields from request"
+                }
+                is com.shary.app.core.domain.interfaces.events.RequestEvent.FetchError -> {
+                    snackbarMessage = "Fetch error: ${event.throwable.message}"
+                }
+            }
+        }
+    }
+
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
 
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                // Persist a Request built from the current local list
-                if (requestFields.isNotEmpty()) {
-                    TODO()
+            when (event) {
+                Lifecycle.Event.ON_START -> requestViewModel.refreshRequests()
+                Lifecycle.Event.ON_STOP -> {
+                    // Persist a Request built from the current local list
+                    if (requestFields.isNotEmpty()) {
+                        fieldViewModel.setSelectedFields()
+                    }
                 }
+                else -> {}
             }
         }
         val lifecycle = lifecycleOwner.value.lifecycle
@@ -123,7 +145,7 @@ fun RequestsScreen(navController: NavHostController) {
                     )
                 }
 
-                // ---- Center: Add + Users ----
+                // ---- Center: Add + Download + Users ----
                 Row(
                     modifier = Modifier.weight(0.70f),
                     horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
@@ -134,6 +156,20 @@ fun RequestsScreen(navController: NavHostController) {
                         icon = Icons.Default.Add,
                         backgroundColor = colorScheme.primary,
                         contentDescription = "Add Field"
+                    )
+
+                    CompactActionButton(
+                        onClick = {
+                            val currentUser = userViewModel.getOwner()
+                            if (currentUser.username.isNotEmpty()) {
+                                requestViewModel.fetchRequestsFromCloud(currentUser.username, currentUser)
+                            } else {
+                                snackbarMessage = "User not logged in"
+                            }
+                        },
+                        icon = Icons.Default.CloudDownload,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Fetch Requests from Cloud"
                     )
 
                     CompactActionButton(
@@ -205,9 +241,9 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     itemsIndexed(
                         items = requestFields,
-                        key = { _, field -> field.key } // stable key
-                    ) { index, field ->
-                        val isSelected = field in selectedFields
+                        key = { _, request -> request.dateAdded } // stable key
+                    ) { index, request ->
+                        val isSelected = request.fields.isNotEmpty() && request.fields.all { it in selectedFields }
 
                         // background colors
                         val backgroundColor = when {
@@ -225,10 +261,18 @@ fun RequestsScreen(navController: NavHostController) {
                                 containerColor = backgroundColor
                             ),
                             onClick = {
-                                if (selectedFields.isNotEmpty()) {
-                                    fieldViewModel.deleteFields(selectedFields)
-                                    fieldViewModel.clearSelectedFields()
-                                    snackbarMessage = "Deleted ${selectedFields.size} fields"
+                                // If all fields in the request are already selected, unselect them all.
+                                // Otherwise, select all of them.
+                                if (isSelected) {
+                                    request.fields.forEach {
+                                        fieldViewModel.toggleFieldSelection(it) // Will unselect
+                                    }
+                                } else {
+                                    request.fields.forEach {
+                                        if (it !in selectedFields) {
+                                            fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
+                                        }
+                                    }
                                 }
                             },
                         ) {
@@ -239,12 +283,12 @@ fun RequestsScreen(navController: NavHostController) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    field.key,
+                                    request.fields.joinToString { it.key },
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
-                                    field.keyAlias.orEmpty(),
+                                    request.fields.joinToString { it.keyAlias.orEmpty() },
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.Gray
@@ -275,12 +319,12 @@ fun RequestsScreen(navController: NavHostController) {
                     if (key.isNotBlank()) {
                         val field = FieldDomain(
                             key = key.trim(),
-                            keyAlias = keyAlias.trim().ifBlank { null },
+                            keyAlias = keyAlias.trim(),
                             value = "", // requests only need the key; keep value empty
                             tag = Tag.Unknown,
                             dateAdded = Instant.now()
                         )
-                        requestFields.add(field)
+                        //requestFields.add(field)
                         openAddDialog = false
                         snackbarMessage = "Requested key '$key' added"
                     } else {

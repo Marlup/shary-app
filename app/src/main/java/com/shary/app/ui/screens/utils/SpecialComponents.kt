@@ -1,6 +1,7 @@
 package com.shary.app.ui.screens.utils
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -12,6 +13,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.shary.app.core.domain.types.enums.AppTheme
+import com.shary.app.ui.theme.getExtendedColors
 
 object SpecialComponents {
     @Composable
@@ -21,24 +24,38 @@ object SpecialComponents {
         backgroundColor: Color = MaterialTheme.colorScheme.secondary,
         contentDescription: String,
         iconShape: Shape = CircleShape,
-        enabled: Boolean = true
+        enabled: Boolean = true,
+        theme: AppTheme = AppTheme.Pastel,
+        useExtendedColors: Boolean = true
     ) {
+        val extendedColors = getExtendedColors(theme = theme)
+
+        val bgColor = if (useExtendedColors) {
+            if (enabled) extendedColors.accent else Color.Gray
+        } else {
+            if (enabled) backgroundColor else Color.Gray
+        }
 
         IconButton(
             onClick = onClick,
             enabled = enabled,
-            modifier = Modifier.Companion
-                .size(44.dp) // círculo pequeño
+            modifier = Modifier
+                .size(44.dp)
                 .background(
-                    color = if (enabled) backgroundColor else Color.Companion.Gray,
+                    color = bgColor,
+                    shape = iconShape
+                )
+                .border(
+                    width = if (useExtendedColors && enabled) 2.dp else 0.dp,
+                    color = if (useExtendedColors) extendedColors.border else Color.Transparent,
                     shape = iconShape
                 )
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = if (enabled) Color.Companion.White else Color.Companion.LightGray,
-                modifier = Modifier.Companion.size(28.dp) // icono más grande dentro
+                tint = if (enabled) Color.White else Color.LightGray,
+                modifier = Modifier.size(28.dp)
             )
         }
     }

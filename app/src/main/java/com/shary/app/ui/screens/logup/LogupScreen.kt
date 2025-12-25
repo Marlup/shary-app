@@ -16,9 +16,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
+import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.PasswordOutlinedTextField
-import com.shary.app.viewmodels.authentication.AuthenticationEvent
 import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch

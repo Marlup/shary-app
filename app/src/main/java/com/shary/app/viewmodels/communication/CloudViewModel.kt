@@ -27,30 +27,6 @@ class CloudViewModel @Inject constructor(
     private val _events = MutableSharedFlow<CloudEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<CloudEvent> = _events.asSharedFlow()
 
-    /** Ping the backend and emit result */
-    fun sendPing() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val ok = runCatching {
-                withContext(Dispatchers.IO) { cloudService.sendPing() }
-            }.getOrElse { false }
-            _isLoading.value = false
-            _events.tryEmit(CloudEvent.PingResult(ok))
-        }
-    }
-
-    /** Check if the user is registered in the backend. */
-    fun checkUserRegistered(username: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val registered = runCatching {
-                withContext(Dispatchers.IO) { cloudService.isUserRegisteredInCloud(username) }
-            }.getOrElse { false }
-            _isLoading.value = false
-            _events.tryEmit(CloudEvent.UserRegisteredResult(username, registered))
-        }
-    }
-
     /** Upload the user to the backend. */
     fun uploadUser(username: String) {
         viewModelScope.launch {
@@ -63,22 +39,6 @@ class CloudViewModel @Inject constructor(
                 _events.tryEmit(CloudEvent.UserUploaded(username, token))
             } else {
                 _events.tryEmit(CloudEvent.Error(Exception("Upload failed")))
-            }
-        }
-    }
-
-    /** Delete the user from the backend. */
-    fun deleteUser(username: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val deleted = runCatching {
-                withContext(Dispatchers.IO) { cloudService.deleteUser(username) }
-            }.getOrElse { false }
-            _isLoading.value = false
-            if (deleted) {
-                _events.tryEmit(CloudEvent.UserDeleted(username))
-            } else {
-                _events.tryEmit(CloudEvent.Error(Exception("Delete failed")))
             }
         }
     }
@@ -100,67 +60,6 @@ class CloudViewModel @Inject constructor(
             }.getOrDefault(emptyMap())
             _isLoading.value = false
             _events.tryEmit(CloudEvent.DataUploaded(resultMap))
-        }
-    }
-
-    /** Fetch the public key for the user. */
-    fun getPubKey(usernameHash: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val pubKey = runCatching {
-                withContext(Dispatchers.IO) { cloudService.getPubKey(usernameHash) }
-            }.getOrNull()
-            _isLoading.value = false
-            if (!pubKey.isNullOrBlank()) {
-                _events.tryEmit(CloudEvent.PubKeyFetched(usernameHash, pubKey))
-            } else {
-                _events.tryEmit(CloudEvent.Error(Exception("No pubkey found")))
-            }
-        }
-    }
-
-    /** Establish anonymous session in Firebase and emits the uuid. Idempotent. */
-    fun ensureAnonymousSession() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val res = cloudService.ensureAnonymousSession()
-            _isLoading.value = false
-
-            res.onSuccess { uid ->
-                _events.tryEmit(CloudEvent.AnonymousReady(uid))
-            }.onFailure { e ->
-                _events.tryEmit(CloudEvent.Error(e))
-            }
-        }
-    }
-
-    /** Refresh token ID and make it available (for example. in Session). */
-    fun refreshCloudIdToken() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val res = cloudService.refreshIdToken()
-            _isLoading.value = false
-
-            res.onSuccess { token ->
-                _events.tryEmit(CloudEvent.TokenRefreshed(token))
-            }.onFailure { e ->
-                _events.tryEmit(CloudEvent.Error(e))
-            }
-        }
-    }
-
-    /** Close the anonymous session (and clean the token session). */
-    fun signOutCloud() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val res = cloudService.signOutCloud()
-            _isLoading.value = false
-
-            res.onSuccess {
-                _events.tryEmit(CloudEvent.CloudSignedOut)
-            }.onFailure { e ->
-                _events.tryEmit(CloudEvent.Error(e))
-            }
         }
     }
 }

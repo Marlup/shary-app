@@ -1,4 +1,4 @@
-package com.shary.app.infrastructure.repositories
+package com.shary.app.infrastructure.persistance.repositories
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
@@ -11,16 +11,17 @@ import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.enums.deserialize
 import com.shary.app.core.domain.types.enums.key
 import com.shary.app.core.domain.types.enums.serialize
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import javax.inject.Singleton
 
 // Initialize one instance of DataStore<Preferences> global and unique
 private val Context.dataStore by preferencesDataStore(name = "tags_prefs")
 
+@Singleton
 class TagRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val context: Context
 ) : TagRepository {
 
     private val dataStore = context.dataStore

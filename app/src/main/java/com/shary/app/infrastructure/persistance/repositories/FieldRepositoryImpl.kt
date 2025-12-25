@@ -1,4 +1,4 @@
-package com.shary.app.infrastructure.repositories
+package com.shary.app.infrastructure.persistance.repositories
 
 import androidx.datastore.core.DataStore
 import com.shary.app.FieldList
@@ -10,7 +10,9 @@ import com.shary.app.infrastructure.mappers.toProto
 import com.shary.app.core.domain.interfaces.security.FieldCodec
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 @Singleton
 class FieldRepositoryImpl @Inject constructor(
@@ -20,9 +22,10 @@ class FieldRepositoryImpl @Inject constructor(
 
     // =============================== Domain API ============================
 
-    override suspend fun getAllFields(): List<FieldDomain> {
-        val fieldProtoList = dataStore.data.first().fieldsList
-        return fieldProtoList.map { it.toDomain(codec) }
+    override suspend fun getAllFields(): Flow<List<FieldDomain>> {
+        return dataStore.data.map { fieldProtoList ->
+            fieldProtoList.fieldsList.map { it.toDomain(codec) }
+        }
     }
 
     override suspend fun getFieldsByTag(tag: Tag): List<FieldDomain> {
@@ -43,7 +46,7 @@ class FieldRepositoryImpl @Inject constructor(
 
     override suspend fun saveFieldIfNotExists(field: FieldDomain): Boolean {
         // Compare by decrypted key in clear text
-        val existing = getAllFields()
+        val existing = dataStore.data.first().fieldsList.map { it.toDomain(codec) }
         return if (existing.none { it.key.equals(field.key, ignoreCase = true) }) {
             saveField(field)
             true
@@ -101,7 +104,7 @@ class FieldRepositoryImpl @Inject constructor(
             val updated = current.fieldsList.map { proto ->
                 val domain = proto.toDomain(codec)
                 if (domain.keyAlias.equals(key, ignoreCase = true)) {
-                    domain.copy(keyAlias = newAlias.ifBlank { null }).toProto(codec)
+                    domain.copy(keyAlias = newAlias).toProto(codec)
                 } else {
                     proto
                 }

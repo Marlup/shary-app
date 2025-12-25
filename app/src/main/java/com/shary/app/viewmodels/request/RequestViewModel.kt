@@ -1,176 +1,122 @@
-// com/shary/app/viewmodels/request/RequestListViewModel.kt
 package com.shary.app.viewmodels.request
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shary.app.core.domain.interfaces.repositories.FieldRepository
+import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
+import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
+import com.shary.app.core.domain.interfaces.services.CloudService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.time.Instant
 
 @HiltViewModel
-class RequestListViewModel @Inject constructor(
+class RequestViewModel @Inject constructor(
     private val requestRepository: RequestRepository,
-    private val fieldRepository: FieldRepository
+    private val fieldRepository: FieldRepository,
+    private val cloudService: CloudService
 ) : ViewModel() {
 
-    // Exposed state to UI
     private val _requests = MutableStateFlow<List<RequestDomain>>(emptyList())
     val requests: StateFlow<List<RequestDomain>> = _requests.asStateFlow()
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    // One-shot events for UI (snackbar/toast/navigation)
     private val _events = MutableSharedFlow<RequestEvent>(extraBufferCapacity = 1)
-    val events: SharedFlow<RequestEvent> = _events
+    val events: SharedFlow<RequestEvent> = _events.asSharedFlow()
 
-    // Serialize writes to avoid concurrent edits on the same store
-    private val writeMutex = Mutex()
-
-    init { refresh() }
-
-    // ------------------------------ Queries ------------------------------
-
-    /** Reload the whole list from the repository. UI never launches coroutines directly. */
-    fun refresh() {
+    fun refreshRequests() {
         viewModelScope.launch {
-            _isLoading.value = true
-            val list = withContext(Dispatchers.IO) { requestRepository.getAllRequests() }
-            _requests.value = list
-            _isLoading.value = false
-        }
-    }
-
-    // ----------------------------- Commands ------------------------------
-
-    /** Add a request already built in domain shape. De-duplicates by id. */
-    fun addRequest(request: RequestDomain) {
-        val normalized = request.copy(
-            id = request.id.trim(),
-            dateAdded = if (request.dateAdded == Instant.EPOCH) Instant.now() else request.dateAdded
-        )
-        viewModelScope.launch {
-            _isLoading.value = true
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    writeMutex.withLock {
-                        requestRepository.saveRequestIfNotExists(normalized)
-                    }
-                }
-            }
-            _isLoading.value = false
-
-            result.onSuccess { created ->
-                if (created) {
-                    _events.tryEmit(RequestEvent.Saved)
-                    refresh()
-                } else {
-                    _events.tryEmit(RequestEvent.AlreadyExists)
-                }
-            }.onFailure { e ->
-                _events.tryEmit(RequestEvent.Error(e))
+            requestRepository.getAllRequests().collect { requests ->
+                _requests.value = requests
             }
         }
     }
 
     /**
-     * Build and add a request from a list of fields.
-     * The id is computed with the repository (same behavior you had: join of keys).
+     * Fetches request data from Firebase, processes it, and attempts to match with local fields.
+     * If fields exist locally, creates a RequestDomain and saves it.
      */
-    fun addRequestFromFields(fields: List<FieldDomain>) {
+    fun fetchRequestsFromCloud(username: String, currentUser: UserDomain) {
         viewModelScope.launch {
-            _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    writeMutex.withLock {
-                        val id = requestRepository.computeHash(fields)
+                    val fetchResult = cloudService.fetchData(username)
+
+                    fetchResult.getOrThrow().let { jsonString ->
+                        Log.d("RequestViewModel", "Fetched request data: $jsonString")
+                        val jsonObject = JSONObject(jsonString)
+
+                        // Check if it's a request by looking for "mode" field
+                        val mode = jsonObject.optString("mode", "")
+                        if (mode != "request") {
+                            throw IllegalStateException("Fetched data is not a request")
+                        }
+
+                        val senderUsername = jsonObject.optString("sender", "")
+                        val keysJson = jsonObject.optJSONArray("keys")
+
+                        if (keysJson == null || keysJson.length() == 0) {
+                            throw IllegalStateException("No keys found in request")
+                        }
+
+                        // Extract requested keys
+                        val requestedKeys = mutableListOf<String>()
+                        for (i in 0 until keysJson.length()) {
+                            requestedKeys.add(keysJson.getString(i))
+                        }
+
+                        // Get all local fields
+                        val allFields = mutableListOf<FieldDomain>()
+                        fieldRepository.getAllFields().collect { fields ->
+                            allFields.addAll(fields)
+                        }
+
+                        // Match requested keys with local fields
+                        val matchedFields = allFields.filter { field ->
+                            requestedKeys.contains(field.key)
+                        }
+
+                        if (matchedFields.isEmpty()) {
+                            throw IllegalStateException("No matching fields found locally")
+                        }
+
+                        // Create RequestDomain
+                        val sender = UserDomain(username = senderUsername)
                         val request = RequestDomain(
-                            id = id,
-                            fields = fields,
+                            fields = matchedFields,
+                            sender = sender,
+                            recipients = listOf(currentUser),
                             dateAdded = Instant.now()
                         )
-                        requestRepository.saveRequestIfNotExists(request)
+
+                        // Save request
+                        requestRepository.saveRequest(request)
+
+                        matchedFields.size
                     }
                 }
             }
-            _isLoading.value = false
 
-            result.onSuccess { created ->
-                if (created) {
-                    _events.tryEmit(RequestEvent.Saved) // id might be long; keep generic
-                    refresh()
-                } else {
-                    _events.tryEmit(RequestEvent.AlreadyExists)
-                }
+            result.onSuccess { matchedCount ->
+                _events.tryEmit(RequestEvent.FetchedFromCloud(matchedCount))
+                refreshRequests()
             }.onFailure { e ->
-                _events.tryEmit(RequestEvent.Error(e))
+                Log.e("RequestViewModel", "Error fetching requests from cloud: ${e.message}")
+                _events.tryEmit(RequestEvent.FetchError(e))
             }
         }
     }
-
-    /** Delete a request by its domain object (uses id). */
-    fun deleteRequest(request: RequestDomain) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    writeMutex.withLock { requestRepository.deleteRequest(request) }
-                }
-            }
-            _isLoading.value = false
-
-            result.onSuccess {
-                _events.tryEmit(RequestEvent.Deleted(request.id))
-                refresh()
-            }.onFailure { e ->
-                _events.tryEmit(RequestEvent.Error(e))
-            }
-        }
-    }
-
-    /**
-     * Update the fields of the request identified by [id].
-     * Repository will recompute the new id (hash of keys) and replace it.
-     */
-    fun updateFields(id: String, fields: List<FieldDomain>) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    writeMutex.withLock { requestRepository.updateFields(id, fields) }
-                }
-            }
-            _isLoading.value = false
-
-            result.onSuccess {
-                _events.tryEmit(RequestEvent.FieldsUpdated(id))
-                refresh()
-            }.onFailure { e ->
-                _events.tryEmit(RequestEvent.Error(e))
-            }
-        }
-    }
-}
-
-// UI events for RequestListViewModel
-sealed interface RequestEvent {
-    data object Saved : RequestEvent
-    data object AlreadyExists : RequestEvent
-    data class Deleted(val id: String) : RequestEvent
-    data class FieldsUpdated(val id: String) : RequestEvent
-    data class Error(val throwable: Throwable) : RequestEvent
 }

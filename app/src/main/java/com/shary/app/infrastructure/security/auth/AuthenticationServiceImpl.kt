@@ -79,9 +79,6 @@ class AuthenticationServiceImpl @Inject constructor(
         crypto.initializeKeysWithUser(context, username, safe)
         crypto.saveSignature(context, username, email, safe)
 
-        //val signPub = crypto.getSignPublic()
-        //val kexPub  = crypto.getKexPublic()
-
         // --- CLOUD REGISTRATION ---
         val cloudReachable = cloud.sendPing()
         Log.w("AuthenticationServiceImpl", "Cloud registration launched")
@@ -121,7 +118,7 @@ class AuthenticationServiceImpl @Inject constructor(
         crypto.initializeKeysWithUser(context, username, safePassword)
         preLoadLocalKeys(username, safePassword)
 
-        loadCredentials(context, username, safePassword)
+        loadCredentials(context, username)
         check(isAuthenticated(username, safePassword)) { "Invalid credentials" }
 
         // --- CLOUD VERIFICATION ---
@@ -197,7 +194,7 @@ class AuthenticationServiceImpl @Inject constructor(
     }
 
     /** Loads credentials JSON from encrypted storage and updates AuthState. */
-    private fun loadCredentials(context: Context, username: String, safePassword: String) {
+    private fun loadCredentials(context: Context, username: String) {
         val encrypted = store.readCredentials(context) ?: error("Credentials file not found")
         val data = crypto.decryptCredentials(
             username,
@@ -226,8 +223,6 @@ class AuthenticationServiceImpl @Inject constructor(
     }
 
     // -------------------- In-memory backend simulation --------------------
-
-    private val rng = SecureRandom()
     private val users = ConcurrentHashMap<String, Pair<ByteArray, ByteArray>>() // username -> (signPub, kexPub)
     private val challenges = ConcurrentHashMap<String, ByteArray>()
 

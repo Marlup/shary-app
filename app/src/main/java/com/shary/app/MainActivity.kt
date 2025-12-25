@@ -11,7 +11,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.firestore
-import com.shary.app.infrastructure.repositories.ThemeRepository
+import com.shary.app.infrastructure.persistance.repositories.ThemeRepositoryImpl
 import com.shary.app.ui.screens.home.utils.AppNavigator
 import com.shary.app.ui.theme.AppOptionalTheme
 import com.shary.app.utils.AppConfig
@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var config: AppConfig
 
     private val themeViewModel by viewModels<ThemeViewModel> {
-        ThemeViewModelFactory(ThemeRepository(this))
+        ThemeViewModelFactory(ThemeRepositoryImpl(this))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

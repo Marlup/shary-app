@@ -14,10 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.enums.safeColor
+import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.tag.TagViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,12 +25,15 @@ import com.shary.app.viewmodels.tag.TagViewModel
 fun TagPicker(
     selectedTag: Tag,
     onTagSelected: (Tag) -> Unit,
-    tagViewModel: TagViewModel = hiltViewModel()
+    tagViewModel: TagViewModel = hiltViewModel(),
+    fieldViewModel: FieldViewModel = hiltViewModel()
 ) {
     val tags by tagViewModel.tags.collectAsState()
     var expanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var showEditDialog by remember { mutableStateOf<Pair<String, Color>?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var tagToUpdate by remember { mutableStateOf<Tag?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -79,12 +82,21 @@ fun TagPicker(
                     trailingIcon = {
                         Row {
                             IconButton(onClick = {
-                                showEditDialog = tag.toTagString() to tag.safeColor()
-                                expanded = false
+                                // Check if tag is in use before allowing edit
+                                if (fieldViewModel.isTagInUse(tag)) {
+                                    errorMessage = "Cannot update tag '${tag.toTagString()}' - it is currently in use by fields"
+                                } else {
+                                    tagToUpdate = tag
+                                    showUpdateDialog = true
+                                }
                             }) { Icon(Icons.Default.Edit, "Edit") }
                             IconButton(onClick = {
-                                tagViewModel.removeTag(tag.toTagString())
-                                expanded = false
+                                // Check if tag is in use before allowing delete
+                                if (fieldViewModel.isTagInUse(tag)) {
+                                    errorMessage = "Cannot delete tag '${tag.toTagString()}' - it is currently in use by fields"
+                                } else {
+                                    tagViewModel.removeTag(tag.toTagString())
+                                }
                             }) { Icon(Icons.Default.Delete, "Delete") }
                         }
                     }
@@ -110,24 +122,46 @@ fun TagPicker(
             onConfirm = { name, color ->
                 Log.d("FieldsScreen()", "tag : ${name}, color : $color")
 
+                showAddDialog = false
                 tagViewModel.addTag(name, color)
                 onTagSelected(Tag.fromString(name, color))
-                showAddDialog = false
             },
             onDismiss = { showAddDialog = false }
         )
     }
 
-    showEditDialog?.let { (name, color) ->
-        AddNewTagDialog(
-            initialName = name,
-            initialColor = color,
-            onConfirm = { n, c ->
-                tagViewModel.updateTag(n, c)
-                onTagSelected(Tag.fromString(n, c))
-                showEditDialog = null
+    if (showUpdateDialog && tagToUpdate != null) {
+        UpdateTagDialog(
+            currentName = tagToUpdate!!.toTagString(),
+            currentColor = tagToUpdate!!.safeColor(),
+            onConfirm = { name, color ->
+                Log.d("TagPicker", "Updating tag: $name with color: $color")
+                showUpdateDialog = false
+                tagViewModel.updateTag(name, color)
+                // Update the selected tag if it was the one being edited
+                if (selectedTag == tagToUpdate) {
+                    onTagSelected(Tag.fromString(name, color))
+                }
+                tagToUpdate = null
             },
-            onDismiss = { showEditDialog = null }
+            onDismiss = {
+                showUpdateDialog = false
+                tagToUpdate = null
+            }
+        )
+    }
+
+    // Error message dialog
+    errorMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { errorMessage = null },
+            title = { Text("Cannot modify tag") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { errorMessage = null }) {
+                    Text("OK")
+                }
+            }
         )
     }
 }

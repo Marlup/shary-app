@@ -26,5 +26,9 @@ sealed class Tag(open val name: String, open val color: Color?) {
 val Tag.key: String
     get() = name.trim().lowercase()
 
+fun Tag?.getSafeTag(): Tag = this?: Tag.Unknown
+
+
+
 fun Tag?.safeColor(): Color = this?.toColor() ?: Color.Gray.copy(alpha = 0.7f)
 fun Tag?.safeTagString(): String = this?.toTagString() ?: "Unknown"

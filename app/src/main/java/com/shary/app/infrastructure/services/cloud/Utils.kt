@@ -1,30 +1,41 @@
 package com.shary.app.infrastructure.services.cloud
 
 import com.shary.app.core.domain.types.enums.StatusDataSentDb
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import okhttp3.Headers.Companion.toHeaders
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 object Utils {
-    fun authBearerHeader(token: String?): Map<String, String> =
-        mapOf("Authorization" to "Bearer $token")
 
-    fun buildPostRequest(url: String, payload: Map<String, String>, headers: Map<String, String>): Request {
-        val json = Json.encodeToString(payload)
-        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
-        val builder = Request.Builder().url(url).post(body)
-        headers.forEach { (k, v) -> builder.addHeader(k, v) }
-        return builder.build()
+    fun authBearerHeader(token: String?): Map<String, String> {
+        return if (token != null) mapOf("Authorization" to "Bearer $token")
+        else emptyMap()
     }
 
-    fun evaluateStatusCode(code: Int): StatusDataSentDb = when (code) {
-        200 -> StatusDataSentDb.STORED
-        400 -> StatusDataSentDb.MISSING_FIELD
-        409 -> StatusDataSentDb.EXISTS
-        500 -> StatusDataSentDb.ERROR
-        else -> StatusDataSentDb.ERROR
+    fun buildPostRequest(
+        url: String,
+        jsonPayload: String,
+        headers: Map<String, String> = emptyMap()
+    ): Request {
+        val requestBody = jsonPayload.toRequestBody("application/json".toMediaType())
+        return Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .headers(headers.toHeaders())
+            .build()
     }
 
+
+    fun evaluateStatusCode(code: Int): StatusDataSentDb {
+        return when (code) {
+            200 -> StatusDataSentDb.SUCCESS
+            201 -> StatusDataSentDb.STORED
+            400 -> StatusDataSentDb.MISSING_FIELD
+            401, 403 -> StatusDataSentDb.FORBIDDEN
+            404 -> StatusDataSentDb.NOT_FOUND
+            409 -> StatusDataSentDb.EXISTS
+            else -> StatusDataSentDb.ERROR
+        }
+    }
 }

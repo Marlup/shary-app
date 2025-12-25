@@ -8,6 +8,7 @@ import com.shary.app.core.domain.interfaces.security.DetachedVerifier
 import com.shary.app.core.domain.interfaces.security.Ed25519Factory
 import com.shary.app.core.domain.interfaces.states.Identity
 import com.shary.app.core.domain.security.Box
+import com.shary.app.core.domain.types.valueobjects.Sealed
 import com.shary.app.infrastructure.security.box.AesGcmBox
 import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
 import com.shary.app.infrastructure.security.derivation.KeyDerivation
@@ -238,7 +239,7 @@ class CryptographyManagerImpl(
         appId: String,
         nonce: ByteArray,
         aad: ByteArray? = null
-    ): Box.Sealed {
+    ): Sealed {
         val master = kd.masterSeed(username, password, appId)
         val sess = kd.sessionSeed(master, nonce) // efímero determinista por nonce
         return box.seal(plain, myPrivate = sess, peerPublic = receiverKexPublic, aad = aad)
@@ -258,7 +259,7 @@ class CryptographyManagerImpl(
      * Apertura ECDH (X25519 + AES-GCM) de un `Box.Sealed`.
      */
     private fun doOpenFrom(
-        sealed: Box.Sealed,
+        sealed: Sealed,
         senderEphPublicOrStatic: ByteArray,
         username: String,
         password: CharArray,
@@ -270,7 +271,7 @@ class CryptographyManagerImpl(
         return box.open(sealed, myPrivate = kex, peerPublic = senderEphPublicOrStatic, aad = aad)
     }
     override fun openFrom(
-        sealed: Box.Sealed,
+        sealed: Sealed,
         senderEphPublicOrStatic: ByteArray,
         username: String,
         password: CharArray,

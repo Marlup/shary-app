@@ -17,12 +17,16 @@ import com.shary.app.infrastructure.services.cloud.Utils.evaluateStatusCode
 import com.google.firebase.auth.FirebaseAuth
 import com.shary.app.core.domain.interfaces.states.CloudState
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.domain.types.valueobjects.DataPayload
+import com.shary.app.core.domain.types.valueobjects.DeleteUserPayload
+import com.shary.app.core.domain.types.valueobjects.UserPayload
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_DELETE_USER
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_FETCH_PAYLOAD
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_GET_PUB_KEY
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_PING
-import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_SEND_DATA
-import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_SEND_USER
-import com.shary.app.infrastructure.services.cloud.Constants.TIME_ALIVE_FIREBASE_DOCUMENT
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_UPLOAD_PAYLOAD
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_UPLOAD_USER
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_MAIN_ENTRYPOINT
 import com.shary.app.utils.Functions.buildJsonStringFromFields
 import com.shary.app.utils.Functions.makeJsonStringFromRequestKeys
 import javax.inject.Inject
@@ -30,12 +34,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
+import java.net.URLEncoder
+
 
 /**
  * CloudServiceImpl
@@ -64,7 +73,7 @@ class CloudServiceImpl @Inject constructor(
         if (cloudState.value.token.isNullOrEmpty()) {
             val session = authAdapter.ensureSession()
             cloudState.value = cloudState.value.copy(
-                username = session.uid,
+                //username = session.uid,
                 token = session.idToken
             )
             setIsOnlineInCLoud(true)
@@ -106,21 +115,19 @@ class CloudServiceImpl @Inject constructor(
      * Updates Session.isOnline based on response.
      */
     override suspend fun sendPing(): Boolean = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(FIREBASE_ENDPOINT_PING).get().build()
-        return@withContext try {
-            val client = OkHttpClient()
-            client.newCall(request).execute().use { response ->
+        val url: String = FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_PING
+
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+
+        try {
+            OkHttpClient().newCall(request).execute().use { response ->
                 cloudState.value.isOnline = response.isSuccessful
-                response.code
-                Log.e("CloudServiceImpl", "Ping sent. " +
-                        "online status: ${cloudState.value.isOnline}; " +
-                        "status code: ${response.code};" +
-                        "url: $FIREBASE_ENDPOINT_PING"
-                )
                 response.isSuccessful
             }
         } catch (e: IOException) {
-            Log.e("CloudServiceImpl", "Ping failed: ${e.message}")
             cloudState.value.isOnline = false
             false
         }
@@ -157,26 +164,27 @@ class CloudServiceImpl @Inject constructor(
         val pubKey = base64Encode(cryptographyManager.getKexPublic())
         val (signature, verification) = makeCredentials(listOf(usernameHash, pubKey))
 
-        val payload = mutableMapOf(
-            "user" to usernameHash,
-            "creation_at" to getCurrentUtcTimestamp().toString(),
-            "expires_at" to getTimestampAfterExpiry(TIME_ALIVE_FIREBASE_DOCUMENT).toString(),
-            "pubkey" to pubKey,
-            "verification" to verification,
-            "signature" to signature
+        val payload = UserPayload(
+            user = usernameHash,
+            creationAt = getCurrentUtcTimestamp(),
+            expiresAt = getTimestampAfterExpiry(),
+            pubkey = pubKey,
+            verification = verification,
+            signature = signature,
+            fcmToken = cloudState.value.fcmToken
         )
-
-        // If we already cached a token in CloudState, attach it
-        cloudState.value.fcmToken?.let { payload["fcmToken"] = it }
 
         Log.d("CloudServiceImpl - doUploadUser", "Username $usernameHash; " +
                     "AuthToken() - ${cloudState.value.token}")
 
+        val url = Constants.FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_UPLOAD_USER
         val request = buildPostRequest(
-            FIREBASE_ENDPOINT_SEND_USER,
-            payload,
+            url,
+            Json.encodeToString(UserPayload.serializer(), payload),
             authBearerHeader(cloudState.value.token)
         )
+
+        Log.i("Authbearer", "authBearerHeader(cloudState.value.token): ${authBearerHeader(cloudState.value.token).toString()}")
 
         Log.i("CloudServiceImpl", "doUploadUser() - request: $request; " +
                                                                "body: ${request.body.toString()}")
@@ -184,8 +192,8 @@ class CloudServiceImpl @Inject constructor(
         return@withContext try {
             val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
-                Log.d("CloudService - doUploadUser", "Upload user response message : ${response.body?.string()}")
                 val bodyString = response.body.string().orEmpty()
+                Log.d("CloudService - doUploadUser", "Upload user response message : $bodyString")
                 val jsonBody = Json.parseToJsonElement(bodyString).jsonObject
                 if (response.code == 200) {
                     jsonBody["token"]?.jsonPrimitive?.content.orEmpty()
@@ -216,8 +224,14 @@ class CloudServiceImpl @Inject constructor(
         val safeUsername = safeGetUser(username)
         val usernameHash = hashMessageB64(safeUsername)
         val (signature, _) = makeCredentials(listOf(usernameHash))
-        val payload = mapOf("user" to usernameHash, "signature" to signature)
-        val request = buildPostRequest(FIREBASE_ENDPOINT_DELETE_USER, payload, authBearerHeader(cloudState.value.token))
+        val payload = DeleteUserPayload(usernameHash, signature)
+
+        val url = Constants.FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_DELETE_USER
+        val request = buildPostRequest(
+            url,
+            Json.encodeToString(DeleteUserPayload.serializer(), payload),
+            authBearerHeader(cloudState.value.token)
+        )
         return@withContext try {
             val client = OkHttpClient()
             client.newCall(request).execute().use { response -> response.code == 200 }
@@ -241,46 +255,6 @@ class CloudServiceImpl @Inject constructor(
         if (isEmptyArguments(fields, consumers)) return@withContext emptyMap()
         if (isRequest) doUploadRequest(fields, owner, consumers)
         else doUploadData(fields, owner, consumers)
-    }
-
-    override suspend fun updateUserFcmToken(token: String): Boolean = withContext(Dispatchers.IO) {
-        ensureAuth()
-        if (!isCloudReachable()) return@withContext false
-
-        val safeUsername = safeGetUser(cloudState.value.username)
-        val usernameHash = hashMessageB64(safeUsername)
-        val (signature, verification) = makeCredentials(listOf(usernameHash, token))
-
-        val payload = mapOf(
-            "user" to usernameHash,
-            "fcmToken" to token,
-            "signature" to signature,
-            "verification" to verification,
-            "updated_at" to getCurrentUtcTimestamp().toString()
-        )
-
-        val request = buildPostRequest(
-            FIREBASE_ENDPOINT_SEND_USER, // reuse same endpoint!
-            payload,
-            authBearerHeader(cloudState.value.token)
-        )
-
-        return@withContext try {
-            val client = OkHttpClient()
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    Log.d("CloudServiceImpl", "FCM token updated successfully")
-                    cloudState.value.fcmToken = token
-                    true
-                } else {
-                    Log.w("CloudServiceImpl", "Failed to update FCM token: ${response.code}")
-                    false
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("CloudServiceImpl", "updateUserFcmToken exception: ${e.message}")
-            false
-        }
     }
 
     private suspend fun doUploadData(fields: List<FieldDomain>, owner: UserDomain, consumers: List<UserDomain>) =
@@ -331,16 +305,21 @@ class CloudServiceImpl @Inject constructor(
                 val (signature, verification) =
                     makeCredentials(listOf(userHash, consumerHash, hashMessageB64(data)))
 
-                val payload = mapOf(
-                    "user" to userHash,
-                    "consumer" to consumerHash,
-                    "creation_at" to getCurrentUtcTimestamp().toString(),
-                    "expires_at" to getTimestampAfterExpiry(TIME_ALIVE_FIREBASE_DOCUMENT).toString(),
-                    "data" to payloadData,
-                    "verification" to verification,
-                    "signature" to signature
+                val payload = DataPayload(
+                    user = userHash,
+                    recipient = consumerHash,
+                    creationAt = getCurrentUtcTimestamp(),
+                    expiresAt = getTimestampAfterExpiry(),
+                    data = payloadData,
+                    verification = verification,
+                    signature = signature
                 )
-                val request = buildPostRequest(FIREBASE_ENDPOINT_SEND_DATA, payload, authBearerHeader(cloudState.value.token))
+                val url = FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_UPLOAD_PAYLOAD
+                val request = buildPostRequest(
+                    url,
+                    Json.encodeToString(DataPayload.serializer(), payload),
+                    authBearerHeader(cloudState.value.token)
+                )
                 try {
                     client.newCall(request).execute().use { response ->
                         results[consumerUsername] = evaluateStatusCode(response.code)
@@ -359,9 +338,13 @@ class CloudServiceImpl @Inject constructor(
     override suspend fun getPubKey(usernameHash: String): String = withContext(Dispatchers.IO) {
         Log.i("CloudServiceImpl", "Launching getPubKey() for usernameHash: $usernameHash")
         ensureAuth()
+
+        val encodedUser = URLEncoder.encode(usernameHash, Charsets.UTF_8.name())
+        val url = "$FIREBASE_MAIN_ENTRYPOINT$FIREBASE_ENDPOINT_GET_PUB_KEY?user=$encodedUser"
+
         val request = Request.Builder()
-            .url("$FIREBASE_ENDPOINT_GET_PUB_KEY?user=$usernameHash")
-            .addHeader("Authorization", "Bearer ${cloudState.value.token}")
+            .url(url)
+            .headers(authBearerHeader(cloudState.value.token).toHeaders())
             .build()
         Log.i("CloudServiceImpl", "getPubKey() - request: $request; " +
                 "headers: ${request.headers} " +
@@ -406,6 +389,100 @@ class CloudServiceImpl @Inject constructor(
     suspend fun getAuthToken(): String? {
         val username = FirebaseAuth.getInstance().currentUser ?: return null
         return username.getIdToken(true).await().token
+    }
+
+    /**
+     * Fetches encrypted data from Firebase for the current user.
+     * Decrypts the data and returns it as a JSON string.
+     * Note: Firebase returns the MOST RECENT payload if multiple exist.
+     */
+    override suspend fun fetchData(username: String): Result<String> = runCatching {
+        withContext(Dispatchers.IO) {
+            // Ensure we have a fresh auth token
+            ensureAuth()
+
+            // Try to refresh the token to ensure it's valid
+            try {
+                refreshIdToken()
+            } catch (e: Exception) {
+                Log.w("CloudServiceImpl", "Could not refresh token: ${e.message}")
+            }
+
+            if (!isCloudReachable()) {
+                throw IOException("Cloud service is not reachable")
+            }
+
+            val safeUsername = safeGetUser(username)
+            val recipientHash = hashMessageB64(safeUsername)
+            val encodedRecipient = URLEncoder.encode(recipientHash, Charsets.UTF_8.name())
+
+            // Note: The parameter name is "user" but it represents the recipient
+            val url = "$FIREBASE_MAIN_ENTRYPOINT$FIREBASE_ENDPOINT_FETCH_PAYLOAD?user=$encodedRecipient"
+
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .headers(authBearerHeader(cloudState.value.token).toHeaders())
+                .build()
+
+            Log.i("CloudServiceImpl", "fetchData() - URL: $url")
+            Log.i("CloudServiceImpl", "fetchData() - recipient hash: $recipientHash")
+            Log.i("CloudServiceImpl", "fetchData() - headers: ${request.headers}")
+            Log.i("CloudServiceImpl", "fetchData() - token: ${cloudState.value.token?.take(20)}...")
+
+            val client = OkHttpClient()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body?.string() ?: "No error body"
+                    Log.e("CloudServiceImpl", "Failed to fetch data: ${response.code} - $errorBody")
+                    throw IOException("Failed to fetch data: ${response.code} - $errorBody")
+                }
+
+                val bodyString = response.body.string().orEmpty()
+                Log.d("CloudServiceImpl - fetchData", "Fetch response: $bodyString")
+
+                val jsonBody = Json.parseToJsonElement(bodyString).jsonObject
+
+                // The response contains a "payload" array
+                val payloadArray = jsonBody["payload"]?.jsonArray
+                    ?: throw IllegalStateException("No payload array in response")
+
+                if (payloadArray.isEmpty()) {
+                    throw IllegalStateException("No payloads available")
+                }
+
+                // Get the most recent payload (last in the array)
+                val latestPayload = payloadArray.last().jsonObject
+
+                val encryptedDataB64 = latestPayload["data"]?.jsonPrimitive?.content
+                    ?: throw IllegalStateException("No data field in payload")
+                val senderHash = latestPayload["user"]?.jsonPrimitive?.content
+                    ?: throw IllegalStateException("No user field in payload")
+
+                Log.d("CloudServiceImpl", "Processing payload from sender: $senderHash")
+
+                // Get sender's public key
+                val senderPubKeyB64 = getPubKey(senderHash)
+                if (senderPubKeyB64.isEmpty()) {
+                    throw IllegalStateException("Cannot retrieve sender's public key")
+                }
+
+                val senderPubKey = base64Decode(senderPubKeyB64)
+                val encryptedData = base64Decode(encryptedDataB64)
+                val aad = "shary:$senderHash:$recipientHash".toByteArray(Charsets.UTF_8)
+
+                // Decrypt the data
+                val decryptedBytes = cryptographyManager.decryptFromPeerPublic(
+                    encryptedData,
+                    senderPubKey,
+                    aad
+                )
+
+                val decryptedString = decryptedBytes.toString(Charsets.UTF_8)
+                Log.d("CloudServiceImpl", "Successfully decrypted data")
+                decryptedString
+            }
+        }
     }
 
     private fun setIsOnlineInCLoud(v: Boolean) { cloudState.value.isOnline = v }

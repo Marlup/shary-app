@@ -1,6 +1,5 @@
 package com.shary.app.infrastructure.mappers
 
-import android.util.Log
 import com.shary.app.core.domain.interfaces.security.FieldCodec
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
@@ -24,7 +23,7 @@ fun FieldDomain.toProto(codec: FieldCodec): FieldProto =
     FieldProto.newBuilder()
         .setKey(codec.encode(key, Purpose.Key))
         .setValue(codec.encode(value, Purpose.Value))
-        .setKeyAlias(codec.encode(keyAlias.orEmpty(), Purpose.Alias))
+        .setKeyAlias(codec.encode(keyAlias, Purpose.Alias))
         .setTag(codec.encode(tag.serialize(), Purpose.Tag)) // Saves name + color
         .setDateAdded(dateAdded.toEpochMilli())
         .build()
@@ -36,7 +35,7 @@ fun FieldProto.toDomain(codec: FieldCodec): FieldDomain =
         FieldDomain(
             key       = codec.decode(key, Purpose.Key),
             value     = codec.decode(value, Purpose.Value),
-            keyAlias  = codec.decode(keyAlias, Purpose.Alias).ifBlank { null },
+            keyAlias  = codec.decode(keyAlias, Purpose.Alias),
             tag       = Tag.deserialize(raw), // recover name + color
             dateAdded = Instant.ofEpochMilli(dateAdded)
         )
@@ -45,7 +44,7 @@ fun FieldProto.toDomain(codec: FieldCodec): FieldDomain =
     FieldDomain(
         key       = key,                     // it will remain encrypted (useful for diagnostics)
         value     = value,
-        keyAlias  = keyAlias.ifBlank { null },
+        keyAlias  = keyAlias,
         tag       = Tag.Unknown,
         dateAdded = Instant.ofEpochMilli(dateAdded)
     )
@@ -64,16 +63,18 @@ fun List<FieldDomain>.toProtoFields(codec: FieldCodec): List<FieldProto> =
 
 fun RequestProto.toDomain(codec: FieldCodec): RequestDomain =
     RequestDomain(
-        id        = id,
-        fields    = fieldsList.toDomainFields(codec),
-        dateAdded = Instant.ofEpochMilli(dateAdded)
+        fields = fieldsList.toDomainFields(codec),
+        dateAdded = Instant.ofEpochMilli(dateAdded),
+        sender = sender.toDomain(),
+        recipients = recipientsList.map { it.toDomain() }
     )
 
 fun RequestDomain.toProto(codec: FieldCodec): RequestProto =
     RequestProto.newBuilder()
-        .setId(id)
         .addAllFields(fields.toProtoFields(codec))
         .setDateAdded(dateAdded.toEpochMilli())
+        .setSender(sender.toProto())
+        .addAllRecipients(recipients.map { it.toProto() })
         .build()
 
 // ======================================================================

@@ -10,6 +10,7 @@ import com.shary.app.UserList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import com.shary.app.core.domain.interfaces.repositories.TagRepository
+import com.shary.app.core.domain.interfaces.repositories.ThemeRepository
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
 import com.shary.app.core.domain.interfaces.services.CacheService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
@@ -20,10 +21,11 @@ import com.shary.app.core.domain.interfaces.services.JsonFileService
 import com.shary.app.infrastructure.persistance.datastore.fieldListDataStore
 import com.shary.app.infrastructure.persistance.datastore.requestListDataStore
 import com.shary.app.infrastructure.persistance.datastore.userListDataStore
-import com.shary.app.infrastructure.repositories.FieldRepositoryImpl
-import com.shary.app.infrastructure.repositories.RequestRepositoryImpl
-import com.shary.app.infrastructure.repositories.TagRepositoryImpl
-import com.shary.app.infrastructure.repositories.UserRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.FieldRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.RequestRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.TagRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.ThemeRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.UserRepositoryImpl
 import com.shary.app.infrastructure.services.cache.SelectionCacheService
 import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
 import com.shary.app.infrastructure.services.email.EmailServiceImpl
@@ -66,7 +68,6 @@ object DependenciesContainer {
 
     @Provides @Singleton fun provideUserRepository(
         datastore: DataStore<UserList>,
-        //codec: FieldCodec
     ): UserRepository = UserRepositoryImpl(datastore)
 
     @Provides @Singleton fun provideRequestRepository(
@@ -77,6 +78,10 @@ object DependenciesContainer {
     @Provides @Singleton fun provideTagRepository(
         @ApplicationContext context: Context
     ): TagRepository = TagRepositoryImpl(context)
+
+    @Provides @Singleton fun provideThemeRepository(
+        @ApplicationContext context: Context
+    ): ThemeRepository = ThemeRepositoryImpl(context)
 
     // ======== Services ========
 

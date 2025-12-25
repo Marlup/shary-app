@@ -29,6 +29,6 @@ interface CloudService {
     /** Cierra sesión Firebase (limpia Session.authToken). */
     suspend fun signOutCloud(): Result<Unit>
 
-    /** Update the FCM token of the current user in the cloud backend. */
-    suspend fun updateUserFcmToken(token: String): Boolean
+    /** Fetch encrypted data from Firebase for the current user */
+    suspend fun fetchData(username: String): Result<String>
 }
