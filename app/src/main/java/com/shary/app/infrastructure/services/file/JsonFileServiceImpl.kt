@@ -196,7 +196,7 @@ class JsonFileServiceImpl(
         val dot = base.lastIndexOf('.')
         val id = UUID.randomUUID().toString().take(8)
         return if (dot > 0) {
-            val name = base.substring(0, dot)
+            val name = base.take(dot)
             val ext = base.substring(dot)
             "${name}_$id$ext"
         } else {

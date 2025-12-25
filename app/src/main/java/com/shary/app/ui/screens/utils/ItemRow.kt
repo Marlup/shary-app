@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.graphics.drawable.shapes.Shape
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import com.shary.app.core.domain.types.enums.AppTheme
 import com.shary.app.ui.screens.utils.Constants.FIELD_TOOLTIP_ALIVE_DURATION
+import com.shary.app.ui.theme.getExtendedColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 @Composable
@@ -52,12 +56,14 @@ fun ItemRowBase(
     tooltip: String = "",
     copyText: String = "$title: $subtitle",
     titleColor: Color = Color.Unspecified,
+    theme: AppTheme = AppTheme.Pastel,
     onEditClick: () -> Unit,
     onAddItemCopyClick: (() -> Unit)? = null // null hides "Add Copy"
 ) {
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val extendedColors = getExtendedColors(theme = theme)
 
     var menuExpanded by remember { mutableStateOf(false) }
     var showTooltip by remember { mutableStateOf(false) }
@@ -72,7 +78,17 @@ fun ItemRowBase(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .background(
+                color = extendedColors.container,
+                shape = MaterialTheme.shapes.small
+            )
+            .border(
+                width = 1.dp,
+                color = extendedColors.border,
+                shape = MaterialTheme.shapes.small
+            )
+            .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
@@ -82,22 +98,23 @@ fun ItemRowBase(
         ) {
             Surface(
                 shape = CircleShape,
-                color = titleColor,
-                modifier = Modifier.padding(bottom = 2.dp) // spacing below, optional
+                color = if (titleColor != Color.Unspecified) titleColor else extendedColors.highlight,
+                modifier = Modifier.padding(bottom = 2.dp)
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
+                    color = extendedColors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp) // <<< padding INSIDE
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
 
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = extendedColors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -109,28 +126,28 @@ fun ItemRowBase(
                 Icon(
                     imageVector = Icons.Filled.MoreHoriz,
                     contentDescription = "Open Actions Menu",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = extendedColors.accent
                 )
             }
 
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
-                    text = { Text("Edit") },
+                    text = { Text("Edit", color = extendedColors.textPrimary) },
                     onClick = { menuExpanded = false; onEditClick() },
-                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = "Edit") }
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = "Edit", tint = extendedColors.accent) }
                 )
 
                 // Show Add Copy only when provided
                 if (onAddItemCopyClick != null) {
                     DropdownMenuItem(
-                        text = { Text("Add Copy") },
+                        text = { Text("Add Copy", color = extendedColors.textPrimary) },
                         onClick = { menuExpanded = false; onAddItemCopyClick() },
-                        leadingIcon = { Icon(Icons.Filled.CopyAll, contentDescription = "Add Copy") }
+                        leadingIcon = { Icon(Icons.Filled.CopyAll, contentDescription = "Add Copy", tint = extendedColors.accent) }
                     )
                 }
 
                 DropdownMenuItem(
-                    text = { Text("Copy") },
+                    text = { Text("Copy", color = extendedColors.textPrimary) },
                     onClick = {
                         menuExpanded = false
                         scope.launch {
@@ -140,14 +157,15 @@ fun ItemRowBase(
                             Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = "Copy") }
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = extendedColors.accent) }
                 )
 
                 if (tooltip.isNotBlank()) {
+                    HorizontalDivider(color = extendedColors.divider, thickness = 1.dp)
                     DropdownMenuItem(
-                        text = { Text("Show Details") },
+                        text = { Text("Show Details", color = extendedColors.textAccent) },
                         onClick = { menuExpanded = false; showTooltip = true },
-                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = "Info") }
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = "Info", tint = extendedColors.textLink) }
                     )
                 }
             }
@@ -161,15 +179,20 @@ fun ItemRowBase(
             ) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = extendedColors.accent,
                     tonalElevation = 8.dp,
                     modifier = Modifier
                         .padding(4.dp)
                         .wrapContentSize()
+                        .border(
+                            width = 2.dp,
+                            color = extendedColors.border,
+                            shape = RoundedCornerShape(8.dp)
+                        )
                 ) {
                     Text(
                         text = tooltip,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = Color.White,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(8.dp)
                     )

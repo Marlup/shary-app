@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.services.CloudService
+import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
@@ -31,21 +32,6 @@ data class AuthLogForm(
     val password: String = "",
     val passwordConfirm: String = ""
 )
-
-/**
- * One-shot events that the UI can observe.
- * These represent important transitions or results,
- * separate from the continuous state (like loading).
- */
-sealed interface AuthenticationEvent {
-    data object Success : AuthenticationEvent
-    data object CloudSignedOut : AuthenticationEvent
-    data object UserRegisteredInCloud : AuthenticationEvent
-    data object UserNotRegisteredInCloud : AuthenticationEvent
-    data class CloudAnonymousReady(val uid: String) : AuthenticationEvent
-    data class CloudTokenRefreshed(val token: String) : AuthenticationEvent
-    data class Error(val message: String) : AuthenticationEvent
-}
 
 /**
  * AuthenticationViewModel
@@ -120,9 +106,6 @@ class AuthenticationViewModel @Inject constructor(
     }
 
     // -------------------- Entry helpers for splash/navigation --------------------
-
-    /** Checks if encrypted credentials exist locally */
-    fun isCredentialsActive(context: Context) = authService.isCredentialsActive(context)
 
     /** Checks if signature file exists locally */
     fun isSignatureActive(context: Context) = authService.isSignatureActive(context)

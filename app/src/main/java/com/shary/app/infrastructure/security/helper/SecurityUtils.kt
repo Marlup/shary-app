@@ -6,10 +6,13 @@ import android.util.Base64
 import android.util.Log
 import com.shary.app.core.constants.Constants.PATH_AUTHENTICATION
 import com.shary.app.core.constants.Constants.PATH_AUTH_SIGNATURE
+import com.shary.app.infrastructure.services.cloud.Constants.TIME_ALIVE_FIREBASE_DOCUMENT
+
 import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import kotlin.math.log
 
 /**
  * SecurityUtils (v2)
@@ -107,7 +110,9 @@ object SecurityUtils {
     fun getCurrentUtcTimestamp(): Long = System.currentTimeMillis() / 1000
 
     /** Returns a timestamp after [extraTime] seconds (default 1h). */
-    fun getTimestampAfterExpiry(baseTimestamp: Long = getCurrentUtcTimestamp(), extraTime: Int = 3600): Long {
+    fun getTimestampAfterExpiry(baseTimestamp: Long = getCurrentUtcTimestamp(), extraTime: Long = TIME_ALIVE_FIREBASE_DOCUMENT): Long {
+        Log.d("getTimestampAfterExpiry", "baseTimestamp: $baseTimestamp, extraTime: $extraTime")
+        Log.d("getTimestampAfterExpiry", "baseTimestamp + extraTime: ${baseTimestamp + extraTime}")
         return baseTimestamp + extraTime
     }
 

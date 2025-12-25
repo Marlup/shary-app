@@ -62,6 +62,21 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            buildConfigField(
+                "String",
+                "FIREBASE_BASE_URL",
+                "\"https://us-central1-shary-21b61.cloudfunctions.net\""
+            )
+        }
+        release {
+            buildConfigField(
+                "String",
+                "FIREBASE_BASE_URL",
+                "\"https://us-central1-shary-21b61.cloudfunctions.net\""
+            )
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -72,6 +87,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -152,6 +168,8 @@ dependencies {
     implementation(libs.protobuf.javalite)
 
     // Networking
+    // Direct OkHttp dependency is required for direct use of okhttp3.Request
+    implementation(libs.okhttp) // Use the latest stable version
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.serialization)

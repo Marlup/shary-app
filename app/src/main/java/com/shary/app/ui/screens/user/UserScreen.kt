@@ -97,6 +97,7 @@ fun UsersScreen(navController: NavHostController) {
                     lastFlow = AddFlow.NONE
                 }
             }
+            userViewModel.refreshUsers()
         }
     }
 
@@ -107,17 +108,22 @@ fun UsersScreen(navController: NavHostController) {
         }
     }
 
-    // ---- Lifecycle: persist selection into Session via VM ----
+    // ---- Lifecycle: persist selection and refresh data ----
     fun clearEphemeralStates() {
         searchCriteria = ""
     }
+
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP)
-            {
-                userViewModel.cacheUsers(selectedUsers)
-                clearEphemeralStates()
+            when (event) {
+                Lifecycle.Event.ON_START -> userViewModel.refreshUsers()
+                Lifecycle.Event.ON_STOP -> {
+                    userViewModel.cacheUsers(selectedUsers)
+                    clearEphemeralStates()
+                }
+                else -> {}
             }
         }
         val lifecycle = lifecycleOwner.value.lifecycle
@@ -381,4 +387,3 @@ fun UsersScreen(navController: NavHostController) {
         )
     }
 }
-

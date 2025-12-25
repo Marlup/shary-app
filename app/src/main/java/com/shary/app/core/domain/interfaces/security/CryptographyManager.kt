@@ -2,8 +2,8 @@ package com.shary.app.core.domain.interfaces.security
 
 import android.content.Context
 import com.shary.app.core.domain.interfaces.states.Identity
-import com.shary.app.core.domain.security.Box
 import com.shary.app.core.domain.types.valueobjects.Purpose
+import com.shary.app.core.domain.types.valueobjects.Sealed
 import org.json.JSONObject
 
 interface CryptographyManager {
@@ -31,7 +31,7 @@ interface CryptographyManager {
     fun verifyDetached(message: ByteArray, signature: ByteArray, publicKey: ByteArray): Boolean
     fun deriveIdentity(username: String, password: CharArray, appId: String): Identity
     fun openFrom(
-        sealed: Box.Sealed,
+        sealedBox: Sealed,
         senderEphPublicOrStatic: ByteArray,
         username: String,
         password: CharArray,
@@ -47,7 +47,7 @@ interface CryptographyManager {
         appId: String,
         nonce: ByteArray,
         aad: ByteArray? = null
-    ): Box.Sealed
+    ): Sealed
 
     /**
      * Encrypt a JSON credentials object using the manager’s **official** storage scheme.

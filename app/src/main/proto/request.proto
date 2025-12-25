@@ -4,11 +4,14 @@ option java_package = "com.shary.app";
 option java_multiple_files = true;
 
 import "field.proto";
+import "user.proto";
 
 message Request {
   string id = 1;
   repeated Field fields = 2;
-  int64 dateAdded = 3;
+  User sender = 3;
+  repeated User recipients = 4;
+  int64 dateAdded = 5;
 }
 
 message RequestList {

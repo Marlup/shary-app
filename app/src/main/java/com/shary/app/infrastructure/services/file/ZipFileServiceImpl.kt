@@ -73,8 +73,8 @@ class ZipFileServiceImpl(
         }
     }
 
-    override suspend fun getFieldsFromJson(filename: File): Map<String, String> = withContext(Dispatchers.IO) {
-        val json = extractTextEntry(filename, "content.json") ?: return@withContext emptyMap()
+    override suspend fun getFieldsFromJson(file: File): Map<String, String> = withContext(Dispatchers.IO) {
+        val json = extractTextEntry(file, "content.json") ?: return@withContext emptyMap()
         runCatching {
             val root = JSONObject(json)
             val fieldsObj = root.optJSONObject("fields") ?: return@runCatching emptyMap<String, String>()
@@ -121,6 +121,7 @@ class ZipFileServiceImpl(
     override fun isZipFile(uri: Uri): Boolean {
         val mime = getMimeType(uri)
         if (mime == "application/zip" || mime == "application/x-zip-compressed") return true
+
         // Fallback by extension if MIME is missing/wrong
         val name = getFileNameFromUri(uri)?.lowercase() ?: return false
         return name.endsWith(".zip")
@@ -130,7 +131,6 @@ class ZipFileServiceImpl(
     override fun deletePrivateFile(file: File): Boolean =
         runCatching { file.delete() }.getOrDefault(false)
 
-    // infrastructure/services/file/ZipFileServiceImpl.kt
     override suspend fun createSharyZip(
         fields: List<FieldDomain>,
         metadata: Map<String, String>,
@@ -192,7 +192,6 @@ class ZipFileServiceImpl(
         }
     }
 
-    // copiar Json desde SAF a sandbox privado
     /** Copy File from SAF to private sandbox */
     override fun loadJsonFromUri(uri: Uri): File? {
         return try {
@@ -206,11 +205,6 @@ class ZipFileServiceImpl(
             e.printStackTrace()
             null
         }
-    }
-
-
-    fun buildMetaFile(mode: DataFileMode): String {
-        return "mode=${DataFileMode.toString(mode)}"
     }
 
     private suspend fun extractTextEntry(file: File, fileName: String): String? =
@@ -266,7 +260,7 @@ class ZipFileServiceImpl(
         val dot = base.lastIndexOf('.')
         val id = UUID.randomUUID().toString().take(8)
         return if (dot > 0) {
-            val name = base.substring(0, dot)
+            val name = base.take(dot)
             val ext = base.substring(dot)
             "${name}_$id$ext"
         } else {

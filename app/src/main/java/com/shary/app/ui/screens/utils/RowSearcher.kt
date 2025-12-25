@@ -17,9 +17,13 @@ fun <A> RowSearcher(
     currentAttribute: A,
     onAttributeChange: (A) -> Unit,
     availableAttributes: List<A>,
-    resolveOptionText: (A) -> String
+    resolveOptionText: (A) -> String,
+    modifier: Modifier = Modifier
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
         val optionText = resolveOptionText(currentAttribute)
 
         TextField(
@@ -32,7 +36,7 @@ fun <A> RowSearcher(
                 )
             },
             modifier = Modifier
-                .fillMaxWidth(0.6f)
+                .fillMaxWidth(1f)
                 .padding(vertical = 4.dp, horizontal = 4.dp),
             singleLine = true,
             maxLines = 1

@@ -18,7 +18,7 @@ object Constants {
     const val DEFAULT_SECRET_LENGTH = 16
 
     // Time values
-    const val TIME_ALIVE_DOCUMENT: Long = 24 * 60 * 60 // 3600s
+    const val TIME_ALIVE_DOCUMENT: Long = 24 * 60 * 60 // 86400
 
     // Formats
     val FIELD_HEADERS = arrayOf("key", "value", "creation_date")
@@ -44,7 +44,8 @@ object Constants {
     const val COLLECTION_SHARE_NAME = "sharing"
     const val SMTP_SSL_PORT = 465
     const val SMTP_TLS_PORT = 587
-    const val baseEndpoint = "http://$BACKEND_HOST:$BACKEND_PORT/$BACKEND_APP_ID/$NAME_GC_LOCATION_HOST"
+    //const val baseEndpoint = "http://$BACKEND_HOST:$BACKEND_PORT/$BACKEND_APP_ID/$NAME_GC_LOCATION_HOST"
+    const val baseEndpoint = "us-central1-shary-21b61.cloudfunctions.net"
     const val endpointGetPubKey = "$baseEndpoint/get_pubKey"
     const val endpointStoreUser = "$baseEndpoint/store_user"
     const val endpointDeleteUser = "$baseEndpoint/delete_user"
