@@ -192,7 +192,12 @@ class FieldViewModel @Inject constructor(
     }
 
     fun setSelectedFields() {
-        val selectedFields = _selectedFields.value.distinctBy { it.key.lowercase() }
+        setSelectedFields(_selectedFields.value)
+    }
+
+    fun setSelectedFields(fields: List<FieldDomain>) {
+        val selectedFields = fields.distinctBy { it.key.lowercase() }
+        _selectedFields.value = selectedFields
         cacheSelection.cacheFields(selectedFields) // <— persistencia cross-screen
     }
 

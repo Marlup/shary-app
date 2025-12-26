@@ -33,7 +33,9 @@ object Functions {
         val json = JSONObject()
         json.put("mode", "request")
         json.put("sender", sender)
-        json.put("keys", fields.forEach { field -> field.key })
+        val keys = org.json.JSONArray()
+        fields.forEach { field -> keys.put(field.key) }
+        json.put("keys", keys)
         return json.toString(4)
     }
 
