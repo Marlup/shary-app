@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -31,18 +33,27 @@ class RequestViewModel @Inject constructor(
     private val cloudService: CloudService
 ) : ViewModel() {
 
-    private val _requests = MutableStateFlow<List<RequestDomain>>(emptyList())
-    val requests: StateFlow<List<RequestDomain>> = _requests.asStateFlow()
+    enum class RequestListMode {
+        RECEIVED,
+        SENT
+    }
+
+    private val _listMode = MutableStateFlow(RequestListMode.RECEIVED)
+    val listMode: StateFlow<RequestListMode> = _listMode.asStateFlow()
+
+    val receivedRequests: StateFlow<List<RequestDomain>> =
+        requestRepository.getReceivedRequests()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val sentRequests: StateFlow<List<RequestDomain>> =
+        requestRepository.getSentRequests()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _events = MutableSharedFlow<RequestEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<RequestEvent> = _events.asSharedFlow()
 
-    fun refreshRequests() {
-        viewModelScope.launch {
-            requestRepository.getAllRequests().collect { requests ->
-                _requests.value = requests
-            }
-        }
+    fun setListMode(mode: RequestListMode) {
+        _listMode.value = mode
     }
 
     /**
@@ -103,7 +114,7 @@ class RequestViewModel @Inject constructor(
                         )
 
                         // Save request
-                        requestRepository.saveRequest(request)
+                        requestRepository.saveReceivedRequest(request)
 
                         matchedFields.size
                     }
@@ -112,7 +123,6 @@ class RequestViewModel @Inject constructor(
 
             result.onSuccess { matchedCount ->
                 _events.tryEmit(RequestEvent.FetchedFromCloud(matchedCount))
-                refreshRequests()
             }.onFailure { e ->
                 Log.e("RequestViewModel", "Error fetching requests from cloud: ${e.message}")
                 _events.tryEmit(RequestEvent.FetchError(e))
