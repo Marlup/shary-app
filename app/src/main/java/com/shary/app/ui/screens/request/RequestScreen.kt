@@ -52,7 +52,14 @@ fun RequestsScreen(navController: NavHostController) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Local working list of requested fields (Domain)
-    val requestFields by requestViewModel.requests.collectAsState()
+    val listMode by requestViewModel.listMode.collectAsState()
+    val receivedRequests by requestViewModel.receivedRequests.collectAsState()
+    val sentRequests by requestViewModel.sentRequests.collectAsState()
+    val requestFields = if (listMode == RequestViewModel.RequestListMode.SENT) {
+        sentRequests
+    } else {
+        receivedRequests
+    }
 
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -87,10 +94,10 @@ fun RequestsScreen(navController: NavHostController) {
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> requestViewModel.refreshRequests()
+                Lifecycle.Event.ON_START -> Unit
                 Lifecycle.Event.ON_STOP -> {
                     // Persist a Request built from the current local list
-                    if (requestFields.isNotEmpty()) {
+                    if (listMode == RequestViewModel.RequestListMode.RECEIVED && requestFields.isNotEmpty()) {
                         fieldViewModel.setSelectedFields()
                     }
                 }
@@ -115,6 +122,8 @@ fun RequestsScreen(navController: NavHostController) {
             )
         },
         floatingActionButton = {
+            val selectionEnabled = listMode == RequestViewModel.RequestListMode.RECEIVED
+            val selectionAvailable = selectionEnabled && selectedFields.isNotEmpty()
 
             HorizontalDivider(thickness = 1.dp)
 
@@ -132,7 +141,7 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     CompactActionButton(
                         onClick = {
-                            if (selectedFields.isNotEmpty()) {
+                            if (selectionAvailable) {
                                 fieldViewModel.deleteFields(selectedFields)
                                 fieldViewModel.clearSelectedFields()
                                 snackbarMessage = "Deleted ${selectedFields.size} fields"
@@ -141,7 +150,7 @@ fun RequestsScreen(navController: NavHostController) {
                         backgroundColor = colorScheme.error,
                         icon = Icons.Default.Delete,
                         contentDescription = "Delete Fields",
-                        enabled = selectedFields.isNotEmpty()
+                        enabled = selectionAvailable
                     )
                 }
 
@@ -155,7 +164,8 @@ fun RequestsScreen(navController: NavHostController) {
                         onClick = { openAddDialog = true },
                         icon = Icons.Default.Add,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Add Field"
+                        contentDescription = "Add Field",
+                        enabled = selectionEnabled
                     )
 
                     CompactActionButton(
@@ -169,14 +179,16 @@ fun RequestsScreen(navController: NavHostController) {
                         },
                         icon = Icons.Default.CloudDownload,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Fetch Requests from Cloud"
+                        contentDescription = "Fetch Requests from Cloud",
+                        enabled = selectionEnabled
                     )
 
                     CompactActionButton(
                         onClick = { navController.navigate(Screen.Users.route) },
                         icon = Icons.Default.Person,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Send to Users"
+                        contentDescription = "Send to Users",
+                        enabled = selectionEnabled
                     )
                 }
 
@@ -195,7 +207,7 @@ fun RequestsScreen(navController: NavHostController) {
                         icon = Icons.Default.AssignmentTurnedIn,
                         backgroundColor = colorScheme.tertiary,
                         contentDescription = "Summary",
-                        enabled = selectedFields.isNotEmpty() && userViewModel.anyCachedUser()
+                        enabled = selectionAvailable && userViewModel.anyCachedUser()
                     )
                 }
             }
@@ -210,6 +222,27 @@ fun RequestsScreen(navController: NavHostController) {
                 .fillMaxHeight(0.90f),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                SegmentedButton(
+                    selected = listMode == RequestViewModel.RequestListMode.RECEIVED,
+                    onClick = { requestViewModel.setListMode(RequestViewModel.RequestListMode.RECEIVED) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                ) {
+                    Text("Received Requests")
+                }
+                SegmentedButton(
+                    selected = listMode == RequestViewModel.RequestListMode.SENT,
+                    onClick = { requestViewModel.setListMode(RequestViewModel.RequestListMode.SENT) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ) {
+                    Text("Sent Requests")
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -244,6 +277,7 @@ fun RequestsScreen(navController: NavHostController) {
                         key = { _, request -> request.dateAdded } // stable key
                     ) { index, request ->
                         val isSelected = request.fields.isNotEmpty() && request.fields.all { it in selectedFields }
+                        val selectionEnabled = listMode == RequestViewModel.RequestListMode.RECEIVED
 
                         // background colors
                         val backgroundColor = when {
@@ -260,17 +294,20 @@ fun RequestsScreen(navController: NavHostController) {
                             colors = CardDefaults.elevatedCardColors(
                                 containerColor = backgroundColor
                             ),
+                            enabled = selectionEnabled,
                             onClick = {
                                 // If all fields in the request are already selected, unselect them all.
                                 // Otherwise, select all of them.
-                                if (isSelected) {
-                                    request.fields.forEach {
-                                        fieldViewModel.toggleFieldSelection(it) // Will unselect
-                                    }
-                                } else {
-                                    request.fields.forEach {
-                                        if (it !in selectedFields) {
-                                            fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
+                                if (selectionEnabled) {
+                                    if (isSelected) {
+                                        request.fields.forEach {
+                                            fieldViewModel.toggleFieldSelection(it) // Will unselect
+                                        }
+                                    } else {
+                                        request.fields.forEach {
+                                            if (it !in selectedFields) {
+                                                fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
+                                            }
                                         }
                                     }
                                 }

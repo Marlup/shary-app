@@ -18,17 +18,33 @@ class RequestRepositoryImpl @Inject constructor(
     private val codec: FieldCodec
 ) : RequestRepository {
 
-    override suspend fun getAllRequests(): Flow<List<RequestDomain>> {
+    override fun getReceivedRequests(): Flow<List<RequestDomain>> {
         return dataStore.data.map { requestProtoList ->
-            requestProtoList.requestsList.map { it.toDomain(codec) }
+            (requestProtoList.receivedRequestsList + requestProtoList.requestsList)
+                .map { it.toDomain(codec) }
         }
     }
 
-    override suspend fun saveRequest(request: RequestDomain) {
+    override fun getSentRequests(): Flow<List<RequestDomain>> {
+        return dataStore.data.map { requestProtoList ->
+            requestProtoList.sentRequestsList.map { it.toDomain(codec) }
+        }
+    }
+
+    override suspend fun saveReceivedRequest(request: RequestDomain) {
         val encrypted = request.toProto(codec)
         dataStore.updateData { current ->
             current.toBuilder()
-                .addRequests(encrypted)
+                .addReceivedRequests(encrypted)
+                .build()
+        }
+    }
+
+    override suspend fun saveSentRequest(request: RequestDomain) {
+        val encrypted = request.toProto(codec)
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .addSentRequests(encrypted)
                 .build()
         }
     }

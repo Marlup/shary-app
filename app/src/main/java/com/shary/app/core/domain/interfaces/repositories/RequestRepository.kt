@@ -4,6 +4,8 @@ import com.shary.app.core.domain.models.RequestDomain
 import kotlinx.coroutines.flow.Flow
 
 interface RequestRepository {
-    suspend fun getAllRequests(): Flow<List<RequestDomain>>
-    suspend fun saveRequest(request: RequestDomain)
+    fun getReceivedRequests(): Flow<List<RequestDomain>>
+    fun getSentRequests(): Flow<List<RequestDomain>>
+    suspend fun saveReceivedRequest(request: RequestDomain)
+    suspend fun saveSentRequest(request: RequestDomain)
 }

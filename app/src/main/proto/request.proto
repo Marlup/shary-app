@@ -16,4 +16,6 @@ message Request {
 
 message RequestList {
   repeated Request requests = 1;
+  repeated Request received_requests = 2;
+  repeated Request sent_requests = 3;
 }
