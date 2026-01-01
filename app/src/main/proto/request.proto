@@ -9,11 +9,13 @@ import "user.proto";
 message Request {
   string id = 1;
   repeated Field fields = 2;
-  User sender = 3;
+  User user = 3;
   repeated User recipients = 4;
   int64 dateAdded = 5;
 }
 
 message RequestList {
   repeated Request requests = 1;
+  repeated Request receivedRequests = 2;
+  repeated Request sentRequests = 3;
 }

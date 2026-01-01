@@ -7,7 +7,6 @@ import java.io.File
 
 
 interface JsonFileService {
-    suspend fun getModeFromJson(file: File): DataFileMode?
     suspend fun getFieldsFromJson(file: File): Map<String, String>
     suspend fun validateJsonStructure(file: File): Boolean
     suspend fun copyJsonToPrivateStorage(uri: Uri): File?

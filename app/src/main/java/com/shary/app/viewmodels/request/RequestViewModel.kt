@@ -4,12 +4,14 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.events.RequestEvent
+import com.shary.app.core.domain.interfaces.repositories.RequestRepository
+import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.models.UserDomain
-import com.shary.app.core.domain.interfaces.repositories.FieldRepository
-import com.shary.app.core.domain.interfaces.repositories.RequestRepository
-import com.shary.app.core.domain.interfaces.services.CloudService
+import com.shary.app.core.domain.types.enums.RequestListMode
+import com.shary.app.ui.screens.request.RequestsScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +21,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -27,92 +32,142 @@ import java.time.Instant
 @HiltViewModel
 class RequestViewModel @Inject constructor(
     private val requestRepository: RequestRepository,
-    private val fieldRepository: FieldRepository,
+    private val cacheSelection: CacheService,
     private val cloudService: CloudService
 ) : ViewModel() {
 
-    private val _requests = MutableStateFlow<List<RequestDomain>>(emptyList())
-    val requests: StateFlow<List<RequestDomain>> = _requests.asStateFlow()
+    private val _listMode = MutableStateFlow(RequestListMode.RECEIVED)
+    val listMode: StateFlow<RequestListMode> = _listMode.asStateFlow()
+
+    private val _draftFields = MutableStateFlow<List<FieldDomain>>(emptyList())
+    private val _draftRequest = MutableStateFlow(RequestDomain.initialize())
+    val draftFields: StateFlow<List<FieldDomain>> = _draftFields.asStateFlow()
+    val draftRequest: StateFlow<RequestDomain> = _draftRequest.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    val receivedRequests: StateFlow<List<RequestDomain>> =
+        requestRepository.getReceivedRequests()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val sentRequests: StateFlow<List<RequestDomain>> =
+        requestRepository.getSentRequests()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _events = MutableSharedFlow<RequestEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<RequestEvent> = _events.asSharedFlow()
 
-    fun refreshRequests() {
-        viewModelScope.launch {
-            requestRepository.getAllRequests().collect { requests ->
-                _requests.value = requests
-            }
+    // -------------------- Draft Request --------------------
+
+    fun getCachedRequests(): List<RequestDomain> = cacheSelection.getRequests()
+    fun getCachedDraftRequest(): RequestDomain = cacheSelection.getDraftRequest()
+    fun anyRequestCached() = cacheSelection.isAnyRequestCached()
+    //fun anyDraftRequestCached() = cacheSelection.isAnyDraftRequestCached()
+
+
+    fun setListMode(mode: RequestListMode) {
+        _listMode.value = mode
+    }
+
+    // -------------------- Draft Fields --------------------
+
+    fun getDraftFields(): List<FieldDomain> = cacheSelection.getDraftFields()
+    fun anyDraftFieldCached() = cacheSelection.isAnyDraftFieldCached()
+
+    fun addDraftField(field: FieldDomain) {
+        Log.d("RequestViewModel", "[3] Adding draft field: $field")
+        _draftFields.update { current ->
+            val exists = current.any { it.key.equals(field.key, ignoreCase = true) }
+            if (exists) current else current + field
         }
     }
 
+    fun removeDraftFields(fields: List<FieldDomain>) {
+        if (fields.isEmpty()) return
+        val toRemove = fields.toSet()
+        _draftFields.update { current -> current.filterNot { it in toRemove } }
+    }
+
+    fun clearDraftFields() {
+        _draftFields.value = emptyList()
+    }
+
+    fun updateDraftRequest() {
+        Log.d("RequestViewModel", "[3] Before Adding draft request: ${_draftFields.value}")
+        if (draftFields.value.isNotEmpty()){
+            cacheSelection.cacheDraftRequest(
+                RequestDomain.initialize().copy(fields = draftFields.value)
+            )
+            Log.d("RequestViewModel", "[4] After Adding draft request: ${_draftFields.value}")
+        }
+    }
+
+    fun setDraftFields() {
+        setDraftFields(_draftFields.value)
+    }
+
+    fun setDraftFields(fields: List<FieldDomain>) {
+        Log.d("RequestViewModel", "[3] Before Updating draft request: ${_draftFields.value}")
+        val draftFields = fields.distinctBy { it.key.lowercase() }
+        _draftFields.value = draftFields
+        Log.d("RequestViewModel", "[4] After Updating draft fields: ${_draftFields.value}")
+        cacheSelection.cacheDraftFields(draftFields)
+    }
+
     /**
-     * Fetches request data from Firebase, processes it, and attempts to match with local fields.
-     * If fields exist locally, creates a RequestDomain and saves it.
+     * Fetches request data from Firebase and saves it as a received request.
      */
     fun fetchRequestsFromCloud(username: String, currentUser: UserDomain) {
+        Log.d("RequestViewModel", "[3] Fetching requests from cloud for user: $username")
         viewModelScope.launch {
+            _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    val fetchResult = cloudService.fetchData(username)
+                    val requestData = cloudService.fetchRequestData(username)
 
-                    fetchResult.getOrThrow().let { jsonString ->
+                    requestData.getOrThrow().let { jsonString ->
                         Log.d("RequestViewModel", "Fetched request data: $jsonString")
                         val jsonObject = JSONObject(jsonString)
 
-                        // Check if it's a request by looking for "mode" field
-                        val mode = jsonObject.optString("mode", "")
-                        if (mode != "request") {
-                            throw IllegalStateException("Fetched data is not a request")
-                        }
-
-                        val senderUsername = jsonObject.optString("sender", "")
+                        // Extract user
+                        val username = jsonObject.optString("user", "")
+                        // Extract keys
                         val keysJson = jsonObject.optJSONArray("keys")
 
+                        Log.d("RequestViewModel", "[4] Fetched keys: $keysJson")
                         if (keysJson == null || keysJson.length() == 0) {
                             throw IllegalStateException("No keys found in request")
                         }
-
-                        // Extract requested keys
-                        val requestedKeys = mutableListOf<String>()
+                        // Extract keys
+                        val requestedFields = mutableListOf<FieldDomain>()
                         for (i in 0 until keysJson.length()) {
-                            requestedKeys.add(keysJson.getString(i))
+                            requestedFields.add(
+                                FieldDomain.initialize().copy(key = keysJson.getString(i))
+                            )
                         }
-
-                        // Get all local fields
-                        val allFields = mutableListOf<FieldDomain>()
-                        fieldRepository.getAllFields().collect { fields ->
-                            allFields.addAll(fields)
-                        }
-
-                        // Match requested keys with local fields
-                        val matchedFields = allFields.filter { field ->
-                            requestedKeys.contains(field.key)
-                        }
-
-                        if (matchedFields.isEmpty()) {
-                            throw IllegalStateException("No matching fields found locally")
-                        }
+                        Log.d("RequestViewModel", "[5] Fetched keys: $requestedFields")
 
                         // Create RequestDomain
-                        val sender = UserDomain(username = senderUsername)
+                        val user = UserDomain(username = username)
                         val request = RequestDomain(
-                            fields = matchedFields,
-                            sender = sender,
+                            fields = requestedFields,
+                            user = user,
                             recipients = listOf(currentUser),
                             dateAdded = Instant.now()
                         )
 
                         // Save request
-                        requestRepository.saveRequest(request)
+                        requestRepository.saveReceivedRequest(request)
 
-                        matchedFields.size
+                        requestedFields.size
                     }
                 }
             }
 
+            _isLoading.value = false
             result.onSuccess { matchedCount ->
                 _events.tryEmit(RequestEvent.FetchedFromCloud(matchedCount))
-                refreshRequests()
             }.onFailure { e ->
                 Log.e("RequestViewModel", "Error fetching requests from cloud: ${e.message}")
                 _events.tryEmit(RequestEvent.FetchError(e))

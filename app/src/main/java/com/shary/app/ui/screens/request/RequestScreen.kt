@@ -1,5 +1,6 @@
 package com.shary.app.ui.screens.request
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 //import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -24,8 +26,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
+import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.reset
+import com.shary.app.core.domain.types.enums.RequestListMode
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
@@ -45,18 +49,25 @@ fun RequestsScreen(navController: NavHostController) {
     // ---------------- ViewModels ----------------
     val fieldViewModel: FieldViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
-    val emailViewModel: EmailViewModel = hiltViewModel()
-    val cloudViewModel: CloudViewModel = hiltViewModel()
+    //val emailViewModel: EmailViewModel = hiltViewModel()
+    //val cloudViewModel: CloudViewModel = hiltViewModel()
     val requestViewModel: RequestViewModel = hiltViewModel()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Local working list of requested fields (Domain)
-    val requestFields by requestViewModel.requests.collectAsState()
+    // ---------------- States from RequestViewModel ----------------
+    val listMode by requestViewModel.listMode.collectAsState()
+    val draftFields by requestViewModel.draftFields.collectAsState()
+    val receivedRequests by requestViewModel.receivedRequests.collectAsState()
+    val sentRequests by requestViewModel.sentRequests.collectAsState()
+    val requestFields = if (listMode == RequestListMode.SENT) {
+        sentRequests
+    } else {
+        receivedRequests
+    }
 
     var openAddDialog by remember { mutableStateOf(false) }
-    var snackbarMessage by remember { mutableStateOf<String?>(null) }
-    var openSendDialog by remember { mutableStateOf(false) }
+    var snackbarMessage by remember { mutableStateOf<String?>("") }
 
     // ---- Checked rows (Domain) ----
     val selectedFields by fieldViewModel.selectedFields.collectAsState()
@@ -64,7 +75,7 @@ fun RequestsScreen(navController: NavHostController) {
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = null
+            snackbarMessage = ""
         }
     }
 
@@ -72,10 +83,10 @@ fun RequestsScreen(navController: NavHostController) {
     LaunchedEffect(Unit) {
         requestViewModel.events.collect { event ->
             when (event) {
-                is com.shary.app.core.domain.interfaces.events.RequestEvent.FetchedFromCloud -> {
+                is RequestEvent.FetchedFromCloud -> {
                     snackbarMessage = "Fetched and matched ${event.matchedCount} fields from request"
                 }
-                is com.shary.app.core.domain.interfaces.events.RequestEvent.FetchError -> {
+                is RequestEvent.FetchError -> {
                     snackbarMessage = "Fetch error: ${event.throwable.message}"
                 }
             }
@@ -86,12 +97,13 @@ fun RequestsScreen(navController: NavHostController) {
 
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
+            Log.d("RequestsScreen", "[1] Before updateDraftRequest()")
             when (event) {
-                Lifecycle.Event.ON_START -> requestViewModel.refreshRequests()
+                Lifecycle.Event.ON_START -> Unit
                 Lifecycle.Event.ON_STOP -> {
-                    // Persist a Request built from the current local list
-                    if (requestFields.isNotEmpty()) {
-                        fieldViewModel.setSelectedFields()
+                    if (listMode == RequestListMode.RECEIVED) {
+                        Log.d("RequestsScreen", "[2] Before updateDraftRequest()")
+                        requestViewModel.setDraftFields()
                     }
                 }
                 else -> {}
@@ -115,6 +127,8 @@ fun RequestsScreen(navController: NavHostController) {
             )
         },
         floatingActionButton = {
+            val selectionEnabled = listMode == RequestListMode.RECEIVED
+            val selectionAvailable = selectionEnabled && selectedFields.isNotEmpty()
 
             HorizontalDivider(thickness = 1.dp)
 
@@ -132,16 +146,17 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     CompactActionButton(
                         onClick = {
-                            if (selectedFields.isNotEmpty()) {
+                            if (selectionAvailable) {
                                 fieldViewModel.deleteFields(selectedFields)
                                 fieldViewModel.clearSelectedFields()
+                                requestViewModel.clearDraftFields()
                                 snackbarMessage = "Deleted ${selectedFields.size} fields"
                             }
                         },
                         backgroundColor = colorScheme.error,
                         icon = Icons.Default.Delete,
                         contentDescription = "Delete Fields",
-                        enabled = selectedFields.isNotEmpty()
+                        enabled = selectionAvailable
                     )
                 }
 
@@ -155,13 +170,16 @@ fun RequestsScreen(navController: NavHostController) {
                         onClick = { openAddDialog = true },
                         icon = Icons.Default.Add,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Add Field"
+                        contentDescription = "Add Field",
+                        enabled = selectionEnabled
                     )
 
                     CompactActionButton(
                         onClick = {
                             val currentUser = userViewModel.getOwner()
+                            Log.d("RequestsScreen", "[1] currentUser: $currentUser")
                             if (currentUser.username.isNotEmpty()) {
+                                Log.d("RequestsScreen", "[2] currentUser: $currentUser")
                                 requestViewModel.fetchRequestsFromCloud(currentUser.username, currentUser)
                             } else {
                                 snackbarMessage = "User not logged in"
@@ -169,14 +187,16 @@ fun RequestsScreen(navController: NavHostController) {
                         },
                         icon = Icons.Default.CloudDownload,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Fetch Requests from Cloud"
+                        contentDescription = "Fetch Requests from Cloud",
+                        enabled = selectionEnabled
                     )
 
                     CompactActionButton(
                         onClick = { navController.navigate(Screen.Users.route) },
                         icon = Icons.Default.Person,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Send to Users"
+                        contentDescription = "Send to Users",
+                        enabled = selectionEnabled
                     )
                 }
 
@@ -188,14 +208,18 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     CompactActionButton(
                         onClick = {
-                            if (userViewModel.anyCachedUser() && selectedFields.isNotEmpty()) {
-                                navController.navigate(Screen.Summary.route)
+                            Log.d("RequestsScreen", "[5] anyDraftRequestCached: ${requestViewModel.anyDraftFieldCached()}")
+                            Log.d("RequestsScreen", "[6] anyDraftRequestCached: ${requestViewModel.anyDraftFieldCached()}")
+                            if (draftFields.isNotEmpty()
+                                && userViewModel.anyCachedUser()) {
+                                requestViewModel.setDraftFields()
+                                navController.navigate(Screen.SummaryRequest.route)
                             }
                         },
                         icon = Icons.Default.AssignmentTurnedIn,
                         backgroundColor = colorScheme.tertiary,
-                        contentDescription = "Summary",
-                        enabled = selectedFields.isNotEmpty() && userViewModel.anyCachedUser()
+                        contentDescription = "Summary: Request",
+                        enabled = draftFields.isNotEmpty() && userViewModel.anyCachedUser()
                     )
                 }
             }
@@ -210,6 +234,31 @@ fun RequestsScreen(navController: NavHostController) {
                 .fillMaxHeight(0.90f),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                SegmentedButton(
+                    selected = listMode == RequestListMode.RECEIVED,
+                    onClick = { requestViewModel.setListMode(RequestListMode.RECEIVED) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                ) {
+                    Text("Received")
+                }
+                SegmentedButton(
+                    selected = listMode == RequestListMode.SENT,
+                    onClick = { requestViewModel.setListMode(RequestListMode.SENT) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ) {
+                    Text("Sent")
+                }
+            }
+
+            // ----------------------------------------------------------------
+            // -------------------- List of Received or Requested Fields --------------------
+            // ----------------------------------------------------------------
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -232,6 +281,8 @@ fun RequestsScreen(navController: NavHostController) {
             HorizontalDivider(thickness = 1.dp, color = Color.Gray)
 
             if (requestFields.isNotEmpty()) {
+                Log.d("RequestsScreen", "requestFields: $requestFields")
+                Log.d("Number of requests", "${requestFields.size}")
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -243,7 +294,9 @@ fun RequestsScreen(navController: NavHostController) {
                         items = requestFields,
                         key = { _, request -> request.dateAdded } // stable key
                     ) { index, request ->
-                        val isSelected = request.fields.isNotEmpty() && request.fields.all { it in selectedFields }
+                        val isSelected =
+                            request.fields.isNotEmpty() && request.fields.all { it in selectedFields }
+                        val selectionEnabled = listMode == RequestListMode.RECEIVED
 
                         // background colors
                         val backgroundColor = when {
@@ -260,17 +313,20 @@ fun RequestsScreen(navController: NavHostController) {
                             colors = CardDefaults.elevatedCardColors(
                                 containerColor = backgroundColor
                             ),
+                            enabled = selectionEnabled,
                             onClick = {
                                 // If all fields in the request are already selected, unselect them all.
                                 // Otherwise, select all of them.
-                                if (isSelected) {
-                                    request.fields.forEach {
-                                        fieldViewModel.toggleFieldSelection(it) // Will unselect
-                                    }
-                                } else {
-                                    request.fields.forEach {
-                                        if (it !in selectedFields) {
-                                            fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
+                                if (selectionEnabled) {
+                                    if (isSelected) {
+                                        request.fields.forEach {
+                                            fieldViewModel.toggleFieldSelection(it) // Will unselect
+                                        }
+                                    } else {
+                                        request.fields.forEach {
+                                            if (it !in selectedFields) {
+                                                fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
+                                            }
                                         }
                                     }
                                 }
@@ -288,7 +344,7 @@ fun RequestsScreen(navController: NavHostController) {
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
-                                    request.fields.joinToString { it.keyAlias.orEmpty() },
+                                    request.fields.joinToString { it.keyAlias },
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.Gray
@@ -308,46 +364,144 @@ fun RequestsScreen(navController: NavHostController) {
                     Text("No requests available", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-        }
 
-        // Add field (for the in-progress request)
-        if (openAddDialog) {
-            AddRequestDialog(
-                onDismiss = { openAddDialog = false },
-                onAddRequest = { key, keyAlias ->
-                    if (key.isNotBlank()) {
-                        val field = FieldDomain(
-                            key = key.trim(),
-                            keyAlias = keyAlias.trim(),
-                            value = "", // requests only need the key; keep value empty
-                            tag = Tag.Unknown,
-                            dateAdded = Instant.now()
-                        )
-                        //requestFields.add(field)
-                        openAddDialog = false
-                        snackbarMessage = "Requested key '$key' added"
-                    } else {
-                        snackbarMessage = "Requested key is required"
+            HorizontalDivider(
+                modifier = Modifier.fillMaxHeight(0.5f),
+                thickness = 1.dp,
+                color = Color.Gray
+            )
+
+            // ----------------------------------------------------------------
+            // -------------------- List of Drafted Fields --------------------
+            // ----------------------------------------------------------------
+
+            Text(
+                "Drafted Fields",
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 8.dp)
+
+                ,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Text(
+                    "Key",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Key Alias",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
+
+            if (draftFields.isNotEmpty()) {
+                Log.d("RequestsScreen", "draftFields: $draftFields")
+                Log.d("Number of requests", "${draftFields.size}")
+                LazyColumn(
+                    modifier = Modifier
+                        //.weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(
+                        items = draftFields,
+                        key = { _, field -> field.dateAdded } // stable key
+                    ) { index, field ->
+                        //val isSelected = field.key.isNotEmpty()
+                        //val selectionEnabled = listMode == RequestViewModel.RequestListMode.RECEIVED
+
+                        // background colors
+                        /*
+                        val backgroundColor = when {
+                            isSelected -> colorScheme.secondaryContainer
+                            index % 2 == 0 -> colorScheme.surface
+                            else -> colorScheme.surfaceVariant
+                        }
+                        */
+
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentHeight(),
+                            //.alpha(if (isSelected) 1f else 0.9f),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = colorScheme.surface
+                            ),
+                            enabled = true,
+                            onClick = {},
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    field.key,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    field.keyAlias.orEmpty(),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
                     }
                 }
-            )
-        }
-
-        // Send (placeholder)
-        if (openSendDialog) {
-            SendRequestDialog(
-                onDismiss = { openSendDialog = false },
-                onSend = {
-                    openSendDialog = false
-                    cloudViewModel.uploadData(
-                        selectedFields,
-                        userViewModel.getOwner(),
-                        userViewModel.getCachedUsers(),
-                        true
-                    )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No drafted fields available", style = MaterialTheme.typography.bodyMedium)
                 }
+            }
+            HorizontalDivider(
+                modifier = Modifier.fillMaxHeight(1.0f),
+                thickness = 1.dp,
+                color = Color.Gray
             )
         }
+    }
+
+    // Add field (for the in-progress request)
+    if (openAddDialog) {
+        AddRequestDialog(
+            onDismiss = { openAddDialog = false },
+            onAddRequest = { key, keyAlias ->
+                Log.d("[1] RequestsScreen", "onAddRequest: $key, $keyAlias")
+                if (key.isNotBlank()) {
+                    Log.d("[2] RequestsScreen", "onAddRequest: $key, $keyAlias")
+                    requestViewModel.addDraftField(FieldDomain.initialize().copy(
+                        key = key.trim(),
+                        value = keyAlias.trim()
+                    ))
+                    openAddDialog = false
+                    snackbarMessage = "Requested key '$key' added"
+                } else {
+                    snackbarMessage = "Requested key is required"
+                }
+            }
+        )
     }
 }

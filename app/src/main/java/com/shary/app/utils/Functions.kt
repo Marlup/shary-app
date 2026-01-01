@@ -29,11 +29,14 @@ object Functions {
         return json.toString(4)
     }
 
-    fun makeJsonStringFromRequestKeys(fields: List<FieldDomain>, sender: String): String {
+    fun makeJsonStringFromRequestKeys(fields: List<FieldDomain>, user: String): String {
         val json = JSONObject()
-        json.put("mode", "request")
-        json.put("sender", sender)
-        json.put("keys", fields.forEach { field -> field.key })
+        json.put("user", user)
+
+        val keys = org.json.JSONArray()
+        fields.forEach { field -> keys.put(field.key) }
+        json.put("keys", keys)
+
         return json.toString(4)
     }
 

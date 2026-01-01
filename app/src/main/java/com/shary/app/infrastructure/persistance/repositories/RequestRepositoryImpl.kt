@@ -1,5 +1,6 @@
 package com.shary.app.infrastructure.persistance.repositories
 
+import android.util.Log
 import androidx.datastore.core.DataStore
 import com.shary.app.RequestList
 import com.shary.app.core.domain.models.RequestDomain
@@ -18,17 +19,34 @@ class RequestRepositoryImpl @Inject constructor(
     private val codec: FieldCodec
 ) : RequestRepository {
 
-    override suspend fun getAllRequests(): Flow<List<RequestDomain>> {
+    override fun getReceivedRequests(): Flow<List<RequestDomain>> {
         return dataStore.data.map { requestProtoList ->
-            requestProtoList.requestsList.map { it.toDomain(codec) }
+            (requestProtoList.receivedRequestsList + requestProtoList.requestsList)
+                .map { it.toDomain(codec) }
         }
     }
 
-    override suspend fun saveRequest(request: RequestDomain) {
+    override fun getSentRequests(): Flow<List<RequestDomain>> {
+        return dataStore.data.map { requestProtoList ->
+            requestProtoList.sentRequestsList.map { it.toDomain(codec) }
+        }
+    }
+
+    override suspend fun saveReceivedRequest(request: RequestDomain) {
+        Log.d("RequestRepositoryImpl", "[6] Saving received request: $request")
         val encrypted = request.toProto(codec)
         dataStore.updateData { current ->
             current.toBuilder()
-                .addRequests(encrypted)
+                .addReceivedRequests(encrypted)
+                .build()
+        }
+    }
+
+    override suspend fun saveSentRequest(request: RequestDomain) {
+        val encrypted = request.toProto(codec)
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .addSentRequests(encrypted)
                 .build()
         }
     }

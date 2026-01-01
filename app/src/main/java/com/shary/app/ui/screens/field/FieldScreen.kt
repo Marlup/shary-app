@@ -222,11 +222,14 @@ fun FieldsScreen(navController: NavHostController) {
                                 onDismissRequest = { expanded = false }) {
                                 DropdownMenuItem(
                                     text = {
-                                        ThemeMenuButton(
-                                            onThemeChosen = { theme ->
-                                                themeViewModel.updateTheme(theme)
-                                            }
-                                        )
+                                        Row() {
+                                            Text("Theme")
+                                            ThemeMenuButton(
+                                                onThemeChosen = { theme ->
+                                                    themeViewModel.updateTheme(theme)
+                                                }
+                                            )
+                                        }
                                     },
                                     onClick = { expanded = false },
                                 )
@@ -364,7 +367,7 @@ fun FieldsScreen(navController: NavHostController) {
                         CompactActionButton(
                             onClick = {
                                 if (userViewModel.anyCachedUser() && selectedFields.isNotEmpty()) {
-                                    navController.navigate(Screen.Summary.route)
+                                    navController.navigate(Screen.SummaryField.route)
                                 }
                             },
                             icon = Icons.Default.AssignmentTurnedIn,

@@ -16,15 +16,18 @@ import com.shary.app.infrastructure.services.cloud.Utils.buildPostRequest
 import com.shary.app.infrastructure.services.cloud.Utils.evaluateStatusCode
 import com.google.firebase.auth.FirebaseAuth
 import com.shary.app.core.domain.interfaces.states.CloudState
+import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.valueobjects.DataPayload
 import com.shary.app.core.domain.types.valueobjects.DeleteUserPayload
 import com.shary.app.core.domain.types.valueobjects.UserPayload
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_DELETE_USER
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_FETCH_PAYLOAD
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_FETCH_REQUEST
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_GET_PUB_KEY
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_PING
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_UPLOAD_PAYLOAD
+import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_UPLOAD_REQUEST
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_ENDPOINT_UPLOAD_USER
 import com.shary.app.infrastructure.services.cloud.Constants.FIREBASE_MAIN_ENTRYPOINT
 import com.shary.app.utils.Functions.buildJsonStringFromFields
@@ -34,7 +37,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -177,7 +179,7 @@ class CloudServiceImpl @Inject constructor(
         Log.d("CloudServiceImpl - doUploadUser", "Username $usernameHash; " +
                     "AuthToken() - ${cloudState.value.token}")
 
-        val url = Constants.FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_UPLOAD_USER
+        val url = FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_UPLOAD_USER
         val request = buildPostRequest(
             url,
             Json.encodeToString(UserPayload.serializer(), payload),
@@ -242,43 +244,57 @@ class CloudServiceImpl @Inject constructor(
     }
 
     /**
-     * Uploads encrypted data (fields or request) to one or more consumers.
+     * Uploads encrypted data fields to one or more recipients.
      */
     override suspend fun uploadData(
         fields: List<FieldDomain>,
         owner: UserDomain,
-        consumers: List<UserDomain>,
-        isRequest: Boolean
+        recipients: List<UserDomain>,
     ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO) {
         ensureAuth()
         if (!isCloudReachable()) return@withContext emptyMap()
-        if (isEmptyArguments(fields, consumers)) return@withContext emptyMap()
-        if (isRequest) doUploadRequest(fields, owner, consumers)
-        else doUploadData(fields, owner, consumers)
+        if (isEmptyArguments(fields, recipients)) return@withContext emptyMap()
+
+        doUploadData(fields, owner, recipients)
     }
 
-    private suspend fun doUploadData(fields: List<FieldDomain>, owner: UserDomain, consumers: List<UserDomain>) =
+    private suspend fun doUploadData(fields: List<FieldDomain>, owner: UserDomain, recipients: List<UserDomain>) =
         withContext(Dispatchers.IO) {
             val dataJson = buildJsonStringFromFields(fields)
             val safeOwnerUsername = safeGetUser(owner.username)
-            val usernames = consumers.map { it.username }
+            val recipients = recipients.map { it.username }
 
-            buildLoad(dataJson, safeOwnerUsername, usernames)
-        }
-
-    private suspend fun doUploadRequest(fields: List<FieldDomain>, owner: UserDomain, consumers: List<UserDomain>) =
-        withContext(Dispatchers.IO) {
-            val safeOwnerUsername = safeGetUser(owner.username)
-            val dataRequestJson = makeJsonStringFromRequestKeys(fields, safeOwnerUsername)
-            val usernames = consumers.map { it.username }
-
-            buildLoad(dataRequestJson, safeOwnerUsername, usernames)
+            buildLoad(dataJson, safeOwnerUsername, recipients, isRequest=false)
         }
 
     /**
-     * Core logic for encrypting data for each consumerUsername and sending via backend.
+     * Uploads encrypted request to one or more recipients.
      */
-    private suspend fun buildLoad(data: String, username: String, consumers: List<String>) =
+    override suspend fun uploadRequest(
+        fields: List<FieldDomain>,
+        owner: UserDomain,
+        recipients: List<UserDomain>,
+    ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO) {
+        ensureAuth()
+        if (!isCloudReachable()) return@withContext emptyMap()
+        if (isEmptyArguments(fields, recipients)) return@withContext emptyMap()
+
+        doUploadRequest(fields, owner, recipients)
+    }
+
+    private suspend fun doUploadRequest(fields: List<FieldDomain>, owner: UserDomain, recipients: List<UserDomain>) =
+        withContext(Dispatchers.IO) {
+            val safeOwnerUsername = safeGetUser(owner.username)
+            val dataRequestJson = makeJsonStringFromRequestKeys(fields, safeOwnerUsername)
+            val recipients = recipients.map { it.username }
+
+            buildLoad(dataRequestJson, safeOwnerUsername, recipients, isRequest=true)
+        }
+
+    /**
+     * Core logic for encrypting data or request-data for each recipientUsername and sending via backend.
+     */
+    private suspend fun buildLoad(data: String, username: String, recipients: List<String>, isRequest: Boolean) =
         withContext(Dispatchers.IO) {
             ensureAuth()
             val safeUsername = safeGetUser(username)
@@ -286,35 +302,40 @@ class CloudServiceImpl @Inject constructor(
             val results = mutableMapOf<String, StatusDataSentDb>()
 
             val client = OkHttpClient()
-            consumers.forEach { consumerUsername ->
-                val consumerHash = hashMessageB64(consumerUsername)
-                val consumerPubKeyB64 = getPubKey(consumerHash)
-                if (consumerPubKeyB64.isEmpty()) {
-                    results[consumerUsername] = StatusDataSentDb.ERROR
+            recipients.forEach { recipientUsername ->
+                val recipientHash = hashMessageB64(recipientUsername)
+                val recipientPubKeyB64 = getPubKey(recipientHash)
+                if (recipientPubKeyB64.isEmpty()) {
+                    results[recipientUsername] = StatusDataSentDb.ERROR
                     return@forEach
                 }
-                val consumerPubKey = base64Decode(consumerPubKeyB64)
-                val aad = "shary:$userHash:$consumerHash".toByteArray(Charsets.UTF_8)
+                val recipientPubKey = base64Decode(recipientPubKeyB64)
+                val aad = "shary:$userHash:$recipientHash".toByteArray(Charsets.UTF_8)
 
                 val encryptedData = cryptographyManager.encryptWithPeerPublic(
                     data.toByteArray(),
-                    consumerPubKey,
+                    recipientPubKey,
                     aad
                 )
                 val payloadData = base64Encode(encryptedData)
                 val (signature, verification) =
-                    makeCredentials(listOf(userHash, consumerHash, hashMessageB64(data)))
+                    makeCredentials(listOf(userHash, recipientHash, hashMessageB64(data)))
 
                 val payload = DataPayload(
                     user = userHash,
-                    recipient = consumerHash,
+                    recipient = recipientHash,
                     creationAt = getCurrentUtcTimestamp(),
                     expiresAt = getTimestampAfterExpiry(),
                     data = payloadData,
                     verification = verification,
                     signature = signature
                 )
-                val url = FIREBASE_MAIN_ENTRYPOINT + FIREBASE_ENDPOINT_UPLOAD_PAYLOAD
+
+                val url = FIREBASE_MAIN_ENTRYPOINT + when {
+                    isRequest -> FIREBASE_ENDPOINT_UPLOAD_REQUEST
+                    else -> FIREBASE_ENDPOINT_UPLOAD_PAYLOAD
+                }
+
                 val request = buildPostRequest(
                     url,
                     Json.encodeToString(DataPayload.serializer(), payload),
@@ -322,11 +343,11 @@ class CloudServiceImpl @Inject constructor(
                 )
                 try {
                     client.newCall(request).execute().use { response ->
-                        results[consumerUsername] = evaluateStatusCode(response.code)
+                        results[recipientUsername] = evaluateStatusCode(response.code)
                     }
                 } catch (e: IOException) {
                     Log.e("CloudServiceImpl", "Upload data exception: ${e.message}")
-                    results[consumerUsername] = StatusDataSentDb.ERROR
+                    results[recipientUsername] = StatusDataSentDb.ERROR
                 }
             }
             results
@@ -379,8 +400,8 @@ class CloudServiceImpl @Inject constructor(
     private suspend fun isCloudReachable(): Boolean =
         cloudState.value.isOnline || sendPing()
 
-    private fun isEmptyArguments(fields: List<FieldDomain>, consumers: List<UserDomain>) =
-        fields.isEmpty() || consumers.isEmpty()
+    private fun isEmptyArguments(fields: List<FieldDomain>, recipients: List<UserDomain>) =
+        fields.isEmpty() || recipients.isEmpty()
 
     /** Returns provided username or fallback to Session.ownerUsername. */
     private fun safeGetUser(username: String?): String =
@@ -396,7 +417,14 @@ class CloudServiceImpl @Inject constructor(
      * Decrypts the data and returns it as a JSON string.
      * Note: Firebase returns the MOST RECENT payload if multiple exist.
      */
-    override suspend fun fetchData(username: String): Result<String> = runCatching {
+    override suspend fun fetchPayloadData(username: String): Result<String> {
+        return fetchdData(username, isRequest = false)
+    }
+    override suspend fun fetchRequestData(username: String): Result<String> {
+        return fetchdData(username, isRequest = true)
+    }
+
+    suspend fun fetchdData(username: String, isRequest: Boolean): Result<String> = runCatching {
         withContext(Dispatchers.IO) {
             // Ensure we have a fresh auth token
             ensureAuth()
@@ -417,7 +445,10 @@ class CloudServiceImpl @Inject constructor(
             val encodedRecipient = URLEncoder.encode(recipientHash, Charsets.UTF_8.name())
 
             // Note: The parameter name is "user" but it represents the recipient
-            val url = "$FIREBASE_MAIN_ENTRYPOINT$FIREBASE_ENDPOINT_FETCH_PAYLOAD?user=$encodedRecipient"
+            val url = FIREBASE_MAIN_ENTRYPOINT + when {
+                isRequest -> FIREBASE_ENDPOINT_FETCH_REQUEST
+                else -> FIREBASE_ENDPOINT_FETCH_PAYLOAD
+            } + "?user=$encodedRecipient"
 
             val request = Request.Builder()
                 .url(url)
@@ -433,7 +464,7 @@ class CloudServiceImpl @Inject constructor(
             val client = OkHttpClient()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    val errorBody = response.body?.string() ?: "No error body"
+                    val errorBody = response.body.string()
                     Log.e("CloudServiceImpl", "Failed to fetch data: ${response.code} - $errorBody")
                     throw IOException("Failed to fetch data: ${response.code} - $errorBody")
                 }
