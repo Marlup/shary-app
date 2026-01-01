@@ -51,34 +51,50 @@ class CloudViewModel @Inject constructor(
     fun uploadData(
         fields: List<FieldDomain>,
         owner: UserDomain,
-        consumers: List<UserDomain>,
-        isRequest: Boolean
+        recipients: List<UserDomain>,
     ) {
         viewModelScope.launch {
             _isLoading.value = true
             val resultMap = runCatching {
                 withContext(Dispatchers.IO) {
                     Log.d("CloudViewModel", "uploadData() - ownerUsername: ${owner.username}")
-                    cloudService.uploadData(fields, owner, consumers, isRequest)
+                    cloudService.uploadData(fields, owner, recipients)
                 }
             }.getOrDefault(emptyMap())
             _isLoading.value = false
-            if (isRequest) {
-                val request = RequestDomain(
-                    fields = fields,
-                    sender = owner,
-                    recipients = consumers,
-                    dateAdded = Instant.now()
-                )
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        requestRepository.saveSentRequest(request)
-                    }
-                }.onFailure { error ->
-                    Log.e("CloudViewModel", "Failed to save sent request: ${error.message}")
-                }
-            }
             _events.tryEmit(CloudEvent.DataUploaded(resultMap))
+        }
+    }
+
+    /** Upload request to the backend. */
+    fun uploadRequest(
+        fields: List<FieldDomain>,
+        owner: UserDomain,
+        recipients: List<UserDomain>,
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val resultMap = runCatching {
+                withContext(Dispatchers.IO) {
+                    Log.d("CloudViewModel", "uploadRequest() - ownerUsername: ${owner.username}")
+                    cloudService.uploadRequest(fields, owner, recipients)
+                }
+            }.getOrDefault(emptyMap())
+            _isLoading.value = false
+            val request = RequestDomain(
+                fields = fields,
+                user = owner,
+                recipients = recipients,
+                dateAdded = Instant.now()
+            )
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    requestRepository.saveSentRequest(request)
+                }
+            }.onFailure { error ->
+                Log.e("CloudViewModel", "Failed to save sent request: ${error.message}")
+            }
+            _events.tryEmit(CloudEvent.RequestUploaded(resultMap))
         }
     }
 }

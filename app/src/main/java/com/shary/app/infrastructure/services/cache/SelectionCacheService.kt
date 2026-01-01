@@ -3,6 +3,8 @@ package com.shary.app.infrastructure.services.cache
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.models.RequestDomain
+import com.shary.app.ui.screens.field.FieldsScreen
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +36,15 @@ class SelectionCacheService @Inject constructor(
     /** Cached fields, exposed as reactive flow */
     private val _fields = MutableStateFlow<List<FieldDomain>>(emptyList())
 
+    /** Cached requests, exposed as reactive flow */
+    private val _requests = MutableStateFlow<List<RequestDomain>>(emptyList())
+
+    /** Cached draft request, exposed as reactive flow */
+    private val _draftRequest = MutableStateFlow(RequestDomain.initialize())
+
+    /** Cached draft request, exposed as reactive flow */
+    private val _draftFields = MutableStateFlow(emptyList<FieldDomain>())
+
     /** Cached users, exposed as reactive flow */
     private val _users  = MutableStateFlow<List<UserDomain>>(emptyList())
 
@@ -52,11 +63,15 @@ class SelectionCacheService @Inject constructor(
     // -------------------- Public Flows --------------------
 
     override val fieldsFlow: StateFlow<List<FieldDomain>> get() = _fields
+    override val requestsFlow: StateFlow<List<RequestDomain>> get() = _requests
     override val usersFlow: StateFlow<List<UserDomain>> get() = _users
 
     // -------------------- Read-only accessors --------------------
 
     override fun getFields(): List<FieldDomain> = _fields.value
+    override fun getRequests(): List<RequestDomain> = _requests.value
+    override fun getDraftFields(): List<FieldDomain> = _draftFields.value
+    override fun getDraftRequest(): RequestDomain = _draftRequest.value
     override fun getUsers(): List<UserDomain> = _users.value
 
     // -------------------- Cache mutations --------------------
@@ -69,7 +84,25 @@ class SelectionCacheService @Inject constructor(
         _fields.value = unique
     }
 
+    override fun cacheRequests(requests: List<RequestDomain>) {
+        val unique = requests.distinctBy { it.recipients }
+        _requests.value = unique
+    }
+
+    override fun cacheDraftRequest(draftRequest: RequestDomain) {
+        _draftRequest.value = draftRequest
+    }
+
+
+    override fun clearCachedDraftFields() {
+        _draftFields.value = emptyList()
+    }
+    override fun cacheDraftFields(draftFields: List<FieldDomain>) {
+        _draftFields.value = draftFields
+    }
     override fun isAnyFieldCached(): Boolean = getFields().isNotEmpty()
+    override fun isAnyRequestCached(): Boolean = getRequests().isNotEmpty()
+    override fun isAnyDraftFieldCached(): Boolean = _draftFields.value.isNotEmpty()
 
     /**
      * Replaces cached users with new list, deduplicated by normalized email.
@@ -81,10 +114,16 @@ class SelectionCacheService @Inject constructor(
 
     override fun isAnyUserCached(): Boolean = getUsers().isNotEmpty()
 
-    /** Clears only fields */
+    /** Clears fields */
     override fun clearCachedFields() { _fields.value = emptyList() }
 
-    /** Clears only users */
+    /** Clears requests */
+    override fun clearCachedRequests() { _requests.value = emptyList() }
+
+    /** Clears draft request */
+    override fun clearCachedDraftRequest() { _draftRequest.value = RequestDomain.initialize() }
+
+    /** Clears users */
     override fun clearCachedUsers()  { _users.value = emptyList() }
 
     /** Clears all cached values (fields, users, phone) */
@@ -111,8 +150,8 @@ class SelectionCacheService @Inject constructor(
         }
     }
     override fun getOwner(): UserDomain = _owner.value
-    override fun getOwnerUsername(): String? = _owner.value.username
-    override fun getOwnerEmail(): String? = _owner.value.email
+    override fun getOwnerUsername(): String = _owner.value.username
+    override fun getOwnerEmail(): String = _owner.value.email
 
     // -------------------- Thread-safe variants --------------------
 

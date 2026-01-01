@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.TextFields
@@ -36,8 +37,10 @@ import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
 import com.shary.app.ui.screens.utils.RowSearcher
 import com.shary.app.viewmodels.field.FieldViewModel
+import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserEvent
 import com.shary.app.viewmodels.user.UserViewModel
+import io.ktor.client.request.request
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +48,7 @@ fun UsersScreen(navController: NavHostController) {
     // ---- ViewModel ----
     val userViewModel: UserViewModel = hiltViewModel()
     val fieldViewModel: FieldViewModel = hiltViewModel()
+    val requestViewModel: RequestViewModel = hiltViewModel()
 
     // ---- State from VM ----
     val userList by userViewModel.users.collectAsState()
@@ -104,7 +108,7 @@ fun UsersScreen(navController: NavHostController) {
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = null
+            snackbarMessage = ""
         }
     }
 
@@ -207,7 +211,14 @@ fun UsersScreen(navController: NavHostController) {
                         onClick = { navController.navigate(Screen.Fields.route) },
                         icon = Icons.Default.TextFields,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Send to Users"
+                        contentDescription = "Go to Field Screen"
+                    )
+
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.Requests.route) },
+                        icon = Icons.Default.Description,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Go to Request Screen"
                     )
                 }
 
@@ -220,13 +231,20 @@ fun UsersScreen(navController: NavHostController) {
                     CompactActionButton(
                         onClick = {
                             if (fieldViewModel.anyFieldCached() && selectedUsers.isNotEmpty()) {
-                                navController.navigate(Screen.Summary.route)
+                                navController.navigate(Screen.SummaryField.route)
+                            }
+                            if (requestViewModel.anyDraftFieldCached() && selectedUsers.isNotEmpty()) {
+                                navController.navigate(Screen.SummaryRequest.route)
                             }
                         },
                         icon = Icons.Default.AssignmentTurnedIn,
                         backgroundColor = colorScheme.tertiary,
                         contentDescription = "Summary",
-                        enabled = selectedUsers.isNotEmpty() && fieldViewModel.anyFieldCached()
+                        enabled = (
+                                fieldViewModel.anyFieldCached()
+                                        || requestViewModel.anyDraftFieldCached()
+                                )
+                                && selectedUsers.isNotEmpty()
                     )
                 }
             }

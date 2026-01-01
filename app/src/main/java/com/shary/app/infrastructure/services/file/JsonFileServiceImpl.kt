@@ -33,23 +33,6 @@ class JsonFileServiceImpl(
 ) : JsonFileService {
 
     /**
-     * Reads the `mode` field from the `metadata` object of a JSON file.
-     *
-     * @return the parsed [DataFileMode] if present and valid, otherwise `null`.
-     */
-    override suspend fun getModeFromJson(file: File): DataFileMode? = withContext(Dispatchers.IO) {
-        runCatching {
-            val root = JSONObject(file.readText())
-            val metaObj = root.optJSONObject("metadata") ?: return@runCatching null
-            val mode = metaObj.optString("mode", "")
-            DataFileMode.fromString(mode)
-        }.getOrElse { ex ->
-            Log.e("JsonFileServiceImpl", "Invalid metadata in JSON", ex)
-            null
-        }
-    }
-
-    /**
      * Extracts all fields from the `fields` object of the JSON file.
      *
      * @return a [Map] of key/value pairs, or empty if the structure is missing/invalid.

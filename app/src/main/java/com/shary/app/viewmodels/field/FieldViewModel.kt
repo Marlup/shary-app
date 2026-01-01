@@ -50,7 +50,6 @@ class FieldViewModel @Inject constructor(
     private val _searchFieldBy = MutableStateFlow(SearchFieldBy.KEY)
     val searchFieldBy: StateFlow<SearchFieldBy> = _searchFieldBy.asStateFlow()
 
-
     private val _selectedKeys = MutableStateFlow<Set<String>>(emptySet())
 
     private val _sortByParameter = MutableStateFlow(SortByParameter.KEY)
@@ -198,7 +197,7 @@ class FieldViewModel @Inject constructor(
     fun setSelectedFields(fields: List<FieldDomain>) {
         val selectedFields = fields.distinctBy { it.key.lowercase() }
         _selectedFields.value = selectedFields
-        cacheSelection.cacheFields(selectedFields) // <— persistencia cross-screen
+        cacheSelection.cacheFields(selectedFields)
     }
 
     fun clearSelectedFields() {
@@ -320,10 +319,10 @@ class FieldViewModel @Inject constructor(
             _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    val fetchResult = cloudService.fetchData(username)
+                    val payloadData = cloudService.fetchPayloadData(username)
 
-                    fetchResult.getOrThrow().let { jsonString ->
-                        Log.d("FieldViewModel", "Fetched data: $jsonString")
+                    payloadData.getOrThrow().let { jsonString ->
+                        Log.d("FieldViewModel", "Fetched payloadData: $jsonString")
                         val jsonObject = JSONObject(jsonString)
                         val keys = jsonObject.keys()
                         var addedCount = 0

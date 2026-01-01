@@ -36,7 +36,7 @@ import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.user.UserViewModel
 
 @Composable
-fun SummaryScreen(navController: NavHostController) {
+fun SummaryFieldScreen(navController: NavHostController) {
     val context = LocalContext.current
 
     // ---------------- ViewModels ----------------
@@ -77,7 +77,6 @@ fun SummaryScreen(navController: NavHostController) {
                 )
 
                 SendFieldsGenericButton(
-                    fieldViewModel.getCachedFields(),
                     onClick = { openSendDialog = true }
                 )
             }
@@ -106,7 +105,6 @@ fun SummaryScreen(navController: NavHostController) {
                                 fieldViewModel.getCachedFields(),
                                 userViewModel.getOwner(),
                                 userViewModel.getCachedUsers(),
-                                false
                             )
                         }
                         null -> TODO()

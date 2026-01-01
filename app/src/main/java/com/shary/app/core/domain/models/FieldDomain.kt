@@ -40,7 +40,8 @@ data class FieldDomain(
             value = "",
             keyAlias = "",
             tag = Tag.Unknown,
-            dateAdded = Instant.EPOCH
+            //dateAdded = Instant.EPOCH
+            dateAdded = Instant.now()
         )
     }
 

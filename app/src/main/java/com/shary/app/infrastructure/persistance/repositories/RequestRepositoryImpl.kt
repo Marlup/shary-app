@@ -1,5 +1,6 @@
 package com.shary.app.infrastructure.persistance.repositories
 
+import android.util.Log
 import androidx.datastore.core.DataStore
 import com.shary.app.RequestList
 import com.shary.app.core.domain.models.RequestDomain
@@ -32,6 +33,7 @@ class RequestRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveReceivedRequest(request: RequestDomain) {
+        Log.d("RequestRepositoryImpl", "[6] Saving received request: $request")
         val encrypted = request.toProto(codec)
         dataStore.updateData { current ->
             current.toBuilder()

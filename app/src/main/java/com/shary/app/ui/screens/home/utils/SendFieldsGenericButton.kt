@@ -8,7 +8,7 @@ import com.shary.app.core.domain.models.FieldDomain
 
 @Composable
 fun SendFieldsGenericButton(
-    fields: List<FieldDomain>,
+    //fields: List<FieldDomain>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {

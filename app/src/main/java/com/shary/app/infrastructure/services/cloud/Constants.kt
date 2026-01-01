@@ -21,7 +21,9 @@ object Constants {
     const val FIREBASE_ENDPOINT_UPLOAD_USER = "/upload_user"
     const val FIREBASE_ENDPOINT_DELETE_USER = "/delete_user"
     const val FIREBASE_ENDPOINT_UPLOAD_PAYLOAD = "/upload_payload"
+    const val FIREBASE_ENDPOINT_UPLOAD_REQUEST = "/upload_request"
     const val FIREBASE_ENDPOINT_FETCH_PAYLOAD = "/fetch_payload"
+    const val FIREBASE_ENDPOINT_FETCH_REQUEST = "/fetch_request"
     const val FIREBASE_ENDPOINT_PING = "/ping"
 
 }
