@@ -154,7 +154,9 @@ class RequestViewModel @Inject constructor(
                             fields = requestedFields,
                             user = user,
                             recipients = listOf(currentUser),
-                            dateAdded = Instant.now()
+                            dateAdded = Instant.now(),
+                            owned = false,
+                            responded = false
                         )
 
                         // Save request

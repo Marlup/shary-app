@@ -8,7 +8,9 @@ data class RequestDomain(
     val fields: List<FieldDomain>,
     val user: UserDomain,
     val recipients: List<UserDomain>,
-    val dateAdded: Instant
+    val dateAdded: Instant,
+    val owned: Boolean,
+    val responded: Boolean
 ) {
 
     companion object {
@@ -24,7 +26,9 @@ data class RequestDomain(
                 fields = fields,
                 user = user,
                 recipients = recipients,
-                dateAdded = Instant.now()
+                dateAdded = Instant.now(),
+                owned = true,
+                responded = false
             )
         }
 
@@ -32,7 +36,9 @@ data class RequestDomain(
             fields = emptyList(),
             user = UserDomain(),
             recipients = emptyList(),
-            dateAdded = Instant.now()
+            dateAdded = Instant.now(),
+            owned = false,
+            responded = false
         )
     }
 }
@@ -44,5 +50,7 @@ fun RequestDomain.reset(): RequestDomain = this.copy(
     fields = emptyList(),
     user = UserDomain(),
     recipients = emptyList(),
-    dateAdded = Instant.EPOCH
+    dateAdded = Instant.EPOCH,
+    owned = false,
+    responded = false
 )

@@ -85,7 +85,9 @@ class CloudViewModel @Inject constructor(
                 fields = fields,
                 user = owner,
                 recipients = recipients,
-                dateAdded = Instant.now()
+                dateAdded = Instant.now(),
+                owned = true,
+                responded = false
             )
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -98,4 +100,3 @@ class CloudViewModel @Inject constructor(
         }
     }
 }
-
