@@ -60,7 +60,7 @@ fun RequestsScreen(navController: NavHostController) {
     val draftFields by requestViewModel.draftFields.collectAsState()
     val receivedRequests by requestViewModel.receivedRequests.collectAsState()
     val sentRequests by requestViewModel.sentRequests.collectAsState()
-    val requestFields = if (listMode == RequestListMode.SENT) {
+    val requestsToShow = if (listMode == RequestListMode.SENT) {
         sentRequests
     } else {
         receivedRequests
@@ -258,6 +258,13 @@ fun RequestsScreen(navController: NavHostController) {
             // ----------------------------------------------------------------
             // -------------------- List of Received or Requested Fields --------------------
             // ----------------------------------------------------------------
+            Text(
+                if (listMode == RequestListMode.SENT) "Sent Requests" else "Received Requests",
+                modifier = Modifier.padding(vertical = 8.dp),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
 
             Row(
                 modifier = Modifier
@@ -265,13 +272,7 @@ fun RequestsScreen(navController: NavHostController) {
                     .padding(vertical = 8.dp)
             ) {
                 Text(
-                    "Key",
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Key Alias",
+                    "Requested Keys",
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
@@ -280,9 +281,9 @@ fun RequestsScreen(navController: NavHostController) {
 
             HorizontalDivider(thickness = 1.dp, color = Color.Gray)
 
-            if (requestFields.isNotEmpty()) {
-                Log.d("RequestsScreen", "requestFields: $requestFields")
-                Log.d("Number of requests", "${requestFields.size}")
+            if (requestsToShow.isNotEmpty()) {
+                Log.d("RequestsScreen", "requestsToShow: $requestsToShow")
+                Log.d("Number of requests", "${requestsToShow.size}")
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -291,7 +292,7 @@ fun RequestsScreen(navController: NavHostController) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(
-                        items = requestFields,
+                        items = requestsToShow,
                         key = { _, request -> request.dateAdded } // stable key
                     ) { index, request ->
                         val isSelected =
@@ -339,15 +340,9 @@ fun RequestsScreen(navController: NavHostController) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    request.fields.joinToString { it.key },
+                                    request.fields.joinToString { it.key }.ifBlank { "No keys requested" },
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    request.fields.joinToString { it.keyAlias },
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray
                                 )
                             }
                         }
@@ -361,126 +356,120 @@ fun RequestsScreen(navController: NavHostController) {
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No requests available", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (listMode == RequestListMode.SENT) {
+                            "No sent requests available"
+                        } else {
+                            "No received requests available"
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
 
-            HorizontalDivider(
-                modifier = Modifier.fillMaxHeight(0.5f),
-                thickness = 1.dp,
-                color = Color.Gray
-            )
-
-            // ----------------------------------------------------------------
-            // -------------------- List of Drafted Fields --------------------
-            // ----------------------------------------------------------------
-
-            Text(
-                "Drafted Fields",
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 8.dp)
-
-                ,
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Text(
-                    "Key",
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
+            if (listMode == RequestListMode.SENT) {
+                HorizontalDivider(
+                    modifier = Modifier.fillMaxHeight(0.5f),
+                    thickness = 1.dp,
+                    color = Color.Gray
                 )
+
+                // ----------------------------------------------------------------
+                // -------------------- List of Drafted Fields --------------------
+                // ----------------------------------------------------------------
+
                 Text(
-                    "Key Alias",
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-
-            if (draftFields.isNotEmpty()) {
-                Log.d("RequestsScreen", "draftFields: $draftFields")
-                Log.d("Number of requests", "${draftFields.size}")
-                LazyColumn(
+                    "Drafted Fields",
                     modifier = Modifier
-                        //.weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .weight(1f)
+                        .padding(vertical = 8.dp),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
                 ) {
-                    itemsIndexed(
-                        items = draftFields,
-                        key = { _, field -> field.dateAdded } // stable key
-                    ) { index, field ->
-                        //val isSelected = field.key.isNotEmpty()
-                        //val selectionEnabled = listMode == RequestViewModel.RequestListMode.RECEIVED
+                    Text(
+                        "Key",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Key Alias",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-                        // background colors
-                        /*
-                        val backgroundColor = when {
-                            isSelected -> colorScheme.secondaryContainer
-                            index % 2 == 0 -> colorScheme.surface
-                            else -> colorScheme.surfaceVariant
-                        }
-                        */
+                HorizontalDivider(thickness = 1.dp, color = Color.Gray)
 
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .wrapContentHeight(),
-                            //.alpha(if (isSelected) 1f else 0.9f),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = colorScheme.surface
-                            ),
-                            enabled = true,
-                            onClick = {},
-                        ) {
-                            Row(
+                if (draftFields.isNotEmpty()) {
+                    Log.d("RequestsScreen", "draftFields: $draftFields")
+                    Log.d("Number of requests", "${draftFields.size}")
+                    LazyColumn(
+                        modifier = Modifier
+                            //.weight(1f)
+                            .fillMaxWidth(),
+                        contentPadding = PaddingValues(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(
+                            items = draftFields,
+                            key = { _, field -> field.dateAdded } // stable key
+                        ) { _, field ->
+                            ElevatedCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .wrapContentHeight(),
+                                colors = CardDefaults.elevatedCardColors(
+                                    containerColor = colorScheme.surface
+                                ),
+                                enabled = true,
+                                onClick = {},
                             ) {
-                                Text(
-                                    field.key,
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    field.keyAlias.orEmpty(),
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        field.key,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        field.keyAlias.orEmpty(),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.Gray
+                                    )
+                                }
                             }
                         }
                     }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No drafted fields available", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No drafted fields available", style = MaterialTheme.typography.bodyMedium)
-                }
+                HorizontalDivider(
+                    modifier = Modifier.fillMaxHeight(1.0f),
+                    thickness = 1.dp,
+                    color = Color.Gray
+                )
             }
-            HorizontalDivider(
-                modifier = Modifier.fillMaxHeight(1.0f),
-                thickness = 1.dp,
-                color = Color.Gray
-            )
         }
     }
 

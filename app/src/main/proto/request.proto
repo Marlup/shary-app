@@ -12,6 +12,8 @@ message Request {
   User user = 3;
   repeated User recipients = 4;
   int64 dateAdded = 5;
+  bool owned = 6;
+  bool responded = 7;
 }
 
 message RequestList {
