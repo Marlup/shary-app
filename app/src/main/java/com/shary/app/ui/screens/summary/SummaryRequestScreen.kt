@@ -130,7 +130,7 @@ fun SummaryRequestScreen(navController: NavHostController) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "You Are Going to Send a Request:",
+                text = "You Are Going to Send:",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = 12.dp)
             )

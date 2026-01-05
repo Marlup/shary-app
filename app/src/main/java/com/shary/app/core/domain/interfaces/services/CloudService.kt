@@ -38,8 +38,8 @@ interface CloudService {
     suspend fun signOutCloud(): Result<Unit>
 
     /** Fetch encrypted data from Payload for the current user */
-    suspend fun fetchPayloadData(username: String): Result<String>
+    suspend fun fetchPayloadData(username: String): Result<List<String>>
 
     /** Fetch encrypted data from Request for the current user */
-    suspend fun fetchRequestData(username: String): Result<String>
+    suspend fun fetchRequestData(username: String): Result<List<String>>
 }

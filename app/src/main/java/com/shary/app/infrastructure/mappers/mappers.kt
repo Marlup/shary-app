@@ -66,7 +66,9 @@ fun RequestProto.toDomain(codec: FieldCodec): RequestDomain =
         fields = fieldsList.toDomainFields(codec),
         dateAdded = Instant.ofEpochMilli(dateAdded),
         user = user.toDomain(),
-        recipients = recipientsList.map { it.toDomain() }
+        recipients = recipientsList.map { it.toDomain() },
+        owned = owned,
+        responded = responded
     )
 
 fun RequestDomain.toProto(codec: FieldCodec): RequestProto =
@@ -75,6 +77,8 @@ fun RequestDomain.toProto(codec: FieldCodec): RequestProto =
         .setDateAdded(dateAdded.toEpochMilli())
         .setUser(user.toProto())
         .addAllRecipients(recipients.map { it.toProto() })
+        .setOwned(owned)
+        .setResponded(responded)
         .build()
 
 // ======================================================================

@@ -317,17 +317,28 @@ class FieldViewModel @Inject constructor(
     fun fetchFieldsFromCloud(username: String) {
         viewModelScope.launch {
             _isLoading.value = true
+
             val result = runCatching {
                 withContext(Dispatchers.IO) {
+
+                    // payloadData: Result<List<String>>
                     val payloadData = cloudService.fetchPayloadData(username)
 
-                    payloadData.getOrThrow().let { jsonString ->
-                        Log.d("FieldViewModel", "Fetched payloadData: $jsonString")
-                        val jsonObject = JSONObject(jsonString)
-                        val keys = jsonObject.keys()
-                        var addedCount = 0
+                    val jsonStrings: List<String> = payloadData.getOrThrow()
+                    if (jsonStrings.isEmpty()) {
+                        throw IllegalStateException("No payloads returned from cloud")
+                    }
 
-                        writeMutex.withLock {
+                    var addedCount = 0
+
+                    // One lock for the whole batch to keep repository writes consistent
+                    writeMutex.withLock {
+                        jsonStrings.forEachIndexed { idx, jsonString ->
+                            Log.d("FieldViewModel", "Fetched payload[$idx]: $jsonString")
+
+                            val jsonObject = JSONObject(jsonString)
+                            val keys = jsonObject.keys()
+
                             while (keys.hasNext()) {
                                 val key = keys.next()
                                 val value = jsonObject.getString(key)
@@ -342,13 +353,16 @@ class FieldViewModel @Inject constructor(
 
                                 val created = fieldRepository.saveFieldIfNotExists(normalize(field))
                                 if (created) addedCount++
+
                                 Log.d("FieldViewModel", "Fetched key: $key")
                             }
                         }
-                        addedCount
                     }
+
+                    addedCount
                 }
             }
+
             _isLoading.value = false
 
             result.onSuccess { count ->
