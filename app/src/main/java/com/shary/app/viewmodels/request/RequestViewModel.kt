@@ -83,9 +83,9 @@ class RequestViewModel @Inject constructor(
         }
     }
 
-    fun removeDraftFields(fields: List<FieldDomain>) {
-        if (fields.isEmpty()) return
-        val toRemove = fields.toSet()
+    fun removeDraftFields() {
+        if (_draftFields.value.isEmpty()) return
+        val toRemove = _draftFields.value.toSet()
         _draftFields.update { current -> current.filterNot { it in toRemove } }
     }
 
@@ -115,41 +115,57 @@ class RequestViewModel @Inject constructor(
         cacheSelection.cacheDraftFields(draftFields)
     }
 
+
+
+
     /**
      * Fetches request data from Firebase and saves it as a received request.
      */
     fun fetchRequestsFromCloud(username: String, currentUser: UserDomain) {
         Log.d("RequestViewModel", "[3] Fetching requests from cloud for user: $username")
+
         viewModelScope.launch {
             _isLoading.value = true
+
             val result = runCatching {
                 withContext(Dispatchers.IO) {
+
+                    // requestData: Result<List<String>>
                     val requestData = cloudService.fetchRequestData(username)
 
-                    requestData.getOrThrow().let { jsonString ->
-                        Log.d("RequestViewModel", "Fetched request data: $jsonString")
+                    val jsonStrings: List<String> = requestData.getOrThrow()
+                    if (jsonStrings.isEmpty()) {
+                        throw IllegalStateException("No requests returned from cloud")
+                    }
+
+                    var totalMatchedFields = 0
+
+                    jsonStrings.forEachIndexed { idx, jsonString ->
+                        Log.d("RequestViewModel", "Fetched request[$idx] data: $jsonString")
+
                         val jsonObject = JSONObject(jsonString)
 
-                        // Extract user
-                        val username = jsonObject.optString("user", "")
-                        // Extract keys
-                        val keysJson = jsonObject.optJSONArray("keys")
+                        // Extract request owner user
+                        val reqUsername = jsonObject.optString("user", "").trim()
+                        if (reqUsername.isBlank()) {
+                            throw IllegalStateException("Request[$idx] has empty 'user'")
+                        }
 
-                        Log.d("RequestViewModel", "[4] Fetched keys: $keysJson")
+                        // Extract keys array
+                        val keysJson = jsonObject.optJSONArray("keys")
                         if (keysJson == null || keysJson.length() == 0) {
-                            throw IllegalStateException("No keys found in request")
+                            throw IllegalStateException("Request[$idx] has no 'keys'")
                         }
-                        // Extract keys
-                        val requestedFields = mutableListOf<FieldDomain>()
-                        for (i in 0 until keysJson.length()) {
-                            requestedFields.add(
-                                FieldDomain.initialize().copy(key = keysJson.getString(i))
-                            )
+
+                        // Build requested fields
+                        val requestedFields = MutableList(keysJson.length()) { i ->
+                            FieldDomain.initialize().copy(key = keysJson.getString(i))
                         }
-                        Log.d("RequestViewModel", "[5] Fetched keys: $requestedFields")
+
+                        Log.d("RequestViewModel", "[4] Request[$idx] keys: $requestedFields")
 
                         // Create RequestDomain
-                        val user = UserDomain(username = username)
+                        val user = UserDomain(username = reqUsername)
                         val request = RequestDomain(
                             fields = requestedFields,
                             user = user,
@@ -162,16 +178,19 @@ class RequestViewModel @Inject constructor(
                         // Save request
                         requestRepository.saveReceivedRequest(request)
 
-                        requestedFields.size
+                        totalMatchedFields += requestedFields.size
                     }
+
+                    totalMatchedFields
                 }
             }
 
             _isLoading.value = false
-            result.onSuccess { matchedCount ->
-                _events.tryEmit(RequestEvent.FetchedFromCloud(matchedCount))
+
+            result.onSuccess { totalMatchedFields ->
+                _events.tryEmit(RequestEvent.FetchedFromCloud(totalMatchedFields))
             }.onFailure { e ->
-                Log.e("RequestViewModel", "Error fetching requests from cloud: ${e.message}")
+                Log.e("RequestViewModel", "Error fetching requests from cloud: ${e.message}", e)
                 _events.tryEmit(RequestEvent.FetchError(e))
             }
         }

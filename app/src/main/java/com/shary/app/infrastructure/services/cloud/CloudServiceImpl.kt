@@ -417,14 +417,14 @@ class CloudServiceImpl @Inject constructor(
      * Decrypts the data and returns it as a JSON string.
      * Note: Firebase returns the MOST RECENT payload if multiple exist.
      */
-    override suspend fun fetchPayloadData(username: String): Result<String> {
+    override suspend fun fetchPayloadData(username: String): Result<List<String>> {
         return fetchdData(username, isRequest = false)
     }
-    override suspend fun fetchRequestData(username: String): Result<String> {
+    override suspend fun fetchRequestData(username: String): Result<List<String>> {
         return fetchdData(username, isRequest = true)
     }
 
-    suspend fun fetchdData(username: String, isRequest: Boolean): Result<String> = runCatching {
+    suspend fun fetchdData(username: String, isRequest: Boolean): Result<List<String>> = runCatching {
         withContext(Dispatchers.IO) {
             // Ensure we have a fresh auth token
             ensureAuth()
@@ -483,35 +483,38 @@ class CloudServiceImpl @Inject constructor(
                 }
 
                 // Get the most recent payload (last in the array)
-                val latestPayload = payloadArray.last().jsonObject
+                //val latestPayload = payloadArray.last().jsonObject
 
-                val encryptedDataB64 = latestPayload["data"]?.jsonPrimitive?.content
-                    ?: throw IllegalStateException("No data field in payload")
-                val senderHash = latestPayload["user"]?.jsonPrimitive?.content
-                    ?: throw IllegalStateException("No user field in payload")
+                payloadArray.map { payload ->
+                    val encryptedDataB64 = payload.jsonObject["data"]?.jsonPrimitive?.content
+                        ?: throw IllegalStateException("No data field in payload")
+                    val senderHash = payload.jsonObject["user"]?.jsonPrimitive?.content
+                        ?: throw IllegalStateException("No user field in payload")
 
-                Log.d("CloudServiceImpl", "Processing payload from sender: $senderHash")
+                    Log.d("CloudServiceImpl", "Processing payload from sender: $senderHash")
 
-                // Get sender's public key
-                val senderPubKeyB64 = getPubKey(senderHash)
-                if (senderPubKeyB64.isEmpty()) {
-                    throw IllegalStateException("Cannot retrieve sender's public key")
-                }
+                    // Get sender's public key
+                    val senderPubKeyB64 = getPubKey(senderHash)
+                    if (senderPubKeyB64.isEmpty()) {
+                        throw IllegalStateException("Cannot retrieve sender's public key")
+                    }
 
-                val senderPubKey = base64Decode(senderPubKeyB64)
-                val encryptedData = base64Decode(encryptedDataB64)
-                val aad = "shary:$senderHash:$recipientHash".toByteArray(Charsets.UTF_8)
+                    val senderPubKey = base64Decode(senderPubKeyB64)
+                    val encryptedData = base64Decode(encryptedDataB64)
+                    val aad = "shary:$senderHash:$recipientHash".toByteArray(Charsets.UTF_8)
 
-                // Decrypt the data
-                val decryptedBytes = cryptographyManager.decryptFromPeerPublic(
-                    encryptedData,
-                    senderPubKey,
-                    aad
-                )
+                    // Decrypt the data
+                    val decryptedData = cryptographyManager.decryptFromPeerPublic(
+                        encryptedData,
+                        senderPubKey,
+                        aad
+                    )
 
-                val decryptedString = decryptedBytes.toString(Charsets.UTF_8)
-                Log.d("CloudServiceImpl", "Successfully decrypted data")
-                decryptedString
+                    val decryptedDataString = decryptedData.toString(Charsets.UTF_8)
+                    Log.d("CloudServiceImpl", "Successfully decrypted data")
+                    decryptedDataString
+                }.toList()
+
             }
         }
     }

@@ -69,13 +69,10 @@ fun RequestsScreen(navController: NavHostController) {
     var openAddDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>("") }
 
-    // ---- Checked rows (Domain) ----
-    val selectedFields by fieldViewModel.selectedFields.collectAsState()
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = ""
         }
     }
 
@@ -101,7 +98,7 @@ fun RequestsScreen(navController: NavHostController) {
             when (event) {
                 Lifecycle.Event.ON_START -> Unit
                 Lifecycle.Event.ON_STOP -> {
-                    if (listMode == RequestListMode.RECEIVED) {
+                    if (listMode == RequestListMode.SENT) {
                         Log.d("RequestsScreen", "[2] Before updateDraftRequest()")
                         requestViewModel.setDraftFields()
                     }
@@ -127,8 +124,8 @@ fun RequestsScreen(navController: NavHostController) {
             )
         },
         floatingActionButton = {
-            val selectionEnabled = listMode == RequestListMode.RECEIVED
-            val selectionAvailable = selectionEnabled && selectedFields.isNotEmpty()
+            val actionButtonsEnabled = listMode == RequestListMode.SENT
+            val actionButtonsAvailable = actionButtonsEnabled && draftFields.isNotEmpty()
 
             HorizontalDivider(thickness = 1.dp)
 
@@ -146,17 +143,16 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     CompactActionButton(
                         onClick = {
-                            if (selectionAvailable) {
-                                fieldViewModel.deleteFields(selectedFields)
-                                fieldViewModel.clearSelectedFields()
+                            if (actionButtonsAvailable) {
                                 requestViewModel.clearDraftFields()
-                                snackbarMessage = "Deleted ${selectedFields.size} fields"
+                                requestViewModel.removeDraftFields()
+                                snackbarMessage = "Deleted ${draftFields.size} fields"
                             }
                         },
                         backgroundColor = colorScheme.error,
                         icon = Icons.Default.Delete,
                         contentDescription = "Delete Fields",
-                        enabled = selectionAvailable
+                        enabled = actionButtonsAvailable
                     )
                 }
 
@@ -171,7 +167,7 @@ fun RequestsScreen(navController: NavHostController) {
                         icon = Icons.Default.Add,
                         backgroundColor = colorScheme.primary,
                         contentDescription = "Add Field",
-                        enabled = selectionEnabled
+                        enabled = actionButtonsEnabled
                     )
 
                     CompactActionButton(
@@ -188,7 +184,7 @@ fun RequestsScreen(navController: NavHostController) {
                         icon = Icons.Default.CloudDownload,
                         backgroundColor = colorScheme.primary,
                         contentDescription = "Fetch Requests from Cloud",
-                        enabled = selectionEnabled
+                        enabled = actionButtonsEnabled
                     )
 
                     CompactActionButton(
@@ -196,7 +192,7 @@ fun RequestsScreen(navController: NavHostController) {
                         icon = Icons.Default.Person,
                         backgroundColor = colorScheme.primary,
                         contentDescription = "Send to Users",
-                        enabled = selectionEnabled
+                        enabled = actionButtonsEnabled
                     )
                 }
 
@@ -255,9 +251,10 @@ fun RequestsScreen(navController: NavHostController) {
                 }
             }
 
-            // ----------------------------------------------------------------
-            // -------------------- List of Received or Requested Fields --------------------
-            // ----------------------------------------------------------------
+            // -----------------------------------------------------------
+            // --------------- List of Received or Requested Fields ------
+            // -----------------------------------------------------------
+            /*
             Text(
                 if (listMode == RequestListMode.SENT) "Sent Requests" else "Received Requests",
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -265,6 +262,7 @@ fun RequestsScreen(navController: NavHostController) {
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold
             )
+             */
 
             Row(
                 modifier = Modifier
@@ -296,8 +294,8 @@ fun RequestsScreen(navController: NavHostController) {
                         key = { _, request -> request.dateAdded } // stable key
                     ) { index, request ->
                         val isSelected =
-                            request.fields.isNotEmpty() && request.fields.all { it in selectedFields }
-                        val selectionEnabled = listMode == RequestListMode.RECEIVED
+                            request.fields.isNotEmpty() && request.fields.all { it in draftFields }
+                        val actionButtonsEnabled = listMode == RequestListMode.SENT
 
                         // background colors
                         val backgroundColor = when {
@@ -314,18 +312,18 @@ fun RequestsScreen(navController: NavHostController) {
                             colors = CardDefaults.elevatedCardColors(
                                 containerColor = backgroundColor
                             ),
-                            enabled = selectionEnabled,
+                            enabled = actionButtonsEnabled,
                             onClick = {
                                 // If all fields in the request are already selected, unselect them all.
                                 // Otherwise, select all of them.
-                                if (selectionEnabled) {
+                                if (actionButtonsEnabled) {
                                     if (isSelected) {
                                         request.fields.forEach {
                                             fieldViewModel.toggleFieldSelection(it) // Will unselect
                                         }
                                     } else {
                                         request.fields.forEach {
-                                            if (it !in selectedFields) {
+                                            if (it !in draftFields) {
                                                 fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
                                             }
                                         }
@@ -348,7 +346,6 @@ fun RequestsScreen(navController: NavHostController) {
                         }
                     }
                 }
-
             } else {
                 Box(
                     modifier = Modifier
