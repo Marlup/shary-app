@@ -26,17 +26,21 @@ fun FieldMatchingDialog(
     onAccept: (List<FieldDomain>) -> Unit,
     onAddField: (FieldDomain) -> Unit,
 ) {
+    val localStoredFields = remember { mutableStateListOf<FieldDomain>() }
     var selectedStorageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedRequestIndex by rememberSaveable { mutableStateOf<Int?>(null) }
 
     // Triple<storageIdx, requestIdx, matchId>
     val matches = remember { mutableStateListOf<Triple<Int, Int, Int>>() }
-    // requerido por tu matchIfPossible
-    val storedFieldsSelection = remember { mutableStateListOf<FieldDomain>() }
     val freeLabelsFromUnmatched = remember { mutableStateListOf<Int>() }
 
     var isStorageFirst by rememberSaveable { mutableStateOf(false) }
     var openAddDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(storedFields) {
+        localStoredFields.clear()
+        localStoredFields.addAll(storedFields)
+    }
 
     fun clearPendingSelections() {
         selectedStorageIndex = null
@@ -48,13 +52,10 @@ fun FieldMatchingDialog(
             storageIdx = selectedStorageIndex,
             requestIdx = selectedRequestIndex,
             matches = matches,
-            storedFieldsSelection = storedFieldsSelection,
-            storedFields = storedFields,
             freeLabelsFromUnmatched = freeLabelsFromUnmatched,
             isStorageFirst = isStorageFirst,
             onUnselect = { clearPendingSelections() },
             onIsStorageFirst = { isStorageFirst = it },
-            onMatchCreated = { /* opcional: log */ },
             onFreeLabelStored = { freeLabelsFromUnmatched.add(it) }
         )
     }
@@ -62,9 +63,9 @@ fun FieldMatchingDialog(
     // Para aceptar devolvemos una lista derivada de matches (evita duplicados por re-matches)
     fun buildAcceptedSelection(): List<FieldDomain> =
         matches.sortedBy { it.second }
-            .mapNotNull { (sIdx, _, _) -> storedFields.getOrNull(sIdx) }
+            .mapNotNull { (sIdx, _, _) -> localStoredFields.getOrNull(sIdx) }
 
-    val isFullyMatched = remember(matches) { matches.size == requestKeys.size }
+    val isFullyMatched = matches.size == requestKeys.size
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 3.dp) {
@@ -107,7 +108,7 @@ fun FieldMatchingDialog(
                             .heightIn(max = 420.dp)
                     ) {
                         itemsIndexed(
-                            items = storedFields,
+                            items = localStoredFields,
                             key = { index, field -> "${field.key}#$index" }
                         ) { index, field ->
                             val isSelected = selectedStorageIndex == index
@@ -125,10 +126,6 @@ fun FieldMatchingDialog(
                                 index = index,
                                 backgroundColorProvider = { backgroundColor },
                                 onToggle = {
-                                    if (isFullyMatched && isSelected) {
-                                        selectedStorageIndex = null
-                                        return@SelectableRow
-                                    }
                                     selectedStorageIndex = if (isSelected) null else index
                                     matchIfPossible()
                                 }
@@ -186,10 +183,6 @@ fun FieldMatchingDialog(
                                 index = index,
                                 backgroundColorProvider = { rowBackgroundColor },
                                 onToggle = {
-                                    if (isFullyMatched && isSelected) {
-                                        selectedRequestIndex = null
-                                        return@SelectableRow
-                                    }
                                     selectedRequestIndex = if (isSelected) null else index
                                     matchIfPossible()
                                 }
@@ -225,7 +218,11 @@ fun FieldMatchingDialog(
                 if (openAddDialog) {
                     AddFieldDialog(
                         onDismiss = { openAddDialog = false },
-                        onAddField = onAddField,
+                        onAddField = { newField ->
+                            localStoredFields.add(newField)
+                            onAddField(newField)
+                            openAddDialog = false
+                        },
                     )
                 }
             }
