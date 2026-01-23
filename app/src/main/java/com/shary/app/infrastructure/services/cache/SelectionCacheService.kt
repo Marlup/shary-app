@@ -4,7 +4,6 @@ import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.interfaces.services.CacheService
 import com.shary.app.core.domain.models.RequestDomain
-import com.shary.app.ui.screens.field.FieldsScreen
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow

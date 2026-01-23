@@ -10,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -23,14 +22,11 @@ import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
 
-// Optional: Hilt entry point to reach CloudServiceImpl without polluting the function signature
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
-import com.shary.app.viewmodels.authentication.AuthLogForm
 import com.shary.app.viewmodels.communication.CloudViewModel
-import dagger.hilt.EntryPoints
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -63,7 +59,7 @@ fun LogupScreen(navController: NavHostController) {
             when (ev) {
                 is AuthenticationEvent.Success -> {
                     scope.launch {
-                        authenticationViewModel.onLoginSuccess(signupForm.username)
+                        authenticationViewModel.onLoginSuccess(signupForm.email)
                         val authToken = authenticationViewModel.getToken()
                         if (authToken.isNullOrEmpty()) {
                             Toast.makeText(
@@ -92,7 +88,7 @@ fun LogupScreen(navController: NavHostController) {
                     Log.i("LogupEvents", msg)
                     // Optional: automatically upload user after anonymous session
                     scope.launch {
-                        cloudViewModel.uploadUser(signupForm.username)
+                        cloudViewModel.uploadUser(signupForm.email)
                         val authToken = authenticationViewModel.getToken()
                             if (authToken.isNullOrEmpty()) {
                             Log.i("LogupEvents", "User uploaded after anonymous connect")

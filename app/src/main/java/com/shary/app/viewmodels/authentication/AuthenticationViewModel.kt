@@ -122,7 +122,7 @@ class AuthenticationViewModel @Inject constructor(
 
         // Validate form based on current mode
         val validationError = when (_logForm.value.mode) {
-            AuthenticationMode.LOGIN -> validateLogin(f.username, f.password)
+            AuthenticationMode.LOGIN -> validateLogin(f.email, f.password)
             AuthenticationMode.SIGNUP -> validateSignup(f.username, f.email, f.password, f.passwordConfirm)
         }
 
@@ -139,7 +139,7 @@ class AuthenticationViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 when (_logForm.value.mode) {
                     AuthenticationMode.LOGIN ->
-                        authService.signIn(context, f.username, f.password)
+                        authService.signIn(context, f.email, f.password)
                     AuthenticationMode.SIGNUP -> {
                         // Pre sign out to safety avoid preloaded user uid and tokens.
                         authService.signOut(context)
@@ -217,9 +217,9 @@ class AuthenticationViewModel @Inject constructor(
         }
     }
 
-    fun onLoginSuccess(username: String) {
+    fun onLoginSuccess(email: String) {
         viewModelScope.launch {
-            val registered = runCatching { cloudService.isUserRegisteredInCloud(username) }
+            val registered = runCatching { cloudService.isUserRegisteredInCloud(email) }
                 .getOrDefault(false)
 
             if (registered) {
@@ -240,9 +240,9 @@ class AuthenticationViewModel @Inject constructor(
         _events.trySend(AuthenticationEvent.Error(msg))
     }
 
-    private fun validateLogin(username: String, password: String): String? =
+    private fun validateLogin(email: String, password: String): String? =
         when {
-            username.isBlank() -> "Username required"
+            email.isBlank() -> "Email required"
             password.isBlank() -> "Password required"
             else -> null
         }

@@ -171,7 +171,7 @@ class FieldViewModel @Inject constructor(
     }
 
     fun updateAlias(field: FieldDomain, alias: String) {
-        if (field.keyAlias.orEmpty() == alias) return
+        if (field.keyAlias == alias) return
         viewModelScope.launch {
             _isLoading.value = true
             val result = runCatching {
@@ -314,7 +314,7 @@ class FieldViewModel @Inject constructor(
      * Fetches fields from Firebase, decrypts them, and saves them to the local database.
      * Returns the number of fields successfully added.
      */
-    fun fetchFieldsFromCloud(username: String) {
+    fun fetchFieldsFromCloud(email: String) {
         viewModelScope.launch {
             _isLoading.value = true
 
@@ -322,7 +322,7 @@ class FieldViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
 
                     // payloadData: Result<List<String>>
-                    val payloadData = cloudService.fetchPayloadData(username)
+                    val payloadData = cloudService.fetchPayloadDataFromEmail(email)
 
                     val jsonStrings: List<String> = payloadData.getOrThrow()
                     if (jsonStrings.isEmpty()) {

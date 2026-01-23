@@ -12,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -26,15 +25,6 @@ import com.shary.app.ui.screens.utils.PasswordTextField
 import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
 import kotlinx.coroutines.launch
-
-// Optional: small Hilt entry point if you still want to check registration on the cloud
-/*
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-interface LoginScreenEntryPoints {
-    fun cloudService(): CloudServiceImpl
-}
- */
 
 /**
  * UI should only react to states and events from the ViewModel, being
@@ -65,7 +55,7 @@ fun LoginScreen(
         authenticationViewModel.events.collect { ev ->
             when (ev) {
                 is AuthenticationEvent.Success -> {
-                    scope.launch { authenticationViewModel.onLoginSuccess(loginForm.username) }
+                    scope.launch { authenticationViewModel.onLoginSuccess(loginForm.email) }
                     navController.navigate(Screen.Fields.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
@@ -164,9 +154,9 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 OutlinedTextField(
-                    value = loginForm.username,
-                    onValueChange = { authenticationViewModel.updateUsername(it) },
-                    label = { Text("Username") },
+                    value = loginForm.email,
+                    onValueChange = { authenticationViewModel.updateEmail(it) },
+                    label = { Text("Email") },
                     singleLine = true,
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth()

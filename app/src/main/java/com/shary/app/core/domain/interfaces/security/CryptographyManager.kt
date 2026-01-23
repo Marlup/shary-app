@@ -8,10 +8,10 @@ import org.json.JSONObject
 
 interface CryptographyManager {
     /**
-     * Initialize/load local key material for a user bound to (username + safePassword).
+     * Initialize/load local key material for a user bound to (email + safePassword).
      * Must be called before any operation that depends on user-scoped keys.
      */
-    fun initializeKeysWithUser(context: Context, username: String, safePassword: String)
+    fun initializeKeysWithUser(context: Context, email: String, safePassword: String)
 
     /**
      * Persist a signature/identity file for the user. Implementation decides the format.
@@ -19,8 +19,8 @@ interface CryptographyManager {
     fun saveSignature(context: Context, username: String, email: String, safePassword: String)
 
     /**
-     * Deterministic hash of a password with a salt (e.g., username) producing the "safePassword" seed.
-     * The app uses base64(hashPassword(password, username)) as its stored/derived safe value.
+     * Deterministic hash of a password with a salt (e.g., email) producing the "safePassword" seed.
+     * The app uses base64(hashPassword(password, email)) as its stored/derived safe value.
      */
     fun hashPassword(password: String, salt: String): ByteArray
 
@@ -29,11 +29,11 @@ interface CryptographyManager {
     fun getKexPublic(): ByteArray
     fun signDetached(message: ByteArray): ByteArray
     fun verifyDetached(message: ByteArray, signature: ByteArray, publicKey: ByteArray): Boolean
-    fun deriveIdentity(username: String, password: CharArray, appId: String): Identity
+    fun deriveIdentity(email: String, password: CharArray, appId: String): Identity
     fun openFrom(
         sealedBox: Sealed,
         senderEphPublicOrStatic: ByteArray,
-        username: String,
+        email: String,
         password: CharArray,
         appId: String,
         aad: ByteArray? = null
@@ -42,7 +42,7 @@ interface CryptographyManager {
     fun sealTo(
         plain: ByteArray,
         receiverKexPublic: ByteArray,
-        username: String,
+        email: String,
         password: CharArray,
         appId: String,
         nonce: ByteArray,
@@ -54,32 +54,32 @@ interface CryptographyManager {
      * This should internally handle KDF (from username + safePassword), AEAD mode, IV/nonce,
      * and (optionally) AAD binding (e.g., username).
      *
-     * @param username       Owner username (used for AAD/binding and/or salt derivation).
+     * @param email       Owner username (used for AAD/binding and/or salt derivation).
      * @param localKey   Base64-encoded result of hashPassword(password, username) (the app's “safe”).
      * @param json           JSON to encrypt.
      * @param aad            Optional AAD to bind; default: username bytes. Can be ignored if impl does not use AAD.
      * @return Opaque ciphertext blob ready to write to disk.
      */
     fun encryptCredentials(
-        username: String,
+        email: String,
         localKey: ByteArray,
         json: JSONObject,
-        aad: ByteArray? = username.toByteArray()
+        aad: ByteArray? = email.toByteArray()
     ): ByteArray
 
     fun encryptCredentialsByDerivation(
-        username: String,
+        email: String,
         p: String,
         purpose: String,
         json: JSONObject,
-        aad: ByteArray? = username.toByteArray()
+        aad: ByteArray? = email.toByteArray()
     ): ByteArray
 
     /**
      * Decrypt a credentials blob produced by [encryptCredentials].
      * Must support migration/legacy decoding if you still have older blobs.
      *
-     * @param username       Owner username (used for AAD/binding and/or salt derivation).
+     * @param email       Owner username (used for AAD/binding and/or salt derivation).
      * @param localKey   Base64-encoded result of hashPassword(password, username).
      * @param encrypted      Ciphertext blob read from disk.
      * @param aad            Optional AAD used on encryption; default matches username.
@@ -87,18 +87,18 @@ interface CryptographyManager {
      * @throws SecurityException if authentication/tag check fails or format is invalid.
      */
     fun decryptCredentials(
-        username: String,
+        email: String,
         localKey: ByteArray,
         encrypted: ByteArray,
-        aad: ByteArray? = username.toByteArray()
+        aad: ByteArray? = email.toByteArray()
     ): JSONObject
 
     fun decryptCredentialsByDerivation(
-        username: String,
+        email: String,
         p: String,
         purpose: String,
         encrypted: ByteArray,
-        aad: ByteArray? = username.toByteArray()
+        aad: ByteArray? = email.toByteArray()
     ): JSONObject
 
     fun getAppId(): String
@@ -116,7 +116,7 @@ interface CryptographyManager {
     ): ByteArray
 
     fun deriveLocalKey(
-        username: String,
+        email: String,
         password: CharArray,
         purpose: String = Purpose.Key.code
     ): ByteArray

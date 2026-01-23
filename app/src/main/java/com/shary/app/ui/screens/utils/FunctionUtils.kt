@@ -1,7 +1,6 @@
 package com.shary.app.ui.screens.utils
 
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import com.shary.app.core.domain.models.FieldDomain
 
 object FunctionUtils {
 
@@ -9,13 +8,10 @@ object FunctionUtils {
         storageIdx: Int?,
         requestIdx: Int?,
         matches: SnapshotStateList<Triple<Int, Int, Int>>,
-        storedFieldsSelection: SnapshotStateList<FieldDomain>,
-        storedFields: List<FieldDomain>,
         freeLabelsFromUnmatched: SnapshotStateList<Int>,
         isStorageFirst: Boolean,
         onUnselect: () -> Unit,
         onIsStorageFirst: (Boolean) -> Unit,
-        onMatchCreated: (Triple<Int, Int, Int>) -> Unit,
         onFreeLabelStored: (Int) -> Unit
     ) {
         if (storageIdx != null && requestIdx == null) onIsStorageFirst(true)
@@ -45,8 +41,6 @@ object FunctionUtils {
                 }
                 val newMatch = Triple(storageIdx, requestIdx, newLabel)
                 matches.add(newMatch)
-                storedFieldsSelection.add(storedFields[storageIdx])
-                onMatchCreated(newMatch)
             }
 
             isStorageMatched && !isRequestMatched -> {
@@ -80,9 +74,6 @@ object FunctionUtils {
                     onFreeLabelStored(storageOldMatch.third)
                     Triple(storageIdx, requestIdx, requestOldMatch.third)
                 }
-
-                storedFieldsSelection.add(storedFields[storageIdx])
-                onMatchCreated(newTriple)
             }
         }
 

@@ -6,8 +6,8 @@ import com.shary.app.core.domain.models.RequestDomain.Companion.initialize
 
 data class RequestDomain(
     val fields: List<FieldDomain>,
-    val user: UserDomain,
-    val recipients: List<UserDomain>,
+    val user: String,
+    val recipients: List<String>,
     val dateAdded: Instant,
     val owned: Boolean,
     val responded: Boolean
@@ -19,8 +19,8 @@ data class RequestDomain(
 
         fun create(
             fields: List<FieldDomain>,
-            user: UserDomain,
-            recipients: List<UserDomain> = emptyList(),
+            user: String,
+            recipients: List<String> = emptyList(),
         ): RequestDomain {
             return RequestDomain(
                 fields = fields,
@@ -34,7 +34,7 @@ data class RequestDomain(
 
         fun initialize(): RequestDomain = RequestDomain(
             fields = emptyList(),
-            user = UserDomain(),
+            user = String(),
             recipients = emptyList(),
             dateAdded = Instant.now(),
             owned = false,
@@ -48,7 +48,7 @@ fun RequestDomain?.orEmpty(): RequestDomain =
 
 fun RequestDomain.reset(): RequestDomain = this.copy(
     fields = emptyList(),
-    user = UserDomain(),
+    user = String(),
     recipients = emptyList(),
     dateAdded = Instant.EPOCH,
     owned = false,

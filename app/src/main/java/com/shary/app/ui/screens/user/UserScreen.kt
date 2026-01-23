@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -40,7 +39,6 @@ import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserEvent
 import com.shary.app.viewmodels.user.UserViewModel
-import io.ktor.client.request.request
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

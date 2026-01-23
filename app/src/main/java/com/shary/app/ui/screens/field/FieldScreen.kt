@@ -335,9 +335,9 @@ fun FieldsScreen(navController: NavHostController) {
 
                         CompactActionButton(
                             onClick = {
-                                val currentUsername = userViewModel.getOwner().username
-                                if (currentUsername.isNotEmpty()) {
-                                    fieldViewModel.fetchFieldsFromCloud(currentUsername)
+                                val ownerEmail = userViewModel.getOwner().email
+                                if (ownerEmail.isNotEmpty()) {
+                                    fieldViewModel.fetchFieldsFromCloud(ownerEmail)
                                 } else {
                                     snackbarMessage = "User not logged in"
                                 }

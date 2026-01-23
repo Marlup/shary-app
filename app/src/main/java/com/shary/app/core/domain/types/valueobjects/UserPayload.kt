@@ -13,5 +13,4 @@ data class UserPayload(
     val pubkey: String,
     val verification: String,
     val signature: String,
-    val fcmToken: String? = null
 )

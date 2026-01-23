@@ -72,21 +72,21 @@ class AuthenticationServiceImpl @Inject constructor(
      * 4) Persist encrypted JSON credentials in storage.
      */
     override suspend fun signUp(context: Context, username: String, email: String, password: String) = runCatching {
-        val safe = computeSafePassword(username, password)
-        Log.d("AuthenticationServiceImpl", "signUp - username: $username")
+        val safePassword = computeSafePassword(email, password)
+        Log.d("AuthenticationServiceImpl", "signUp - email: $email")
 
         // Initialize keys locally
-        crypto.initializeKeysWithUser(context, username, safe)
-        crypto.saveSignature(context, username, email, safe)
+        crypto.initializeKeysWithUser(context, email, safePassword)
+        crypto.saveSignature(context, username, email, safePassword)
 
         // --- CLOUD REGISTRATION ---
         val cloudReachable = cloud.sendPing()
         Log.w("AuthenticationServiceImpl", "Cloud registration launched")
         if (cloudReachable) {
-            val registered = cloud.isUserRegisteredInCloud(username)
+            val registered = cloud.isUserRegisteredInCloud(email)
         Log.w("AuthenticationServiceImpl", "Cloud isUserRegisteredInCloud launched")
             if (!registered) {
-                val token = cloud.uploadUser(username)
+                val token = cloud.uploadUser(email)
                 if (token.isNotEmpty()) {
                     Log.d("AuthenticationServiceImpl", "Cloud user uploaded, token received.")
                     setAuthToken(token)
@@ -101,9 +101,9 @@ class AuthenticationServiceImpl @Inject constructor(
         }
 
         // Persist locally
-        cacheCredentials(username, email, safe,getAuthToken())
+        cacheCredentials(username, email, safePassword,getAuthToken())
         persistCredentials(context)
-        preLoadLocalKeys(username, safe)
+        preLoadLocalKeys(email, safePassword)
     }
 
     /**
@@ -111,25 +111,25 @@ class AuthenticationServiceImpl @Inject constructor(
      * 1) Derive safe password.
      * 2) Initialize keys for that user.
      * 3) Load and decrypt JSON credentials from local storage.
-     * 4) Verify that provided username + password match stored credentials.
+     * 4) Verify that provided email + password match stored credentials.
      */
-    override suspend fun signIn(context: Context, username: String, password: String) = runCatching {
-        val safePassword = computeSafePassword(username, password)
-        crypto.initializeKeysWithUser(context, username, safePassword)
-        preLoadLocalKeys(username, safePassword)
+    override suspend fun signIn(context: Context, email: String, password: String) = runCatching {
+        val safePassword = computeSafePassword(email, password)
+        crypto.initializeKeysWithUser(context, email, safePassword)
+        preLoadLocalKeys(email, safePassword)
 
-        loadCredentials(context, username)
-        check(isAuthenticated(username, safePassword)) { "Invalid credentials" }
+        loadCredentials(context, email)
+        check(isAuthenticated(email, safePassword)) { "Invalid credentials" }
 
         // --- CLOUD VERIFICATION ---
         val online = cloud.sendPing()
         Log.w("AuthenticationServiceImpl", "Cloud verification launched")
         if (online) {
-            val isRegistered = cloud.isUserRegisteredInCloud(username)
+            val isRegistered = cloud.isUserRegisteredInCloud(email)
             Log.w("AuthenticationServiceImpl", "Cloud isUserRegisteredInCloud launched")
             if (!isRegistered) {
                 Log.w("AuthenticationServiceImpl", "After ping: User not found in cloud, forcing re-upload.")
-                cloud.uploadUser(username)
+                cloud.uploadUser(email)
             } else {
                 Log.d("AuthenticationServiceImpl", "After ping: User verified in cloud.")
             }
@@ -155,15 +155,15 @@ class AuthenticationServiceImpl @Inject constructor(
 
     // -------------------- Helpers --------------------
 
-    /** Safe password = base64( SHA256(password + ":" + username) ) */
-    private fun computeSafePassword(username: String, password: String): String =
-        base64Encode(crypto.hashPassword(password, username))
+    /** Safe password = base64( SHA256(password + ":" + code) ) */
+    private fun computeSafePassword(salt: String, password: String): String =
+        base64Encode(crypto.hashPassword(password, salt))
 
-    private fun cacheCredentials(username: String, email: String, safe: String, token: String = "") {
+    private fun cacheCredentials(username: String, email: String, safePassword: String, token: String = "") {
         _state.value = _state.value.copy(
             username = username,
             email = email,
-            safePassword = safe,
+            safePassword = safePassword,
             authToken = token
         )
     }
@@ -182,7 +182,7 @@ class AuthenticationServiceImpl @Inject constructor(
             put("ts", SecurityUtils.getCurrentUtcTimestamp())
         }
         val bytes = crypto.encryptCredentialsByDerivation(
-            s.username,
+            s.email,
             s.safePassword,
             Purpose.Credentials.code,
             json
@@ -194,10 +194,10 @@ class AuthenticationServiceImpl @Inject constructor(
     }
 
     /** Loads credentials JSON from encrypted storage and updates AuthState. */
-    private fun loadCredentials(context: Context, username: String) {
+    private fun loadCredentials(context: Context, email: String) {
         val encrypted = store.readCredentials(context) ?: error("Credentials file not found")
         val data = crypto.decryptCredentials(
-            username,
+            email,
             getLocalKeyByPurpose(Purpose.Credentials)!!,
             encrypted
         )
@@ -207,7 +207,7 @@ class AuthenticationServiceImpl @Inject constructor(
         cacheCredentials(
             username = data.optString("user_username"),
             email    = data.optString("user_email"),
-            safe     = data.optString("user_safe_password"),
+            safePassword     = data.optString("user_safe_password"),
             token    = data.optString("user_validation_token")
         )
         cache.cacheOwnerUsername(username)
@@ -215,11 +215,11 @@ class AuthenticationServiceImpl @Inject constructor(
         Log.d("AuthenticationServiceImpl", "Encrypted credentials loaded (${encrypted.size} bytes).")
     }
 
-    /** Verifies if username + safePassword match in-memory AuthState. */
-    private fun isAuthenticated(username: String, safePassword: String): Boolean {
+    /** Verifies if email + safePassword match in-memory AuthState. */
+    private fun isAuthenticated(email: String, safePassword: String): Boolean {
         val s = _state.value
-        return username.isNotBlank() && safePassword.isNotBlank() &&
-                s.username == username && s.safePassword == safePassword
+        return email.isNotBlank() && safePassword.isNotBlank() &&
+                s.email == email && s.safePassword == safePassword
     }
 
     // -------------------- In-memory backend simulation --------------------
@@ -229,26 +229,26 @@ class AuthenticationServiceImpl @Inject constructor(
     /** Stores user's public keys (used in fake backend simulation). */
     private suspend fun doRegisterIdentity(username: String, email: String, signPublic: ByteArray, kexPublic: ByteArray): Boolean {
         delay(50)
-        users[username] = signPublic to kexPublic
+        users[email] = signPublic to kexPublic
         return true
     }
 
     /** Verifies challenge/response (for future backend). */
-    private suspend fun doVerifyLogin(username: String, challenge: ByteArray, signature: ByteArray): Boolean {
+    private suspend fun doVerifyLogin(email: String, challenge: ByteArray, signature: ByteArray): Boolean {
         delay(DELAY_TIME_SECONDS)
-        val (signPub, _) = users[username] ?: return false
-        val last = challenges[username] ?: return false
+        val (signPub, _) = users[email] ?: return false
+        val last = challenges[email] ?: return false
         if (!last.contentEquals(challenge)) return false
         return crypto.verifyDetached(challenge, signature, signPub)
     }
 
     /** Preloads local symmetric keys for all built-in purposes. */
-    private fun preLoadLocalKeys(username: String, password: String) {
+    private fun preLoadLocalKeys(email: String, password: String) {
         Purpose.builtIns.forEach { purpose ->
             addLocalKeyByPurpose(
                 purpose,
                 crypto.deriveLocalKey(
-                    username,
+                    email,
                     password.toCharArray(),
                     purpose.code
                 )
