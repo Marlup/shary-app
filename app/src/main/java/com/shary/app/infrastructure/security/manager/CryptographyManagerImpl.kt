@@ -7,7 +7,6 @@ import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.security.DetachedVerifier
 import com.shary.app.core.domain.interfaces.security.Ed25519Factory
 import com.shary.app.core.domain.interfaces.states.Identity
-import com.shary.app.core.domain.security.Box
 import com.shary.app.core.domain.types.valueobjects.Sealed
 import com.shary.app.infrastructure.security.box.AesGcmBox
 import com.shary.app.infrastructure.security.messageCipher.AesGcmCipher
@@ -29,7 +28,7 @@ import java.security.MessageDigest
  * - Deriva identidad (semillas y públicas) con `KeyDerivation`.
  * - Firma/verifica con Ed25519.
  * - Cifra/descifra credenciales JSON en almacenamiento local con **AES-GCM** usando `AesGcmCipher`
- *   y **clave derivada** estable desde (username, safePassword, appId) vía `KeyDerivation`.
+ *   y **clave derivada** estable desde (email, safePassword, appId) vía `KeyDerivation`.
  * - Opcionalmente, realiza sellado ECDH (X25519 + AES-GCM) con `AesGcmBox` para P2P o C/S.
  */
 class CryptographyManagerImpl(
@@ -42,7 +41,7 @@ class CryptographyManagerImpl(
     private val context: Context
 ) : CryptographyManager {
 
-    private var cachedUser: String? = null
+    private var cachedUserEmail: String? = null
     private var cachedIdentity: Identity? = null
 
     // Tamaños fijos de AES-GCM
@@ -56,12 +55,12 @@ class CryptographyManagerImpl(
     // =====================================================================================
 
     /**
-     * Inicializa/deriva las claves de usuario (en memoria) a partir de (username, safePassword).
+     * Inicializa/deriva las claves de usuario (en memoria) a partir de (email, safePassword).
      * Debe llamarse antes de `getSignPublicKey`, `signDetached`, etc.
      */
-    override fun initializeKeysWithUser(context: Context, username: String, safePassword: String) {
-        val id = deriveIdentity(username, safePassword.toCharArray(), getAppId())
-        cachedUser = username
+    override fun initializeKeysWithUser(context: Context, email: String, safePassword: String) {
+        val id = deriveIdentity(email, safePassword.toCharArray(), getAppId())
+        cachedUserEmail = email
         cachedIdentity = id
     }
 
@@ -77,7 +76,7 @@ class CryptographyManagerImpl(
      * }
      */
     override fun saveSignature(context: Context, username: String, email: String, safePassword: String) {
-        if (cachedIdentity == null || cachedUser != username) {
+        if (cachedIdentity == null || cachedUserEmail != username) {
             initializeKeysWithUser(context, username, safePassword)
         }
         val id = requireNotNull(cachedIdentity)
@@ -90,7 +89,7 @@ class CryptographyManagerImpl(
             put("app_id", getAppId())
         }
         val f = SecurityUtils.signatureFile(context)
-        if (!f.parentFile.exists()) f.parentFile.mkdirs()
+        if (!f.parentFile!!.exists()) f.parentFile!!.mkdirs()
         f.writeText(json.toString())
     }
 
@@ -103,8 +102,6 @@ class CryptographyManagerImpl(
      */
     override fun hashPassword(password: String, salt: String): ByteArray {
         return runCatching {
-            // Si existe kd.passwordHash(...), úsalo:
-            // kd.passwordHash(password.toCharArray(), salt.toByteArray(StandardCharsets.UTF_8))
             throw UnsupportedOperationException("fallback")
         }.getOrElse {
             val md = MessageDigest.getInstance("SHA-256")
@@ -150,33 +147,33 @@ class CryptographyManagerImpl(
     /**
      * Cifra un JSON de credenciales para almacenamiento local usando:
      * - KDF oficial (`KeyDerivation`) → `localStorageKey(master)` (o `storageKey(master)`).
-     * - AES-GCM (`AesGcmCipher`) con AAD = username (por defecto).
+     * - AES-GCM (`AesGcmCipher`) con AAD = email (por defecto).
      *
      * Formato en disco (bytes):  iv(12) || body || tag(16)
      *
-     * @param username      Dueño del blob; también se usa como AAD por defecto.
-     * @param safePassword  Base64( hashPassword(plain, username) ) que usa la app.
+     * @param email      Dueño del blob; también se usa como AAD por defecto.
+     * @param safePassword  Base64( hashPassword(plain, email) ) que usa la app.
      * @param json          Credenciales a cifrar.
-     * @param aad           AAD opcional; si es null, se usa username bytes.
-     * @return              Blob opaco listo para persistir.
+     * @param aad           AAD opcional; si es null, se usa email bytes.
+     * @return              email
      */
     override fun encryptCredentials(
-        username: String,
+        email: String,
         localKey: ByteArray,
         json: JSONObject,
         aad: ByteArray?
     ): ByteArray {
-        return localVault.encryptCredentials(username, localKey, json, aad)
+        return localVault.encryptCredentials(email, localKey, json, aad)
     }
 
     override fun encryptCredentialsByDerivation(
-        username: String,
+        email: String,
         p: String,
         purpose: String,
         json: JSONObject,
         aad: ByteArray?
     ): ByteArray {
-        return localVault.encryptCredentialsByDerivation(username, p, json, aad)
+        return localVault.encryptCredentialsByDerivation(email, p, json, aad)
     }
 
     /**
@@ -186,22 +183,22 @@ class CryptographyManagerImpl(
      * @throws SecurityException si falla la autenticación (GCM tag) o el formato no es válido.
      */
     override fun decryptCredentials(
-        username: String,
+        email: String,
         localKey: ByteArray,
         encrypted: ByteArray,
         aad: ByteArray?
     ): JSONObject {
-        return localVault.decryptCredentials(username, localKey, encrypted, aad)
+        return localVault.decryptCredentials(email, localKey, encrypted, aad)
     }
 
     override fun decryptCredentialsByDerivation(
-        username: String,
+        email: String,
         p: String,
         purpose: String,
         encrypted: ByteArray,
         aad: ByteArray?
     ): JSONObject {
-        return localVault.decryptCredentialsByDerivation(username, p, encrypted, aad)
+        return localVault.decryptCredentialsByDerivation(email, p, encrypted, aad)
     }
 
     // =====================================================================================
@@ -209,11 +206,11 @@ class CryptographyManagerImpl(
     // =====================================================================================
 
     /**
-     * Deriva identidad (semillas + públicas) desde (username, passwordChars, appId).
+     * Deriva identidad (semillas + públicas) desde (email, passwordChars, appId).
      * `passwordChars` puede ser el safePassword decodificado/transformado si así lo decidiste.
      */
-    override fun deriveIdentity(username: String, password: CharArray, appId: String): Identity {
-        val master = kd.masterSeed(username, password, appId)
+    override fun deriveIdentity(email: String, password: CharArray, appId: String): Identity {
+        val master = kd.masterSeed(email, password, appId)
         val signSeed = kd.idSignSeed(master)
         val kexSeed  = kd.idKexSeed(master)
         val signer   = Ed25519Signer.fromSeed(signSeed)
@@ -234,13 +231,13 @@ class CryptographyManagerImpl(
     private fun doSealTo(
         plain: ByteArray,
         receiverKexPublic: ByteArray,
-        username: String,
+        email: String,
         password: CharArray,
         appId: String,
         nonce: ByteArray,
         aad: ByteArray? = null
     ): Sealed {
-        val master = kd.masterSeed(username, password, appId)
+        val master = kd.masterSeed(email, password, appId)
         val sess = kd.sessionSeed(master, nonce) // efímero determinista por nonce
         return box.seal(plain, myPrivate = sess, peerPublic = receiverKexPublic, aad = aad)
     }
@@ -248,12 +245,12 @@ class CryptographyManagerImpl(
     override fun sealTo(
         plain: ByteArray,
         receiverKexPublic: ByteArray,
-        username: String,
+        email: String,
         password: CharArray,
         appId: String,
         nonce: ByteArray,
         aad: ByteArray?
-    ) = doSealTo(plain, receiverKexPublic, username, password, appId, nonce, aad)
+    ) = doSealTo(plain, receiverKexPublic, email, password, appId, nonce, aad)
 
     /**
      * Apertura ECDH (X25519 + AES-GCM) de un `Box.Sealed`.
@@ -261,23 +258,23 @@ class CryptographyManagerImpl(
     private fun doOpenFrom(
         sealed: Sealed,
         senderEphPublicOrStatic: ByteArray,
-        username: String,
+        email: String,
         password: CharArray,
         appId: String,
         aad: ByteArray? = null
     ): ByteArray {
-        val master = kd.masterSeed(username, password, appId)
+        val master = kd.masterSeed(email, password, appId)
         val kex    = kd.idKexSeed(master)
         return box.open(sealed, myPrivate = kex, peerPublic = senderEphPublicOrStatic, aad = aad)
     }
     override fun openFrom(
-        sealed: Sealed,
+        sealedBox: Sealed,
         senderEphPublicOrStatic: ByteArray,
-        username: String,
+        email: String,
         password: CharArray,
         appId: String,
         aad: ByteArray?
-    ) = doOpenFrom(sealed, senderEphPublicOrStatic, username, password, appId, aad)
+    ) = doOpenFrom(sealedBox, senderEphPublicOrStatic, email, password, appId, aad)
 
     /** Clave pública X25519 del usuario (base64) derivada ad hoc. */
     fun deriveKexPublicKeyB64(username: String, password: CharArray): String {
@@ -332,8 +329,8 @@ class CryptographyManagerImpl(
         return cipher.decrypt(sharedKey, iv, body, tag, aad)
     }
 
-    override fun deriveLocalKey(username: String, password: CharArray, purpose: String): ByteArray {
-        return localVault.deriveLocalKey(username, password, purpose)
+    override fun deriveLocalKey(email: String, password: CharArray, purpose: String): ByteArray {
+        return localVault.deriveLocalKey(email, password, purpose)
     }
 
     // =====================================================================================

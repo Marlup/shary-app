@@ -9,8 +9,8 @@ import "user.proto";
 message Request {
   string id = 1;
   repeated Field fields = 2;
-  User user = 3;
-  repeated User recipients = 4;
+  string user = 3;
+  repeated string recipients = 4;
   int64 dateAdded = 5;
   bool owned = 6;
   bool responded = 7;

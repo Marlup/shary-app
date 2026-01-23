@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -20,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-//import androidx.hilt.navigation.compose.hiltViewModel // deprecated location of hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -28,19 +28,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.domain.models.reset
 import com.shary.app.core.domain.types.enums.RequestListMode
-import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
-import com.shary.app.ui.screens.request.utils.SendRequestDialog
+import com.shary.app.ui.screens.utils.FieldMatchingDialog
 import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
-import com.shary.app.viewmodels.communication.CloudViewModel
-import com.shary.app.viewmodels.communication.EmailViewModel
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserViewModel
-import java.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,11 +44,10 @@ fun RequestsScreen(navController: NavHostController) {
     // ---------------- ViewModels ----------------
     val fieldViewModel: FieldViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
-    //val emailViewModel: EmailViewModel = hiltViewModel()
-    //val cloudViewModel: CloudViewModel = hiltViewModel()
     val requestViewModel: RequestViewModel = hiltViewModel()
 
-    val snackbarHostState = remember { SnackbarHostState() }
+    // ---------------- States from RequestViewModel ----------------
+    val fields by fieldViewModel.fields.collectAsState()
 
     // ---------------- States from RequestViewModel ----------------
     val listMode by requestViewModel.listMode.collectAsState()
@@ -67,12 +61,14 @@ fun RequestsScreen(navController: NavHostController) {
     }
 
     var openAddDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     var snackbarMessage by remember { mutableStateOf<String?>("") }
 
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
+            snackbarMessage = ""
         }
     }
 
@@ -162,21 +158,32 @@ fun RequestsScreen(navController: NavHostController) {
                     horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CompactActionButton(
-                        onClick = { openAddDialog = true },
-                        icon = Icons.Default.Add,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Add Field",
-                        enabled = actionButtonsEnabled
-                    )
+                    when (listMode) {
+                        RequestListMode.SENT ->
+                            CompactActionButton(
+                                onClick = { openAddDialog = true },
+                                icon = Icons.Default.Add,
+                                backgroundColor = colorScheme.primary,
+                                contentDescription = "Add Field",
+                                enabled = true
+                            )
+                        RequestListMode.RECEIVED ->
+                            CompactActionButton(
+                                onClick = { openAddDialog = true },
+                                icon = Icons.Default.Compare,
+                                backgroundColor = colorScheme.primary,
+                                contentDescription = "Go to Match Fields Dialog",
+                                enabled = draftFields.isNotEmpty()
+                            )
+                    }
 
                     CompactActionButton(
                         onClick = {
-                            val currentUser = userViewModel.getOwner()
-                            Log.d("RequestsScreen", "[1] currentUser: $currentUser")
-                            if (currentUser.username.isNotEmpty()) {
-                                Log.d("RequestsScreen", "[2] currentUser: $currentUser")
-                                requestViewModel.fetchRequestsFromCloud(currentUser.username, currentUser)
+                            val owner = userViewModel.getOwner()
+                            Log.d("RequestsScreen", "[1] owner: $owner")
+                            if (owner.username.isNotEmpty()) {
+                                Log.d("RequestsScreen", "[2] owner: $owner")
+                                requestViewModel.fetchRequestsFromCloud(owner)
                             } else {
                                 snackbarMessage = "User not logged in"
                             }
@@ -184,15 +191,15 @@ fun RequestsScreen(navController: NavHostController) {
                         icon = Icons.Default.CloudDownload,
                         backgroundColor = colorScheme.primary,
                         contentDescription = "Fetch Requests from Cloud",
-                        enabled = actionButtonsEnabled
+                        enabled = true
                     )
 
                     CompactActionButton(
                         onClick = { navController.navigate(Screen.Users.route) },
                         icon = Icons.Default.Person,
                         backgroundColor = colorScheme.primary,
-                        contentDescription = "Send to Users",
-                        enabled = actionButtonsEnabled
+                        contentDescription = "Go to Users Screen",
+                        enabled = true
                     )
                 }
 
@@ -206,8 +213,7 @@ fun RequestsScreen(navController: NavHostController) {
                         onClick = {
                             Log.d("RequestsScreen", "[5] anyDraftRequestCached: ${requestViewModel.anyDraftFieldCached()}")
                             Log.d("RequestsScreen", "[6] anyDraftRequestCached: ${requestViewModel.anyDraftFieldCached()}")
-                            if (draftFields.isNotEmpty()
-                                && userViewModel.anyCachedUser()) {
+                            if (draftFields.isNotEmpty() && userViewModel.anyCachedUser()) {
                                 requestViewModel.setDraftFields()
                                 navController.navigate(Screen.SummaryRequest.route)
                             }
@@ -291,11 +297,13 @@ fun RequestsScreen(navController: NavHostController) {
                 ) {
                     itemsIndexed(
                         items = requestsToShow,
-                        key = { _, request -> request.dateAdded } // stable key
+                        key = { i, _ -> i } // stable key
                     ) { index, request ->
                         val isSelected =
-                            request.fields.isNotEmpty() && request.fields.all { it in draftFields }
-                        val actionButtonsEnabled = listMode == RequestListMode.SENT
+                            request.fields.isNotEmpty() && request.fields.all {
+                                it in draftFields
+                            }
+                        val requestRowButtonEnabled = listMode == RequestListMode.RECEIVED
 
                         // background colors
                         val backgroundColor = when {
@@ -312,22 +320,11 @@ fun RequestsScreen(navController: NavHostController) {
                             colors = CardDefaults.elevatedCardColors(
                                 containerColor = backgroundColor
                             ),
-                            enabled = actionButtonsEnabled,
+                            enabled = requestRowButtonEnabled,
                             onClick = {
-                                // If all fields in the request are already selected, unselect them all.
-                                // Otherwise, select all of them.
-                                if (actionButtonsEnabled) {
-                                    if (isSelected) {
-                                        request.fields.forEach {
-                                            fieldViewModel.toggleFieldSelection(it) // Will unselect
-                                        }
-                                    } else {
-                                        request.fields.forEach {
-                                            if (it !in draftFields) {
-                                                fieldViewModel.toggleFieldSelection(it) // Will select only those not yet selected
-                                            }
-                                        }
-                                    }
+                                requestViewModel.clearDraftFields()
+                                request.fields.forEach {
+                                    requestViewModel.toggleFieldSelection(it)
                                 }
                             },
                         ) {
@@ -418,7 +415,7 @@ fun RequestsScreen(navController: NavHostController) {
                     ) {
                         itemsIndexed(
                             items = draftFields,
-                            key = { _, field -> field.dateAdded } // stable key
+                            key = { i, _ -> i } // stable key
                         ) { _, field ->
                             ElevatedCard(
                                 modifier = Modifier
@@ -471,7 +468,7 @@ fun RequestsScreen(navController: NavHostController) {
     }
 
     // Add field (for the in-progress request)
-    if (openAddDialog) {
+    if (openAddDialog && listMode == RequestListMode.SENT) {
         AddRequestDialog(
             onDismiss = { openAddDialog = false },
             onAddRequest = { key, keyAlias ->
@@ -490,4 +487,21 @@ fun RequestsScreen(navController: NavHostController) {
             }
         )
     }
+    // Match fields (for the selected received request)
+    if (openAddDialog && listMode == RequestListMode.RECEIVED) {
+
+        FieldMatchingDialog(
+            storedFields = fields,
+            requestFields = draftFields,
+            onDismiss = { openAddDialog = false },
+            onAccept = { selectedFields ->
+                if (userViewModel.anyCachedUser()) {
+                    fieldViewModel.setSelectedFields(selectedFields)
+                    navController.navigate(Screen.SummaryField.route)
+                }
+            },
+            onAddField = { field -> fieldViewModel.addField(field) },
+        )
+    }
 }
+

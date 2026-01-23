@@ -30,6 +30,6 @@ interface AuthenticationService {
         email: String,
         password: String
     ): Result<Unit>
-    suspend fun signIn(context: Context, username: String, password: String): Result<Any>
+    suspend fun signIn(context: Context, email: String, password: String): Result<Any>
     suspend fun signOut(context: Context)
 }

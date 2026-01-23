@@ -46,10 +46,10 @@ object SecurityUtils {
         return digest.digest(message.toByteArray(Charsets.UTF_8))
     }
 
-    fun hashPassword(username: String, password: CharArray, appId: String): ByteArray {
-        // Concatenamos y normalizamos los datos
+    fun hashPassword(email: String, password: CharArray, appId: String): ByteArray {
+        // Concatenate and normalize the data
         val input = buildString {
-            append(username.trim().lowercase())
+            append(email.trim().lowercase())
             append(':')
             append(password.concatToString())
             append(':')
@@ -63,8 +63,8 @@ object SecurityUtils {
     /**
      * Variante que devuelve en Base64 para transporte o almacenamiento textual.
      */
-    fun hashPasswordB64(username: String, password: CharArray, appId: String): String =
-        base64Encode(hashPassword(username, password, appId))
+    fun hashPasswordB64(email: String, password: CharArray, appId: String): String =
+        base64Encode(hashPassword(email, password, appId))
 
     fun hashMessageB64(message: String): String {
         val hashB64 = base64Encode(hashMessage(message))
@@ -74,8 +74,6 @@ object SecurityUtils {
 
     fun hashSaltedMessage(message: String, salt: String): ByteArray {
         return runCatching {
-            // Si existe kd.passwordHash(...), úsalo:
-            // kd.passwordHash(password.toCharArray(), salt.toByteArray(StandardCharsets.UTF_8))
             throw UnsupportedOperationException("fallback")
         }.getOrElse {
             val md = MessageDigest.getInstance("SHA-256")

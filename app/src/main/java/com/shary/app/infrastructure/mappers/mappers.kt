@@ -50,7 +50,7 @@ fun FieldProto.toDomain(codec: FieldCodec): FieldDomain =
     )
 }
 
-// Convenience para colecciones
+// Convenience for collections
 fun List<FieldProto>.toDomainFields(codec: FieldCodec): List<FieldDomain> =
     map { it.toDomain(codec) }
 
@@ -65,8 +65,8 @@ fun RequestProto.toDomain(codec: FieldCodec): RequestDomain =
     RequestDomain(
         fields = fieldsList.toDomainFields(codec),
         dateAdded = Instant.ofEpochMilli(dateAdded),
-        user = user.toDomain(),
-        recipients = recipientsList.map { it.toDomain() },
+        user = user,
+        recipients = recipientsList, //recipientsList.map { it.toDomain() },
         owned = owned,
         responded = responded
     )
@@ -75,8 +75,8 @@ fun RequestDomain.toProto(codec: FieldCodec): RequestProto =
     RequestProto.newBuilder()
         .addAllFields(fields.toProtoFields(codec))
         .setDateAdded(dateAdded.toEpochMilli())
-        .setUser(user.toProto())
-        .addAllRecipients(recipients.map { it.toProto() })
+        .setUser(user)
+        .addAllRecipients(recipients)
         .setOwned(owned)
         .setResponded(responded)
         .build()

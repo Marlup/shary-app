@@ -5,8 +5,8 @@ import com.shary.app.infrastructure.security.derivation.hkdf.HkdfSha256
 
 
 class KeyDerivation(private val kdf: Kdf, val hkdf: HkdfSha256) {
-    fun masterSeed(username: String, password: CharArray, appId: String): ByteArray =
-        kdf.derive(password, ("$appId:$username").encodeToByteArray(), 32)
+    fun masterSeed(email: String, password: CharArray, appId: String): ByteArray =
+        kdf.derive(password, ("$appId:$email").encodeToByteArray(), 32)
 
     fun idSignSeed(master: ByteArray): ByteArray =
         hkdf.expand(master, info = "shary:id:sign".encodeToByteArray(), len = 32)

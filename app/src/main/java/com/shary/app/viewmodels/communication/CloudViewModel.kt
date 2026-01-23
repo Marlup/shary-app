@@ -32,15 +32,15 @@ class CloudViewModel @Inject constructor(
     val events: SharedFlow<CloudEvent> = _events.asSharedFlow()
 
     /** Upload the user to the backend. */
-    fun uploadUser(username: String) {
+    fun uploadUser(email: String) {
         viewModelScope.launch {
             _isLoading.value = true
             val token = runCatching {
-                withContext(Dispatchers.IO) { cloudService.uploadUser(username) }
+                withContext(Dispatchers.IO) { cloudService.uploadUser(email) }
             }.getOrDefault("")
             _isLoading.value = false
             if (token.isNotBlank()) {
-                _events.tryEmit(CloudEvent.UserUploaded(username, token))
+                _events.tryEmit(CloudEvent.UserUploaded(email, token))
             } else {
                 _events.tryEmit(CloudEvent.Error(Exception("Upload failed")))
             }
@@ -57,7 +57,7 @@ class CloudViewModel @Inject constructor(
             _isLoading.value = true
             val resultMap = runCatching {
                 withContext(Dispatchers.IO) {
-                    Log.d("CloudViewModel", "uploadData() - ownerUsername: ${owner.username}")
+                    //Log.d("CloudViewModel", "uploadData() - ownerUsername: ${owner.username}")
                     cloudService.uploadData(fields, owner, recipients)
                 }
             }.getOrDefault(emptyMap())
@@ -76,15 +76,15 @@ class CloudViewModel @Inject constructor(
             _isLoading.value = true
             val resultMap = runCatching {
                 withContext(Dispatchers.IO) {
-                    Log.d("CloudViewModel", "uploadRequest() - ownerUsername: ${owner.username}")
+                    //Log.d("CloudViewModel", "uploadRequest() - ownerUsername: ${owner.username}")
                     cloudService.uploadRequest(fields, owner, recipients)
                 }
             }.getOrDefault(emptyMap())
             _isLoading.value = false
             val request = RequestDomain(
                 fields = fields,
-                user = owner,
-                recipients = recipients,
+                user = owner.email,
+                recipients = recipients.map { it.email },
                 dateAdded = Instant.now(),
                 owned = true,
                 responded = false

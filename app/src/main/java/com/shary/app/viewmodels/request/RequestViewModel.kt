@@ -11,7 +11,6 @@ import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.enums.RequestListMode
-import com.shary.app.ui.screens.request.RequestsScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.time.Instant
+import kotlin.collections.plus
 
 @HiltViewModel
 class RequestViewModel @Inject constructor(
@@ -74,6 +74,9 @@ class RequestViewModel @Inject constructor(
 
     fun getDraftFields(): List<FieldDomain> = cacheSelection.getDraftFields()
     fun anyDraftFieldCached() = cacheSelection.isAnyDraftFieldCached()
+    fun toggleFieldSelection(field: FieldDomain) {
+        _draftFields.update { current -> if (field in current) current - field else current + field }
+    }
 
     fun addDraftField(field: FieldDomain) {
         Log.d("RequestViewModel", "[3] Adding draft field: $field")
@@ -115,14 +118,12 @@ class RequestViewModel @Inject constructor(
         cacheSelection.cacheDraftFields(draftFields)
     }
 
-
-
-
     /**
      * Fetches request data from Firebase and saves it as a received request.
      */
-    fun fetchRequestsFromCloud(username: String, currentUser: UserDomain) {
-        Log.d("RequestViewModel", "[3] Fetching requests from cloud for user: $username")
+    fun fetchRequestsFromCloud(targetUser: UserDomain) {
+        Log.d("RequestViewModel", "[3] Fetching requests " +
+                "from cloud for user: ${targetUser.email}")
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -131,9 +132,9 @@ class RequestViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
 
                     // requestData: Result<List<String>>
-                    val requestData = cloudService.fetchRequestData(username)
+                    val requestsData = cloudService.fetchRequestDataFromEmail(targetUser.email)
 
-                    val jsonStrings: List<String> = requestData.getOrThrow()
+                    val jsonStrings: List<String> = requestsData.getOrThrow()
                     if (jsonStrings.isEmpty()) {
                         throw IllegalStateException("No requests returned from cloud")
                     }
@@ -145,9 +146,9 @@ class RequestViewModel @Inject constructor(
 
                         val jsonObject = JSONObject(jsonString)
 
-                        // Extract request owner user
-                        val reqUsername = jsonObject.optString("user", "").trim()
-                        if (reqUsername.isBlank()) {
+                        // Extract request sender user
+                        val userEmail = jsonObject.optString("user", "").trim()
+                        if (userEmail.isBlank()) {
                             throw IllegalStateException("Request[$idx] has empty 'user'")
                         }
 
@@ -165,11 +166,10 @@ class RequestViewModel @Inject constructor(
                         Log.d("RequestViewModel", "[4] Request[$idx] keys: $requestedFields")
 
                         // Create RequestDomain
-                        val user = UserDomain(username = reqUsername)
                         val request = RequestDomain(
                             fields = requestedFields,
-                            user = user,
-                            recipients = listOf(currentUser),
+                            user = userEmail,
+                            recipients = listOf(targetUser.email),
                             dateAdded = Instant.now(),
                             owned = false,
                             responded = false

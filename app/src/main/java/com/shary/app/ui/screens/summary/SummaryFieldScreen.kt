@@ -99,7 +99,6 @@ fun SummaryFieldScreen(navController: NavHostController) {
                         }
 
                         SendOption.Cloud -> {
-                            Log.d("SummaryScreen", "Sending to cloud: " + "username: ${userViewModel.getOwnerUsername()}")
                             Log.d("SummaryScreen", "Sending to cloud: " + "email: ${userViewModel.getOwnerEmail()}")
                             cloudViewModel.uploadData(
                                 fieldViewModel.getCachedFields(),

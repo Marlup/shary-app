@@ -10,8 +10,6 @@ class FieldCodecVault @Inject constructor(
     private val vault: LocalVault,
     private val authenticationService: AuthenticationService
 ) : FieldCodec {
-    //private val u get() = session.getOwnerUsername()
-    //private val p get() = session.getOwnerSafePassword().toCharArray()
 
     override fun encode(message: String, purpose: Purpose): String =
         vault.encryptToString(message, getLocalKeyByPurpose(purpose), null)

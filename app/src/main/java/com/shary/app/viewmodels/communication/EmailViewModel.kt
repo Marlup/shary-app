@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// application
 @HiltViewModel
 class EmailViewModel @Inject constructor(
     private val emailService: EmailService
@@ -20,9 +19,6 @@ class EmailViewModel @Inject constructor(
 
     private val _intent = MutableSharedFlow<Intent>()
     val intent: SharedFlow<Intent> = _intent
-
-    //private val _sending = MutableStateFlow(false)
-    //val sending: StateFlow<Boolean> = _sending
 
     private val _events = MutableSharedFlow<String>() // success/error messages
     val events: SharedFlow<String> = _events

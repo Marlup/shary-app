@@ -60,6 +60,7 @@ interface CacheService {
     fun getOwnerEmail(): String?
     fun getPhoneNumber(): String?
 
+
     // General
     fun clearAllCaches()
 }

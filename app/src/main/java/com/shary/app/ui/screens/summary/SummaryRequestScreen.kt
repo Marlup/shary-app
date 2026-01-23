@@ -106,8 +106,6 @@ fun SummaryRequestScreen(navController: NavHostController) {
 
                         SendOption.Cloud -> {
                             Log.d("SummaryRequestScreen", "Sending Request to cloud: "
-                                    + "username: ${userViewModel.getOwnerUsername()}")
-                            Log.d("SummaryRequestScreen", "Sending Request to cloud: "
                                     + "email: ${userViewModel.getOwnerEmail()}")
                             cloudViewModel.uploadRequest(
                                 requestViewModel.getDraftFields(),
