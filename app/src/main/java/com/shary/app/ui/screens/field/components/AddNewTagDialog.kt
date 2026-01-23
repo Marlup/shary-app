@@ -16,7 +16,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.shary.app.ui.screens.utils.GradientColorPicker
+import com.shary.app.ui.screens.utils.GradientCo
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+lorPicker
 
 @Composable
 fun AddNewTagDialog(
@@ -42,8 +51,23 @@ fun AddNewTagDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(24.dp),
+                    shape = CircleShape,
+                    color = selectedColor
+                ) {}
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = name)
+            }
+
                 Button(onClick = { openColorPicker = true }) {
-                    Text("Pick colour")
+                    Text("Pick ccolor
                 }
 
                 if (openColorPicker) {
