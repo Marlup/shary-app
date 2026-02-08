@@ -1,0 +1,85 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "targets": [
+        {
+          "id": "login_refresh_token",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "send_user",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "upload_user",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "get_pubkey",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "fetch_payload",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "upload_payload",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "delete_user",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        },
+        {
+          "id": "ping",
+          "options": {
+            "ingressSettings": "ALLOW_ALL"
+          }
+        }
+      ],
+      "ignore": [
+        "venv",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
+  "emulators": {
+    "firestore": {
+      "host": "localhost",
+      "port": 5002
+    },
+    "functions": {
+      "port": 5002
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true,
+    "auth": {
+      "port": 9099
+    }
+  }
+}

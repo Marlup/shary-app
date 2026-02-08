@@ -17,28 +17,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.screens.utils.GradientColorPicker
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Alignment
 
 @Composable
-fun AddNewTagDialog(
-    initialName: String,
-    initialColor: Color,
+fun UpdateTagDialog(
+    currentName: String,
+    currentColor: Color,
     onConfirm: (String, Color) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf(initialName) }
-    var selectedColor by remember { mutableStateOf(initialColor) }
+    var name by remember { mutableStateOf(currentName) }
+    var selectedColor by remember { mutableStateOf(currentColor) }
     var openColorPicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialName.isBlank()) "Create new tag" else "Edit tag") },
+        title = { Text("Update tag") },
         text = {
             Column {
                 OutlinedTextField(
@@ -49,23 +42,8 @@ fun AddNewTagDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(24.dp),
-                    shape = CircleShape,
-                    color = selectedColor
-                ) {}
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = name)
-            }
-
                 Button(onClick = { openColorPicker = true }) {
-                    Text("Pick color")
+                    Text("Pick colour")
                 }
 
                 if (openColorPicker) {
@@ -85,7 +63,7 @@ fun AddNewTagDialog(
                     if (name.isNotBlank()) onConfirm(name.trim(), selectedColor)
                 },
                 enabled = name.isNotBlank()
-            ) { Text("Save") }
+            ) { Text("Update") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
