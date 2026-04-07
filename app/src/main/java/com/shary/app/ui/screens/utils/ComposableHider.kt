@@ -28,13 +28,15 @@ fun SearchToggleWithRowSearcher(
             .border(2.dp, Color.Black, shape = RectangleShape)
         //verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(
-            onClick = { onValueChange(showSearcher) }
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = if (showSearcher) "Hide searcher" else "Show searcher"
-            )
+        LongPressHint(if (showSearcher) "Hide search box" else "Show search box") {
+            IconButton(
+                onClick = { onValueChange(showSearcher) }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = if (showSearcher) "Hide searcher" else "Show searcher"
+                )
+            }
         }
 
         AnimatedVisibility(

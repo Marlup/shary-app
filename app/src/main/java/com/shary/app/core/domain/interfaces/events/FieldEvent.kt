@@ -13,6 +13,7 @@ sealed interface FieldEvent {
     data class ValueUpdated(val key: String) : FieldEvent
     data class AliasUpdated(val key: String) : FieldEvent
     data class TagUpdated(val key: String, val tag: Tag) : FieldEvent
+    data object PasswordChanged : FieldEvent
     data class Error(val throwable: Throwable) : FieldEvent
     data class FetchedFromCloud(val count: Int) : FieldEvent
     data object NoNewFields : FieldEvent

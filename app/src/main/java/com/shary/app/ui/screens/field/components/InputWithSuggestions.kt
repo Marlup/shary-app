@@ -31,7 +31,9 @@ import androidx.compose.ui.window.Popup
 fun InputWithSuggestions(
     key: String,
     onKeyChange: (String) -> Unit,
-    predefinedKeys: List<String>
+    predefinedKeys: List<String>,
+    label: String = "Enter input",
+    showError: Boolean = false
 ) {
     var showSuggestions by remember { mutableStateOf(false) }
     var filteredSuggestions by remember { mutableStateOf(listOf<String>()) }
@@ -42,7 +44,7 @@ fun InputWithSuggestions(
     Box {
         OutlinedTextField(
             value = key,
-            isError = key.isBlank(),
+            isError = showError && key.isBlank(),
             onValueChange = {
                 onKeyChange(it)
 
@@ -59,7 +61,7 @@ fun InputWithSuggestions(
                     textFieldBounds.value = position
                 },
 
-            label = { Text("Enter input") },
+            label = { Text(label) },
             singleLine = true
         )
 

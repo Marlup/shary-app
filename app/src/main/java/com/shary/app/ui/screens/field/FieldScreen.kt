@@ -1,10 +1,15 @@
 package com.shary.app.ui.screens.field
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
@@ -16,16 +21,18 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Details
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -41,12 +48,15 @@ import com.shary.app.core.domain.types.enums.safeColor
 import com.shary.app.core.domain.types.enums.safeTagString
 import com.shary.app.ui.screens.field.components.AddCopiedFieldDialog
 import com.shary.app.ui.screens.field.components.AddFieldDialog
+import com.shary.app.ui.screens.field.components.ChangePasswordDialog
 import com.shary.app.ui.screens.field.components.SortMenu
 import com.shary.app.ui.screens.field.components.UpdateFieldDialog
 import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.LoadingOverlay
+import com.shary.app.ui.screens.utils.LongPressHint
 import com.shary.app.ui.screens.utils.RowSearcher
+import com.shary.app.ui.screens.utils.ScreenScaffold
 import com.shary.app.ui.theme.ThemeMenuButton
 import com.shary.app.viewmodels.configuration.ThemeViewModel
 import com.shary.app.viewmodels.field.FieldViewModel
@@ -56,6 +66,7 @@ import com.shary.app.viewmodels.user.UserViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FieldsScreen(navController: NavHostController) {
+    val context = LocalContext.current
 
     // ---------------- ViewModels ----------------
     val fieldViewModel: FieldViewModel = hiltViewModel()
@@ -67,6 +78,7 @@ fun FieldsScreen(navController: NavHostController) {
 
     // ---- Add dialogs ----
     var openAddDialog by remember { mutableStateOf(false) }
+    var openChangePasswordDialog by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var lastSubmittedKey by remember { mutableStateOf<String?>(null) }
     var lastFlow by remember { mutableStateOf(AddFlow.NONE) }
@@ -129,7 +141,7 @@ fun FieldsScreen(navController: NavHostController) {
                     snackbarMessage = "Tag updated for '${ev.key}'"
                 }
                 is FieldEvent.Error -> {
-                    snackbarMessage = "An error occurred"
+                    snackbarMessage = ev.throwable.message ?: "An error occurred"
                 }
                 is FieldEvent.MultiDeleted -> {
                     snackbarMessage = "Deleted fields"
@@ -139,6 +151,14 @@ fun FieldsScreen(navController: NavHostController) {
                 }
                 is FieldEvent.NoNewFields -> {
                     snackbarMessage = "No fields to fetch"
+                }
+                FieldEvent.PasswordChanged -> {
+                    openChangePasswordDialog = false
+                    fieldViewModel.clearSelectedFields()
+                    navController.navigate(Screen.Login.routeWithPasswordChanged(true)) {
+                        popUpTo(Screen.Fields.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
                 else -> {}
             }
@@ -180,116 +200,85 @@ fun FieldsScreen(navController: NavHostController) {
 
     // ---------------- UI ----------------
     LoadingOverlay(isLoading = isLoading) {
-        Scaffold(
-            topBar = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 48.dp)
-                ) {
-                    // Top row with Title, Sort and Menu
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Fields",
-                            style = MaterialTheme.typography.headlineMedium,
-                            modifier = Modifier.weight(1f)
-                        )
+        ScreenScaffold(
+            title = "Fields",
+            snackbarHostState = snackbarHostState,
+            topActions = {
+                SortMenu(
+                    currentSort = sortBy,
+                    isAscendingMap = ascendingSortByMap,
+                    onSortChange = { s, asc ->
+                        fieldViewModel.updateSort(s, asc)
+                    }
+                )
 
-                        SortMenu(
-                            currentSort = sortBy,
-                            isAscendingMap = ascendingSortByMap,
-                            onSortChange = { s, asc ->
-                                fieldViewModel.updateSort(s, asc)
-                            }
-                        )
-
-                        var expanded by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { expanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = "Menu"
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Row() {
-                                            Text("Theme")
-                                            ThemeMenuButton(
-                                                onThemeChosen = { theme ->
-                                                    themeViewModel.updateTheme(theme)
-                                                }
-                                            )
-                                        }
-                                    },
-                                    onClick = { expanded = false },
-                                )
-
-                                DropdownMenuItem(
-                                    text = { Text("Request") },
-                                    onClick = {
-                                        expanded = false
-                                        navController.navigate(Screen.Requests.route)
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Description, null) }
-                                )
-
-                                DropdownMenuItem(
-                                    text = { Text("File Visualization") },
-                                    onClick = {
-                                        expanded = false
-                                        navController.navigate(Screen.FileVisualizer.route)
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.FolderOpen, null) }
-                                )
-
-                                DropdownMenuItem(
-                                    text = { Text("Logout") },
-                                    onClick = {
-                                        expanded = false
-                                        fieldViewModel.clearSelectedFields()
-                                        navController.navigate(Screen.Login.route)
-                                    },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) }
-                                )
-                            }
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    LongPressHint("Open field screen menu") {
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "Menu"
+                            )
                         }
                     }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }) {
+                        DropdownMenuItem(
+                            text = {
+                                ThemeMenuButton(
+                                    onThemeChosen = { theme ->
+                                        themeViewModel.updateTheme(theme)
+                                    }
+                                )
+                            },
+                            onClick = { expanded = false },
+                        )
 
-                    // Search bar - always visible, integrated into top bar
-                    RowSearcher(
-                        queryText = searchQuery,
-                        onQueryTextChange = { searchQuery = it },
-                        currentAttribute = searchFieldBy,
-                        onAttributeChange = { fieldViewModel.updateSearchField(it) },
-                        availableAttributes = SearchFieldBy.entries,
-                        resolveOptionText = {
-                            fieldViewModel.updateSearchField(it);
-                            searchFieldBy.name
-                        },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
+                        DropdownMenuItem(
+                            text = { Text("Change password") },
+                            onClick = {
+                                expanded = false
+                                openChangePasswordDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Lock, null) }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Logout") },
+                            onClick = {
+                                expanded = false
+                                fieldViewModel.clearSelectedFields()
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(Screen.Fields.route) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) }
+                        )
+                    }
                 }
             },
-
-            floatingActionButtonPosition = FabPosition.Center,
-
-            // Components at the bottom
-            floatingActionButton = {
+            searchContent = {
+                RowSearcher(
+                    queryText = searchQuery,
+                    onQueryTextChange = { searchQuery = it },
+                    currentAttribute = searchFieldBy,
+                    onAttributeChange = { fieldViewModel.updateSearchField(it) },
+                    availableAttributes = SearchFieldBy.entries,
+                    resolveOptionText = {
+                        fieldViewModel.updateSearchField(it)
+                        searchFieldBy.name
+                    }
+                )
+            },
+            bottomBarContent = {
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
 
@@ -330,7 +319,6 @@ fun FieldsScreen(navController: NavHostController) {
                             icon = Icons.Default.Add,
                             backgroundColor = colorScheme.primary,
                             contentDescription = "Add Field",
-                            useExtendedColors = false
                         )
 
                         CompactActionButton(
@@ -345,7 +333,6 @@ fun FieldsScreen(navController: NavHostController) {
                             icon = Icons.Default.CloudDownload,
                             backgroundColor = colorScheme.primary,
                             contentDescription = "Fetch Fields from Cloud",
-                            useExtendedColors = false
                         )
 
                         CompactActionButton(
@@ -353,7 +340,13 @@ fun FieldsScreen(navController: NavHostController) {
                             icon = Icons.Default.Person,
                             backgroundColor = colorScheme.primary,
                             contentDescription = "Send to Users",
-                            useExtendedColors = false
+                        )
+
+                        CompactActionButton(
+                            onClick = { navController.navigate(Screen.Requests.route) },
+                            icon = Icons.Default.Description,
+                            backgroundColor = colorScheme.primary,
+                            contentDescription = "Go to Request Screen",
                         )
                     }
 
@@ -378,12 +371,6 @@ fun FieldsScreen(navController: NavHostController) {
                         )
                     }
                 }
-            },
-            snackbarHost = {
-                SnackbarHost(
-                    snackbarHostState,
-                    modifier = Modifier.background(colorScheme.inverseSurface)
-                )
             }
         ) { paddingValues ->
             Column(
@@ -406,138 +393,96 @@ fun FieldsScreen(navController: NavHostController) {
                             items = filteredFields,
                             key = { _, field -> field.key }
                         ) { _, field ->
+                            val isSelected = selectedFields.contains(field)
 
-                            ElevatedCard(
+                            val stripeColor = field.tag.safeColor()
+
+                            val actionPanelWidth = if (field.keyAlias.isNotEmpty()) 248.dp else 186.dp
+                            val cardEndPadding by animateDpAsState(
+                                targetValue = if (isSelected) actionPanelWidth else 0.dp,
+                                label = "fieldCardEndPadding"
+                            )
+
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                                    .border(
-                                        width = if (selectedFields.contains(field)) 6.dp else 4.dp,
-                                        color = if (selectedFields.contains(field)) colorScheme.primary else field.tag.safeColor(),
-                                        shape = MaterialTheme.shapes.medium
-                                    ),
-                                colors = CardDefaults.elevatedCardColors(
-                                    containerColor = colorScheme.surface
-                                ),
-                                onClick = { fieldViewModel.toggleFieldSelection(field) }
+                                    .padding(vertical = 6.dp)
                             ) {
-                                Row(
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = isSelected,
+                                    modifier = Modifier.align(Alignment.CenterEnd),
+                                    enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                    exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                                ) {
+                                    SwipeActionsRow(
+                                        modifier = Modifier
+                                            .width(actionPanelWidth)
+                                            .fillMaxHeight(),
+                                        onEdit = {
+                                            openUpdateFieldDialog = true
+                                            editingField = field.copy()
+                                        },
+                                        onCopy = {
+                                            snackbarMessage = "Field '${field.key}' copied"
+                                        },
+                                        onAddCopy = {
+                                            openAddFieldCopyDialog = true
+                                            editingField = field.copy()
+                                        },
+                                        onDetails = if (field.keyAlias.isNotEmpty()) {
+                                            { snackbarMessage = field.keyAlias }
+                                        } else null
+                                    )
+                                }
+
+                                Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(end = cardEndPadding),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = colorScheme.surface
+                                    ),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                                    onClick = { fieldViewModel.toggleFieldSelection(field) }
                                 ) {
-                                    Column(Modifier.weight(1f)) {
-
-                                        // key text
-                                        Text(
-                                            field.key,
-                                            color = colorScheme.onSurface,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            maxLines = 1
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 12.dp, horizontal = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(6.dp)
+                                                .heightIn(min = 48.dp)
+                                                .background(stripeColor)
                                         )
-                                        // value text
-                                        Text(
-                                            field.value,
-                                            color = colorScheme.onSurfaceVariant,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1
-                                        )
-                                        // tag text
-                                        Text(
-                                            "Tag: ${field.tag.safeTagString()}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            //color = field.tag.safeColor().copy(alpha = 1.0f),
-                                            color = colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-                                    }
 
-                                    // --- Three dots menu ---
-                                    var expanded by remember { mutableStateOf(false) }
-                                    Box {
-                                        IconButton(onClick = { expanded = true }) {
-                                            Icon(
-                                                imageVector = Icons.Default.MoreHoriz,
-                                                contentDescription = "Options"
-                                            )
-                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
 
-                                        DropdownMenu(
-                                            expanded = expanded,
-                                            onDismissRequest = { expanded = false }
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Row {
-                                                        Icon(
-                                                            Icons.Default.ContentCopy,
-                                                            contentDescription = "Copy Field Content"
-                                                        )
-                                                        Text("Copy")
-                                                    }
-                                                },
-                                                onClick = {
-                                                    expanded = false
-                                                    // Direct copy to clipboard or VM
-                                                    snackbarMessage = "Field '${field.key}' copied"
-                                                }
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                field.key,
+                                                color = colorScheme.onSurface,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                maxLines = 1
                                             )
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Row {
-                                                        Icon(
-                                                            Icons.Default.CopyAll,
-                                                            contentDescription = "Add Field from User Content"
-                                                        )
-                                                        Text("Add Copy")
-                                                    }
-                                                },
-                                                onClick = {
-                                                    expanded = false
-                                                    openAddFieldCopyDialog = true
-                                                    //targetAddFieldCopy = field
-                                                    editingField = field.copy()
-                                                }
+                                            Text(
+                                                field.value,
+                                                color = colorScheme.onSurfaceVariant,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1
                                             )
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Row {
-                                                        Icon(
-                                                            Icons.Default.Edit,
-                                                            contentDescription = "Edit Field Content"
-                                                        )
-                                                        Text("Edit")
-                                                    }
-                                                },
-                                                onClick = {
-                                                    expanded = false
-                                                    openUpdateFieldDialog = true
-                                                    editingField = field.copy()
-                                                }
-                                            )
-                                            if (field.keyAlias.isNotEmpty()) {
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Row {
-                                                            Icon(
-                                                                Icons.Default.Details,
-                                                                contentDescription = "Edit Field Content"
-                                                            )
-                                                            Text("Details")
-                                                        }
-                                                    },
-                                                    onClick = {
-                                                        expanded = false
-                                                        // Show details about the key
-                                                        snackbarMessage = field.keyAlias
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
+                                            Text(
+                                                field.tag.safeTagString(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                    )
                                 }
                             }
+                        }
+                    }
                         }
                     }
                 } else {
@@ -600,6 +545,77 @@ fun FieldsScreen(navController: NavHostController) {
                     openUpdateFieldDialog = false
                 }
             )
+        }
+    }
+
+    if (openChangePasswordDialog) {
+        ChangePasswordDialog(
+            isLoading = isLoading,
+            onDismiss = { openChangePasswordDialog = false },
+            onAccept = { oldPassword, newPassword, repeatNewPassword ->
+                fieldViewModel.changePasswordAndRewrapDataKey(
+                    context = context,
+                    oldPassword = oldPassword,
+                    newPassword = newPassword,
+                    repeatNewPassword = repeatNewPassword
+                )
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeActionsRow(
+    modifier: Modifier = Modifier,
+    onEdit: () -> Unit,
+    onCopy: () -> Unit,
+    onAddCopy: () -> Unit,
+    onDetails: (() -> Unit)?
+) {
+    Row(
+        modifier = modifier
+            .background(Color.Transparent)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SwipeActionButton(
+            label = "",
+            icon = Icons.Default.Edit,
+            onClick = onEdit
+        )
+        SwipeActionButton(
+            label = "",
+            icon = Icons.Default.ContentCopy,
+            onClick = onCopy
+        )
+        SwipeActionButton(
+            label = "",
+            icon = Icons.Default.CopyAll,
+            onClick = onAddCopy
+        )
+        if (onDetails != null) {
+            SwipeActionButton(
+                label = "",
+                icon = Icons.Default.Details,
+                onClick = onDetails
+            )
+        }
+    }
+}
+
+@Composable
+private fun SwipeActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    LongPressHint("Run this quick action") {
+        TextButton(onClick = onClick) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(icon, contentDescription = label)
+            }
         }
     }
 }

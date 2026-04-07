@@ -18,7 +18,7 @@ fun AddUserDialog(
     UserEditorDialog(
         initial = initial,
         title = "Add New User",
-        confirmLabel = "ADD",
+        confirmLabel = "Add",
         onDismiss = onDismiss,
         onConfirm = onAddUser
     )

@@ -18,31 +18,35 @@ fun GoToScreen(
     buttonIcon: ImageVector = Icons.AutoMirrored.Default.Login,
     onExit: () -> Unit = {  }
 ) {
-    Button(onClick = {
-        onExit()
-        navController.navigate(targetScreen.route) {
-            popUpTo(targetScreen.route) { inclusive = true }
-            launchSingleTop = true
+    LongPressHint("Leave this screen and open ${targetScreen.route}") {
+        Button(onClick = {
+            onExit()
+            navController.navigate(targetScreen.route) {
+                popUpTo(targetScreen.route) { inclusive = true }
+                launchSingleTop = true
+            }
+        }) {
+            Icon(
+                buttonIcon,
+                contentDescription = "Go to Screen button"
+            )
         }
-    }) {
-        Icon(
-            buttonIcon,
-            contentDescription = "Go to Screen button"
-        )
     }
 }
 
 @Composable
 fun GoBackButton(navController: NavHostController) {
-    Button(onClick = {
-        navController.navigate(Screen.Home.route) {
-            popUpTo(Screen.Home.route) { inclusive = true }
-            launchSingleTop = true
+    LongPressHint("Return to home screen") {
+        Button(onClick = {
+            navController.navigate(Screen.Home.route) {
+                popUpTo(Screen.Home.route) { inclusive = true }
+                launchSingleTop = true
+            }
+        }) {
+            Icon(
+                Icons.Filled.Home,
+                contentDescription = "Go back button"
+            )
         }
-    }) {
-        Icon(
-            Icons.Filled.Home,
-            contentDescription = "Go back button"
-        )
     }
 }

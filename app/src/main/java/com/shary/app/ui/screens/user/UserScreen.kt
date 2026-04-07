@@ -1,10 +1,15 @@
 package com.shary.app.ui.screens.user
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
@@ -13,7 +18,6 @@ import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.material3.MaterialTheme.colorScheme
@@ -34,7 +38,9 @@ import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
+import com.shary.app.ui.screens.utils.LongPressHint
 import com.shary.app.ui.screens.utils.RowSearcher
+import com.shary.app.ui.screens.utils.ScreenScaffold
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserEvent
@@ -134,41 +140,25 @@ fun UsersScreen(navController: NavHostController) {
     }
 
     // ---------------- UI ----------------
-    Scaffold(
-        topBar = {
-            Column(
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 64.dp),
-                    horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    //GoToScreen(navController, Screen.Fields) { userViewModel.clearSelectedUsers() }
-
-                }
-                RowSearcher(
-                    queryText = searchCriteria,
-                    onQueryTextChange = { searchCriteria = it },
-                    currentAttribute = userSearchAttribute,
-                    onAttributeChange = { userSearchAttribute = it },
-                    availableAttributes = UserAttribute.entries,
-                    resolveOptionText = { userSearchAttribute = it; it.name }
-                )
-            }
+    ScreenScaffold(
+        title = "Users",
+        snackbarHostState = snackbarHostState,
+        searchContent = {
+            RowSearcher(
+                queryText = searchCriteria,
+                onQueryTextChange = { searchCriteria = it },
+                currentAttribute = userSearchAttribute,
+                onAttributeChange = { userSearchAttribute = it },
+                availableAttributes = UserAttribute.entries,
+                resolveOptionText = { userSearchAttribute = it; it.name }
+            )
         },
-
-        floatingActionButtonPosition = FabPosition.Center,
-
-        // Components at the bottom
-        floatingActionButton = {
+        bottomBarContent = {
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // ---- Left: Delete ----
@@ -195,7 +185,7 @@ fun UsersScreen(navController: NavHostController) {
                 // ---- Center: Add + Fields ----
                 Row(
                     modifier = Modifier.weight(0.70f),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CompactActionButton(
@@ -246,12 +236,6 @@ fun UsersScreen(navController: NavHostController) {
                     )
                 }
             }
-        },
-        snackbarHost = {
-            SnackbarHost(
-                snackbarHostState,
-                modifier = Modifier.background(colorScheme.inverseSurface)
-            )
         }
     ) { paddingValues ->
         Column(
@@ -283,86 +267,82 @@ fun UsersScreen(navController: NavHostController) {
 
                         val isSelected = selectedUsers.any { it == user } // comparar por key
 
-                        ElevatedCard(
+                        val actionPanelWidth = 186.dp
+                        val cardEndPadding by animateDpAsState(
+                            targetValue = if (isSelected) actionPanelWidth else 0.dp,
+                            label = "userCardEndPadding"
+                        )
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .border(
-                                    width = if (isSelected) 6.dp else 4.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = MaterialTheme.shapes.medium
-                                ),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = Color.White //field.tag.safeColor().copy(alpha = 1.0f)
-                            ),
-                            onClick = { userViewModel.toggleUser(user) }
+                                .padding(vertical = 6.dp)
                         ) {
-                            Row(
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = isSelected,
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            ) {
+                                SwipeActionsRow(
+                                    modifier = Modifier
+                                        .width(actionPanelWidth)
+                                        .fillMaxHeight(),
+                                    onEdit = {
+                                        editingUser = user
+                                    },
+                                    onCopy = {
+                                        snackbarMessage = "User '${user.username}' copied"
+                                    },
+                                    onAddCopy = {
+                                        openAddUserCopyDialog = true
+                                        targetAddUserCopy = user
+                                    }
+                                )
+                            }
+
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(end = cardEndPadding),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = colorScheme.surface
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                                onClick = { userViewModel.toggleUser(user) }
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    // key text
-                                    Text(
-                                        user.username,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1
-                                    )
-                                    // value text
-                                    Text(
-                                        user.email,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1
-                                    )
-                                }
-
-                                // --- Three dots menu ---
-                                var expanded by remember { mutableStateOf(false) }
-                                Box {
-                                    IconButton(onClick = { expanded = true }) {
-                                        Icon(
-                                            imageVector = Icons.Default.MoreHoriz,
-                                            contentDescription = "Options"
-                                        )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp, horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val stripeColor = if (isSelected) {
+                                        colorScheme.primary
+                                    } else {
+                                        colorScheme.outlineVariant
                                     }
+                                    Box(
+                                        modifier = Modifier
+                                            .width(6.dp)
+                                            .heightIn(min = 48.dp)
+                                            .background(stripeColor)
+                                    )
 
-                                    DropdownMenu(
-                                        expanded = expanded,
-                                        onDismissRequest = { expanded = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy User Content")
-                                                Text("Copy")
-                                                   },
-                                            onClick = {
-                                                expanded = false
-                                                // Direct copy to clipboard or VM
-                                                snackbarMessage = "User '${user.username}' copied"
-                                            }
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            user.username,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = colorScheme.onSurface,
+                                            maxLines = 1
                                         )
-                                        DropdownMenuItem(
-                                            text = {
-                                                Icon(Icons.Default.CopyAll, contentDescription = "Add Copy from User Content")
-                                                Text("Add Copy")
-                                                   },
-                                            onClick = {
-                                                expanded = false
-                                                openAddUserCopyDialog = true
-                                                targetAddUserCopy = user
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = {
-                                                Icon(Icons.Default.Edit, contentDescription = "Edit User Content")
-                                                Text("Edit")
-                                                   },
-                                            onClick = {
-                                                expanded = false
-                                                editingUser = user
-                                            }
+                                        Text(
+                                            user.email,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = colorScheme.onSurfaceVariant,
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -401,5 +381,53 @@ fun UsersScreen(navController: NavHostController) {
                 userViewModel.saveUser(newUser)
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeActionsRow(
+    modifier: Modifier = Modifier,
+    onEdit: () -> Unit,
+    onCopy: () -> Unit,
+    onAddCopy: () -> Unit
+) {
+    Row(
+        modifier = modifier
+            .background(Color.Transparent)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SwipeActionButton(
+            label = "",
+            icon = Icons.Default.Edit,
+            onClick = onEdit
+        )
+        SwipeActionButton(
+            label = "",
+            icon = Icons.Default.ContentCopy,
+            onClick = onCopy
+        )
+        SwipeActionButton(
+            label = "",
+            icon = Icons.Default.CopyAll,
+            onClick = onAddCopy
+        )
+    }
+}
+
+@Composable
+private fun SwipeActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    LongPressHint("Run this quick action") {
+        TextButton(onClick = onClick) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(icon, contentDescription = label)
+            }
+        }
     }
 }

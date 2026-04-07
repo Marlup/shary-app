@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.home.utils.AppTopBar
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @SuppressLint("StateFlowValueCalledInComposition")
 @Composable
@@ -36,35 +37,33 @@ fun HomeScreen(navController: NavHostController) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    Button(
-                        onClick = { navController.navigate(Screen.Fields.route) },
-                        modifier = Modifier.size(50.dp, 50.dp)
-                    ) {
-                        Text("Fields")
+                    LongPressHint("Open your saved fields") {
+                        Button(
+                            onClick = { navController.navigate(Screen.Fields.route) },
+                            modifier = Modifier.size(50.dp, 50.dp)
+                        ) {
+                            Text("Fields")
+                        }
                     }
                 }
                 item {
-                    Button(
-                        onClick = { navController.navigate(Screen.Users.route) },
-                        modifier = Modifier.size(50.dp, 50.dp)
-                    ) {
-                        Text("Users")
+                    LongPressHint("Open your user list") {
+                        Button(
+                            onClick = { navController.navigate(Screen.Users.route) },
+                            modifier = Modifier.size(50.dp, 50.dp)
+                        ) {
+                            Text("Users")
+                        }
                     }
                 }
                 item {
-                    Button(
-                        onClick = { navController.navigate(Screen.Requests.route) },
-                        modifier = Modifier.size(50.dp, 50.dp)
-                    ) {
-                        Text("Requests")
-                    }
-                }
-                item {
-                    Button(
-                        onClick = { navController.navigate(Screen.FileVisualizer.route) },
-                        modifier = Modifier.size(50.dp, 50.dp)
-                    ) {
-                        Text("File Visualizer")
+                    LongPressHint("Open sent and received requests") {
+                        Button(
+                            onClick = { navController.navigate(Screen.Requests.route) },
+                            modifier = Modifier.size(50.dp, 50.dp)
+                        ) {
+                            Text("Requests")
+                        }
                     }
                 }
             }

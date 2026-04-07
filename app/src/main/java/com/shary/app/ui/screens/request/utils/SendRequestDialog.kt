@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun SendRequestDialog(
@@ -34,8 +35,12 @@ fun SendRequestDialog(
                 Spacer(Modifier.height(16.dp))
 
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = onSend) { Text("Send") }
+                    LongPressHint("Close without sending") {
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
+                    }
+                    LongPressHint("Send selected fields now") {
+                        TextButton(onClick = onSend) { Text("Send") }
+                    }
                 }
             }
         }

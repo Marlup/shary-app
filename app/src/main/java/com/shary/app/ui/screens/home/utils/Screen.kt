@@ -3,12 +3,17 @@ package com.shary.app.ui.screens.home.utils
 sealed class Screen(val route: String) {
     //data object Start : Screen("start")          // splash / resolver
     data object Logup : Screen("logup")
-    data object Login : Screen("login")
+    data object Login : Screen("login") {
+        const val PASSWORD_CHANGED_ARG = "passwordChanged"
+        const val routePattern = "login?$PASSWORD_CHANGED_ARG={$PASSWORD_CHANGED_ARG}"
+
+        fun routeWithPasswordChanged(passwordChanged: Boolean): String =
+            "login?$PASSWORD_CHANGED_ARG=$passwordChanged"
+    }
     data object Home : Screen("home")
     data object SummaryRequest : Screen("summary_request")
     data object SummaryField : Screen("summary_field")
     data object Fields : Screen("fields")
     data object Users : Screen("users")
     data object Requests : Screen("requests")
-    data object FileVisualizer : Screen("file_visualizer")
 }

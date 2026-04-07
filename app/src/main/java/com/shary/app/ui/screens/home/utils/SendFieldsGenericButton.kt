@@ -3,8 +3,8 @@ package com.shary.app.ui.screens.home.utils
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import com.shary.app.core.domain.models.FieldDomain
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun SendFieldsGenericButton(
@@ -12,11 +12,10 @@ fun SendFieldsGenericButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-
-    Button(
-        onClick = {
-            onClick()
+    LongPressHint("Share the current data using another app") {
+        Button(
+            onClick = {
+                onClick()
             /*
             val message = fields.joinToString("\n") {
                 val formattedDate = DateUtils.formatTimeMillis(it.dateAdded)
@@ -34,9 +33,10 @@ fun SendFieldsGenericButton(
             context.startActivity(chooser)
             */
 
-        },
-        modifier = modifier
-    ) {
-        Text("Share")
+            },
+            modifier = modifier
+        ) {
+            Text("Share")
+        }
     }
 }

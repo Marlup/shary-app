@@ -1,12 +1,15 @@
 package com.shary.app.viewmodels.field
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.application.security.ChangePasswordAndRewrapDataKeyUseCase
 import com.shary.app.core.domain.interfaces.events.FieldEvent
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
+import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.services.CacheService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.types.enums.SearchFieldBy
@@ -28,6 +31,8 @@ class FieldViewModel @Inject constructor(
     private val fieldRepository: FieldRepository,
     private val cacheSelection: CacheService,
     private val cloudService: CloudService,
+    private val authenticationService: AuthenticationService,
+    private val changePasswordAndRewrapDataKeyUseCase: ChangePasswordAndRewrapDataKeyUseCase
 ) : ViewModel() {
 
     // Domain state exposed to UI
@@ -374,6 +379,49 @@ class FieldViewModel @Inject constructor(
                 }
             }.onFailure { e ->
                 _events.tryEmit(FieldEvent.FetchError(e))
+            }
+        }
+    }
+
+    fun changePasswordAndRewrapDataKey(
+        context: Context,
+        oldPassword: String,
+        newPassword: String,
+        repeatNewPassword: String
+    ) {
+        if (oldPassword.isBlank()) {
+            _events.tryEmit(FieldEvent.Error(IllegalArgumentException("Old password is required.")))
+            return
+        }
+        if (newPassword.isBlank()) {
+            _events.tryEmit(FieldEvent.Error(IllegalArgumentException("New password is required.")))
+            return
+        }
+        if (newPassword != repeatNewPassword) {
+            _events.tryEmit(FieldEvent.Error(IllegalArgumentException("New passwords do not match.")))
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock {
+                        changePasswordAndRewrapDataKeyUseCase(
+                            context = context,
+                            oldPassword = oldPassword,
+                            newPassword = newPassword
+                        )
+                    }
+                }
+                authenticationService.logoutForRelogin()
+            }
+            _isLoading.value = false
+
+            result.onSuccess {
+                _events.tryEmit(FieldEvent.PasswordChanged)
+            }.onFailure { e ->
+                _events.tryEmit(FieldEvent.Error(e))
             }
         }
     }

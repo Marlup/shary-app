@@ -23,12 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun SendCommunicationDialog(
     options: List<SendOption>,
-    onOptionSelected: (SendOption) -> Unit,
-    onSend: () -> Unit,
+    onSend: (SendOption) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selected by remember { mutableStateOf<SendOption?>(null) }
@@ -49,17 +49,19 @@ fun SendCommunicationDialog(
                 )
 
                 options.forEach { option ->
-                    Button(
-                        onClick = { selected = option },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selected == option) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Text(option.label, color = Color.Black)
+                    LongPressHint("Choose ${option.label.lowercase()} as send method") {
+                        Button(
+                            onClick = { selected = option },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selected == option) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text(option.label, color = Color.Black)
+                        }
                     }
                 }
 
@@ -69,26 +71,29 @@ fun SendCommunicationDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Cancel")
+                    LongPressHint("Close without sending") {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancel")
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    Button(
-                        onClick = {
-                            selected?.let {
-                                onOptionSelected(it)
-                                onSend()
-                            }
-                        },
-                        enabled = selected != null,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Send")
+                    LongPressHint("Send using the selected method") {
+                        Button(
+                            onClick = {
+                                selected?.let {
+                                    onSend(it)
+                                }
+                            },
+                            enabled = selected != null,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Send")
+                        }
                     }
                 }
             }
