@@ -8,6 +8,7 @@ import com.shary.app.FieldList
 import com.shary.app.RequestList
 import com.shary.app.UserList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
+import com.shary.app.core.domain.interfaces.repositories.FieldValueHistoryRepository
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import com.shary.app.core.domain.interfaces.repositories.TagRepository
 import com.shary.app.core.domain.interfaces.repositories.ThemeRepository
@@ -22,6 +23,7 @@ import com.shary.app.infrastructure.persistance.datastore.fieldListDataStore
 import com.shary.app.infrastructure.persistance.datastore.requestListDataStore
 import com.shary.app.infrastructure.persistance.datastore.userListDataStore
 import com.shary.app.infrastructure.persistance.repositories.FieldRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.FieldValueHistoryRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.RequestRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.TagRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.ThemeRepositoryImpl
@@ -65,6 +67,12 @@ object DependenciesContainer {
         datastore: DataStore<FieldList>,
         codec: FieldCodec
     ): FieldRepository = FieldRepositoryImpl(datastore, codec)
+
+    @Provides @Singleton
+    fun provideFieldValueHistoryRepository(
+        @ApplicationContext context: Context,
+        codec: FieldCodec
+    ): FieldValueHistoryRepository = FieldValueHistoryRepositoryImpl(context, codec)
 
     @Provides @Singleton fun provideUserRepository(
         datastore: DataStore<UserList>,

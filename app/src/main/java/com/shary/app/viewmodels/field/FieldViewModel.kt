@@ -9,12 +9,14 @@ import com.shary.app.core.domain.interfaces.events.FieldEvent
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
+import com.shary.app.core.domain.interfaces.repositories.FieldValueHistoryRepository
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.services.CacheService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.types.enums.SearchFieldBy
 import com.shary.app.core.domain.types.enums.SortByParameter
 import com.shary.app.core.domain.types.enums.getSafeTag
+import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.time.Instant
@@ -29,6 +31,7 @@ import org.json.JSONObject
 @HiltViewModel
 class FieldViewModel @Inject constructor(
     private val fieldRepository: FieldRepository,
+    private val fieldValueHistoryRepository: FieldValueHistoryRepository,
     private val cacheSelection: CacheService,
     private val cloudService: CloudService,
     private val authenticationService: AuthenticationService,
@@ -61,9 +64,14 @@ class FieldViewModel @Inject constructor(
     val sortByParameter: StateFlow<SortByParameter> = _sortByParameter.asStateFlow()
     private val _ascendingSortByMap = MutableStateFlow(SortByParameter.entries.associateWith { false })
     val ascendingSortByMap: StateFlow<Map<SortByParameter, Boolean>> = _ascendingSortByMap.asStateFlow()
+    private val _strictModeEnabled = MutableStateFlow(false)
+    val strictModeEnabled: StateFlow<Boolean> = _strictModeEnabled.asStateFlow()
 
     private val _ascending = MutableStateFlow(ascendingSortByMap.value[_sortByParameter.value]!!)
     val ascending: StateFlow<Boolean> = _ascending.asStateFlow()
+    val recoverableKeys: StateFlow<Set<String>> =
+        fieldValueHistoryRepository.recoverableKeys
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     val events: SharedFlow<FieldEvent> = _events.asSharedFlow()
 
@@ -115,6 +123,7 @@ class FieldViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
                         val normalized = normalize(field)
+                        validateValueOrThrow(normalized.value)
                         fieldRepository.saveFieldIfNotExists(normalized)
                     }
                 }
@@ -141,6 +150,7 @@ class FieldViewModel @Inject constructor(
                     writeMutex.withLock {
                         val keys = fields.map { it.key }
                         fieldRepository.deleteFields(keys)
+                        fieldValueHistoryRepository.clearSnapshots(keys)
                     }
                 }
             }
@@ -156,12 +166,17 @@ class FieldViewModel @Inject constructor(
     }
 
     fun updateValue(field: FieldDomain, value: String) {
-        if (field.value == value) return
+        val normalizedValue = value.trim()
+        if (field.value == normalizedValue) return
         viewModelScope.launch {
             _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    writeMutex.withLock { fieldRepository.updateValue(field.key, value) }
+                    validateValueOrThrow(normalizedValue)
+                    writeMutex.withLock {
+                        fieldValueHistoryRepository.saveSnapshot(field.key, field.value)
+                        fieldRepository.updateValue(field.key, normalizedValue)
+                    }
                 }
             }
             _isLoading.value = false
@@ -231,6 +246,10 @@ class FieldViewModel @Inject constructor(
         _ascending.value = ascending
     }
 
+    fun setStrictModeEnabled(enabled: Boolean) {
+        _strictModeEnabled.value = enabled
+    }
+
     fun isFilteredFieldsNotEmpty():Boolean = filteredFields.value.isNotEmpty()
 
     fun refreshFields() {
@@ -262,6 +281,15 @@ class FieldViewModel @Inject constructor(
         } else trimmed
     }
 
+    private fun validateValueOrThrow(value: String) {
+        val result = FieldValueContract.validate(value, strictModeEnabled.value)
+        if (!result.isValid) {
+            throw IllegalArgumentException(
+                result.hint ?: "Value does not satisfy strict mode validation."
+            )
+        }
+    }
+
     // Add this to your FieldViewModel
 
     /**
@@ -284,9 +312,11 @@ class FieldViewModel @Inject constructor(
             _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
+                    if (shouldUpdateValue) validateValueOrThrow(valueTrimmed)
                     // Make both updates atomically with respect to other writes
                     writeMutex.withLock {
                         if (shouldUpdateValue) {
+                            fieldValueHistoryRepository.saveSnapshot(field.key, field.value)
                             fieldRepository.updateValue(field.key, valueTrimmed)
                         }
                         if (shouldUpdateAlias) {
@@ -308,6 +338,31 @@ class FieldViewModel @Inject constructor(
                     newField.tag.getSafeTag()
                 ))
                 // Single refresh after performing all updates
+                refresh()
+            }.onFailure { e ->
+                _events.tryEmit(FieldEvent.Error(e))
+            }
+        }
+    }
+
+    fun recoverPreviousValue(field: FieldDomain) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock {
+                        val snapshot = fieldValueHistoryRepository.consumeSnapshot(field.key)
+                            ?: throw IllegalStateException("No recoverable value found for '${field.key}'.")
+
+                        validateValueOrThrow(snapshot.value)
+                        fieldRepository.updateValue(field.key, snapshot.value)
+                    }
+                }
+            }
+            _isLoading.value = false
+
+            result.onSuccess {
+                _events.tryEmit(FieldEvent.ValueRecovered(field.key))
                 refresh()
             }.onFailure { e ->
                 _events.tryEmit(FieldEvent.Error(e))

@@ -6,6 +6,7 @@ package com.shary.app.core.domain.types.valueobjects
 sealed class Purpose(val code: String) {
     data object Key : Purpose("key")
     data object Value : Purpose("value")
+    data object ValueHistory : Purpose("value_history")
     data object Alias : Purpose("alias")
     data object Tag : Purpose("tag")
     data object Credentials : Purpose("credentials")
@@ -14,7 +15,7 @@ sealed class Purpose(val code: String) {
     companion object {
         /** Built-in purposes (lazy init to avoid circular initialization) */
         val builtIns: List<Purpose> by lazy {
-            listOf(Key, Value, Alias, Tag, Credentials)
+            listOf(Key, Value, ValueHistory, Alias, Tag, Credentials)
         }
 
         val builtInCodes: List<String> by lazy {

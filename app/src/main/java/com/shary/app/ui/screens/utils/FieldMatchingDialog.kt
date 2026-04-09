@@ -18,6 +18,7 @@ import androidx.compose.ui.window.Dialog
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.safeColor
 import com.shary.app.core.domain.types.valueobjects.MatchingState
+import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import com.shary.app.ui.screens.field.components.AddFieldDialog
 import com.shary.app.utils.MatchingHistoryController
 
@@ -278,7 +279,7 @@ fun FieldMatchingDialog(
                                                 )
                                                 Spacer(Modifier.height(2.dp))
                                                 Text(
-                                                    field.value,
+                                                    FieldValueContract.parse(field.value).plainData,
                                                     maxLines = 1,
                                                     style = MaterialTheme.typography.bodySmall
                                                 )

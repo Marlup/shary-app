@@ -1,6 +1,6 @@
 [versions]
 
-agp = "8.13.2"
+agp = "9.1.0"
 firebaseAnalytics = "23.0.0"
 firebaseMessaging = "25.0.1"
 kotlin = "2.2.21"
