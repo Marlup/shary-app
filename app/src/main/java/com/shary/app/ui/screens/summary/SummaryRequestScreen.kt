@@ -45,7 +45,6 @@ fun SummaryRequestScreen(navController: NavHostController) {
     val requestViewModel: RequestViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
 
-    var sendOption by remember { mutableStateOf<SendOption?>(null) }
     var openSendDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -92,10 +91,9 @@ fun SummaryRequestScreen(navController: NavHostController) {
         if (openSendDialog) {
             SendCommunicationDialog(
                 options = SendOption.all,
-                onOptionSelected = { sendOption = it },
-                onSend = {
+                onSend = { selectedOption ->
                     openSendDialog = false
-                    when (sendOption) {
+                    when (selectedOption) {
 
                         SendOption.Email -> {
                             emailViewModel.sendRequest(
@@ -113,8 +111,6 @@ fun SummaryRequestScreen(navController: NavHostController) {
                                 userViewModel.getCachedUsers(),
                             )
                         }
-
-                        else -> {}
                     }
                 },
                 onDismiss = { openSendDialog = false }

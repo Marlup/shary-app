@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.shary.app.core.domain.types.enums.SortByParameter
+import com.shary.app.ui.screens.utils.LongPressHint
 import com.shary.app.viewmodels.field.FieldViewModel
 
 @Composable
@@ -40,11 +41,13 @@ fun SortMenu(
     }
 
     Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                Icons.AutoMirrored.Filled.Sort,
-                contentDescription = "Sort"
-            )
+        LongPressHint("Open sorting options") {
+            IconButton(onClick = { expanded = true }) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Sort,
+                    contentDescription = "Sort"
+                )
+            }
         }
 
         DropdownMenu(
@@ -56,15 +59,17 @@ fun SortMenu(
                 DropdownMenuItem(
                     text = { Text(option.name) },
                     trailingIcon = {
-                        IconButton(onClick = { onSortChange(option, !isAscending) }
-                        ) {
-                            Icon(
-                                imageVector = if (isAscending)
-                                    Icons.Default.ArrowUpward
-                                else
-                                    Icons.Default.ArrowDownward,
-                                contentDescription = "Toggle order"
-                            )
+                        LongPressHint("Toggle ascending or descending order") {
+                            IconButton(onClick = { onSortChange(option, !isAscending) }
+                            ) {
+                                Icon(
+                                    imageVector = if (isAscending)
+                                        Icons.Default.ArrowUpward
+                                    else
+                                        Icons.Default.ArrowDownward,
+                                    contentDescription = "Toggle order"
+                                )
+                            }
                         }
                     },
                     onClick = {

@@ -42,8 +42,10 @@ fun PasswordOutlinedTextField(
 
             val description = if (isVisible) "Hide password" else "Show password"
 
-            IconButton(onClick = onClick) {
-                Icon(imageVector = image, contentDescription = description)
+            LongPressHint(description) {
+                IconButton(onClick = onClick) {
+                    Icon(imageVector = image, contentDescription = description)
+                }
             }
         },
         modifier = Modifier.fillMaxWidth()
@@ -74,8 +76,10 @@ fun PasswordTextField(
             val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
             val description = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña"
 
-            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                Icon(imageVector = image, contentDescription = description)
+            LongPressHint(description) {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(imageVector = image, contentDescription = description)
+                }
             }
         }
     )

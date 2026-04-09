@@ -146,10 +146,15 @@ class AuthenticationServiceImpl @Inject constructor(
         }
     }
 
+    override suspend fun logoutForRelogin() {
+        _state.value = AuthState()
+        cache.clearAllCaches()
+        cloud.signOutCloud()
+    }
+
     /** Clears in-memory state and deletes the encrypted credentials file. */
     override suspend fun signOut(context: Context) {
-        _state.value = AuthState()
-        cloud.signOutCloud()
+        logoutForRelogin()
         store.deleteCredentials(context)
     }
 

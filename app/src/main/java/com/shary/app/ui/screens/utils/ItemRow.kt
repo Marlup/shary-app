@@ -122,12 +122,14 @@ fun ItemRowBase(
 
         // Right menu
         Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-            IconButton(onClick = { menuExpanded = true }) {
-                Icon(
-                    imageVector = Icons.Filled.MoreHoriz,
-                    contentDescription = "Open Actions Menu",
-                    tint = extendedColors.accent
-                )
+            LongPressHint("Open actions for this row") {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreHoriz,
+                        contentDescription = "Open Actions Menu",
+                        tint = extendedColors.accent
+                    )
+                }
             }
 
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {

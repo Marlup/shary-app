@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,8 +31,10 @@ fun AppTopBar(navController: NavHostController) {
                 },
 
         actions = {
-            IconButton(onClick = { expanded = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+            LongPressHint("Open account menu") {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                }
             }
 
             DropdownMenu(

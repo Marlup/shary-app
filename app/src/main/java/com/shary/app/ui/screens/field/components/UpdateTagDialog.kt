@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.screens.utils.GradientColorPicker
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun UpdateTagDialog(
@@ -42,8 +43,10 @@ fun UpdateTagDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Button(onClick = { openColorPicker = true }) {
-                    Text("Pick colour")
+                LongPressHint("Choose a new color for this tag") {
+                    Button(onClick = { openColorPicker = true }) {
+                        Text("Pick colour")
+                    }
                 }
 
                 if (openColorPicker) {
@@ -58,15 +61,19 @@ fun UpdateTagDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    if (name.isNotBlank()) onConfirm(name.trim(), selectedColor)
-                },
-                enabled = name.isNotBlank()
-            ) { Text("Update") }
+            LongPressHint("Save the updated tag") {
+                TextButton(
+                    onClick = {
+                        if (name.isNotBlank()) onConfirm(name.trim(), selectedColor)
+                    },
+                    enabled = name.isNotBlank()
+                ) { Text("Update") }
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            LongPressHint("Close without updating") {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
         }
     )
 }

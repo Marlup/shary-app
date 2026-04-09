@@ -26,7 +26,7 @@ object SpecialComponents {
         iconShape: Shape = CircleShape,
         enabled: Boolean = true,
         theme: AppTheme = AppTheme.Pastel,
-        useExtendedColors: Boolean = true
+        useExtendedColors: Boolean = false
     ) {
         val extendedColors = getExtendedColors(theme = theme)
 
@@ -36,27 +36,29 @@ object SpecialComponents {
             if (enabled) backgroundColor else Color.Gray
         }
 
-        IconButton(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier
-                .size(44.dp)
-                .background(
-                    color = bgColor,
-                    shape = iconShape
+        LongPressHint(contentDescription) {
+            IconButton(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(
+                        color = bgColor,
+                        shape = iconShape
+                    )
+                    .border(
+                        width = if (useExtendedColors && enabled) 2.dp else 0.dp,
+                        color = if (useExtendedColors) extendedColors.border else Color.Transparent,
+                        shape = iconShape
+                    )
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = if (enabled) Color.White else Color.LightGray,
+                    modifier = Modifier.size(28.dp)
                 )
-                .border(
-                    width = if (useExtendedColors && enabled) 2.dp else 0.dp,
-                    color = if (useExtendedColors) extendedColors.border else Color.Transparent,
-                    shape = iconShape
-                )
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = if (enabled) Color.White else Color.LightGray,
-                modifier = Modifier.size(28.dp)
-            )
+            }
         }
     }
 }

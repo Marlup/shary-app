@@ -4,9 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.shary.app.core.domain.interfaces.navigator.CredentialsEntryPoint
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.core.domain.types.enums.AppTheme
@@ -55,7 +57,19 @@ fun AppNavigator(onThemeSelected: (AppTheme) -> Unit) {
         }
     ) {
         composable(Screen.Logup.route) { LogupScreen(navController) }
-        composable(Screen.Login.route) { LoginScreen(navController, onThemeSelected) }
+        composable(
+            route = Screen.Login.routePattern,
+            arguments = listOf(
+                navArgument(Screen.Login.PASSWORD_CHANGED_ARG) {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
+            val passwordChanged =
+                backStackEntry.arguments?.getBoolean(Screen.Login.PASSWORD_CHANGED_ARG) ?: false
+            LoginScreen(navController, onThemeSelected, passwordChanged)
+        }
         composable(Screen.SummaryRequest.route) { SummaryRequestScreen(navController) }
         composable(Screen.SummaryField.route) { SummaryFieldScreen(navController) }
         composable(Screen.Fields.route) { FieldsScreen(navController) }

@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
 import com.shary.app.ui.screens.home.utils.Screen
+import com.shary.app.ui.screens.utils.LongPressHint
 import com.shary.app.ui.screens.utils.PasswordOutlinedTextField
 import com.shary.app.viewmodels.authentication.AuthenticationMode
 import com.shary.app.viewmodels.authentication.AuthenticationViewModel
@@ -197,12 +198,14 @@ fun LogupScreen(navController: NavHostController) {
 
             Spacer(Modifier.height(24.dp))
 
-            Button(
-                onClick = { authenticationViewModel.submit(context) },
-                enabled = !loading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (loading) "Creating..." else "Create Account")
+            LongPressHint("Create a new account with this form") {
+                Button(
+                    onClick = { authenticationViewModel.submit(context) },
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (loading) "Creating..." else "Create Account")
+                }
             }
         }
     }

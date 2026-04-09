@@ -1,6 +1,7 @@
 package com.shary.app.ui.screens.request
 
 import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -11,12 +12,12 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,6 +34,7 @@ import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
 import com.shary.app.ui.screens.utils.FieldMatchingDialog
 import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.screens.utils.ScreenScaffold
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserViewModel
@@ -108,18 +110,10 @@ fun RequestsScreen(navController: NavHostController) {
     }
 
     // ---------------- UI ----------------
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Requests") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.primaryContainer,
-                    titleContentColor = colorScheme.primary
-                ),
-                expandedHeight = 64.dp
-            )
-        },
-        floatingActionButton = {
+    ScreenScaffold(
+        title = "Requests",
+        snackbarHostState = snackbarHostState,
+        bottomBarContent = {
             val actionButtonsEnabled = listMode == RequestListMode.SENT
             val actionButtonsAvailable = actionButtonsEnabled && draftFields.isNotEmpty()
 
@@ -128,7 +122,7 @@ fun RequestsScreen(navController: NavHostController) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // ---- Left: Delete ----
@@ -155,7 +149,7 @@ fun RequestsScreen(navController: NavHostController) {
                 // ---- Center: Add + Download + Users ----
                 Row(
                     modifier = Modifier.weight(0.70f),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     when (listMode) {
@@ -201,6 +195,14 @@ fun RequestsScreen(navController: NavHostController) {
                         contentDescription = "Go to Users Screen",
                         enabled = true
                     )
+
+                    CompactActionButton(
+                        onClick = { navController.navigate(Screen.Fields.route) },
+                        icon = Icons.Default.TextFields,
+                        backgroundColor = colorScheme.primary,
+                        contentDescription = "Go to Field Screen",
+                        enabled = true
+                    )
                 }
 
                 // ---- Right: Summary ----
@@ -225,8 +227,7 @@ fun RequestsScreen(navController: NavHostController) {
                     )
                 }
             }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -305,21 +306,21 @@ fun RequestsScreen(navController: NavHostController) {
                             }
                         val requestRowButtonEnabled = listMode == RequestListMode.RECEIVED
 
-                        // background colors
-                        val backgroundColor = when {
-                            isSelected -> colorScheme.secondaryContainer
-                            index % 2 == 0 -> colorScheme.surface
-                            else -> colorScheme.surfaceVariant
+                        val backgroundColor = colorScheme.surface
+                        val stripeColor = if (isSelected) {
+                            colorScheme.primary
+                        } else {
+                            colorScheme.outlineVariant
                         }
 
-                        ElevatedCard(
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .wrapContentHeight()
-                                .alpha(if (isSelected) 1f else 0.9f),
-                            colors = CardDefaults.elevatedCardColors(
+                                .wrapContentHeight(),
+                            colors = CardDefaults.cardColors(
                                 containerColor = backgroundColor
                             ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             enabled = requestRowButtonEnabled,
                             onClick = {
                                 requestViewModel.clearDraftFields()
@@ -331,14 +332,30 @@ fun RequestsScreen(navController: NavHostController) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(vertical = 12.dp, horizontal = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    request.fields.joinToString { it.key }.ifBlank { "No keys requested" },
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyLarge
+                                Box(
+                                    modifier = Modifier
+                                        .width(6.dp)
+                                        .heightIn(min = 48.dp)
+                                        .background(stripeColor)
                                 )
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        request.fields.joinToString { it.key }.ifBlank { "No keys requested" },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "${request.fields.size} keys",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -417,33 +434,44 @@ fun RequestsScreen(navController: NavHostController) {
                             items = draftFields,
                             key = { i, _ -> i } // stable key
                         ) { _, field ->
-                            ElevatedCard(
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .wrapContentHeight(),
-                                colors = CardDefaults.elevatedCardColors(
+                                colors = CardDefaults.cardColors(
                                     containerColor = colorScheme.surface
                                 ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 enabled = true,
                                 onClick = {},
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(vertical = 12.dp, horizontal = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        field.key,
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyLarge
+                                    Box(
+                                        modifier = Modifier
+                                            .width(6.dp)
+                                            .heightIn(min = 48.dp)
+                                            .background(colorScheme.outlineVariant)
                                     )
-                                    Text(
-                                        field.keyAlias.orEmpty(),
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.Gray
-                                    )
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            field.key,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = colorScheme.onSurface
+                                        )
+                                        Text(
+                                            field.keyAlias.orEmpty(),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }

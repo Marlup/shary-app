@@ -66,7 +66,6 @@ object Constants {
     const val PATH_SCHEMA_LOGIN = "./ui_layouts/login.kv"
     const val PATH_SCHEMA_REQUEST = "./ui_layouts/request.kv"
     const val PATH_SCHEMA_USER_CREATION = "./ui_layouts/user_creation.kv"
-    const val PATH_SCHEMA_FILE_VISUALIZER = "./ui_layouts/file_visualizer.kv"
     const val PATH_SCHEMA_FIELD_DIALOG = "./ui_layouts/field_dialog.kv"
     const val PATH_SCHEMA_SEND_EMAIL_DIALOG = "./ui_layouts/send_email_dialog.kv"
     const val PATH_SCHEMA_SELECT_CHANNEL_DIALOG = "./ui_layouts/select_channel_dialog.kv"
@@ -82,7 +81,6 @@ object Constants {
         PATH_SCHEMA_FIELD,
         PATH_SCHEMA_USER,
         PATH_SCHEMA_REQUEST,
-        PATH_SCHEMA_FILE_VISUALIZER
     )
 
     // Predefined messages

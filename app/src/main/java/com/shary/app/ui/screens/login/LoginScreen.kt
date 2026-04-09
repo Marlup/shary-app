@@ -7,6 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme.colorScheme
+import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +22,7 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
 import com.shary.app.core.domain.types.enums.AppTheme
 import com.shary.app.ui.screens.home.utils.Screen
+import com.shary.app.ui.screens.utils.LongPressHint
 import com.shary.app.ui.screens.utils.LoadingOverlay
 import com.shary.app.ui.screens.utils.PasswordTextField
 import com.shary.app.viewmodels.authentication.AuthenticationMode
@@ -35,7 +38,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     navController: NavHostController,
-    onThemeChosen: (AppTheme) -> Unit = {} // optional callback for theme switching
+    onThemeChosen: (AppTheme) -> Unit = {}, // optional callback for theme switching
+    passwordChanged: Boolean = false
 ) {
     // ---------------- ViewModels ----------------
     val authenticationViewModel: AuthenticationViewModel = hiltViewModel()
@@ -49,6 +53,11 @@ fun LoginScreen(
 
     // ---------------- Init ----------------
     LaunchedEffect(Unit) { authenticationViewModel.setMode(AuthenticationMode.LOGIN) }
+    LaunchedEffect(passwordChanged) {
+        if (passwordChanged) {
+            snackbarHostState.showSnackbar("Password changed. Please log in again.")
+        }
+    }
 
     // ---------------- Events ----------------
     LaunchedEffect(Unit) {
@@ -87,7 +96,6 @@ fun LoginScreen(
     var expanded by remember { mutableStateOf(false) }
     var selectedTheme by remember { mutableStateOf(AppTheme.Pastel) }
 
-
     LoadingOverlay(isLoading = loading) {
         Scaffold(
             topBar = {
@@ -96,29 +104,33 @@ fun LoginScreen(
                     title = {
                         Text(
                             text = "Shary",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.secondary
+                            style = typography.headlineMedium,
+                            color = colorScheme.secondary
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            authenticationViewModel.signOutCloud()
-                            navController.navigate(Screen.Logup.route)
-                        }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = "Logout"
-                            )
+                        LongPressHint("Sign out and go to signup screen") {
+                            IconButton(onClick = {
+                                authenticationViewModel.signOutCloud()
+                                navController.navigate(Screen.Logup.route)
+                            }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = "Logout"
+                                )
+                            }
                         }
                     },
                     actions = {
                         // Theme menu button
                         Box {
-                            IconButton(onClick = { expanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.Palette,
-                                    contentDescription = "Choose Theme"
-                                )
+                            LongPressHint("Open theme picker") {
+                                IconButton(onClick = { expanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = "Choose Theme"
+                                    )
+                                }
                             }
                             DropdownMenu(
                                 expanded = expanded,
@@ -138,8 +150,8 @@ fun LoginScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.primary,
+                        containerColor = colorScheme.surface,
+                        titleContentColor = colorScheme.secondary,
                     )
                 )
             },
@@ -172,12 +184,14 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Button(
-                    onClick = { authenticationViewModel.submit(context) },
-                    enabled = !loading,
-                    modifier = Modifier.size(200.dp, 50.dp)
-                ) {
-                    Text(if (loading) "Checking..." else "Login")
+                LongPressHint("Submit credentials and sign in") {
+                    Button(
+                        onClick = { authenticationViewModel.submit(context) },
+                        enabled = !loading,
+                        modifier = Modifier.size(200.dp, 50.dp)
+                    ) {
+                        Text(if (loading) "Checking..." else "Login")
+                    }
                 }
             }
         }

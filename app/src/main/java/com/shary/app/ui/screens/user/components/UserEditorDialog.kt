@@ -5,10 +5,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.ui.screens.utils.LongPressHint
 import java.time.Instant
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserEditorDialog(
     initial: UserDomain,
@@ -18,38 +22,78 @@ fun UserEditorDialog(
     onConfirm: (UserDomain) -> Unit
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
+    var showErrors by remember { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val sheetMaxHeight = (configuration.screenHeightDp * 0.7f).dp
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // very light validation (you can plug your own)
     fun isValid(): Boolean =
         draft.username.isNotBlank() && draft.email.isNotBlank()
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 8.dp) {
-            Column(Modifier.padding(16.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(16.dp))
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = sheetMaxHeight)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = draft.username,
-                    onValueChange = { draft = draft.copy(username = it) },
-                    label = { Text("Username") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Text(
+                "Required",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-                OutlinedTextField(
-                    value = draft.email,
-                    onValueChange = { draft = draft.copy(email = it) },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Spacer(Modifier.height(8.dp))
 
-                Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = draft.username,
+                onValueChange = { draft = draft.copy(username = it) },
+                label = { Text("Username *") },
+                isError = showErrors && draft.username.isBlank(),
+                supportingText = {
+                    if (showErrors && draft.username.isBlank()) {
+                        Text("Required")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
 
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) { Text("CANCEL") }
-                    TextButton(
+            OutlinedTextField(
+                value = draft.email,
+                onValueChange = { draft = draft.copy(email = it) },
+                label = { Text("Email *") },
+                isError = showErrors && draft.email.isBlank(),
+                supportingText = {
+                    if (showErrors && draft.email.isBlank()) {
+                        Text("Required")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                LongPressHint("Close without saving this user") {
+                    OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+                }
+                LongPressHint("Save user changes") {
+                    FilledTonalButton(
                         onClick = {
-                            if (!isValid()) return@TextButton
+                            showErrors = true
+                            if (!isValid()) return@FilledTonalButton
                             val normalized = draft.copy(
                                 username = draft.username.trim(),
                                 email = draft.email.trim(),
@@ -58,8 +102,7 @@ fun UserEditorDialog(
                             )
                             onConfirm(normalized)
                             onDismiss()
-                        },
-                        enabled = isValid()
+                        }
                     ) { Text(confirmLabel) }
                 }
             }

@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.shary.app.core.domain.types.enums.AppTheme
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun ThemeMenuButton(
@@ -22,11 +23,13 @@ fun ThemeMenuButton(
     var expanded by remember { mutableStateOf(false) }
     // Theme menu button
     Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Default.Palette,
-                contentDescription = "Choose Theme"
-            )
+        LongPressHint("Open theme picker") {
+            IconButton(onClick = { expanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.Palette,
+                    contentDescription = "Choose Theme"
+                )
+            }
         }
         DropdownMenu(
             expanded = expanded,

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
+import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun AddNewTagDialog(
@@ -64,8 +65,10 @@ fun AddNewTagDialog(
                 Text(text = name)
             }
 
-                Button(onClick = { openColorPicker = true }) {
-                    Text("Pick color")
+                LongPressHint("Choose a color for this tag") {
+                    Button(onClick = { openColorPicker = true }) {
+                        Text("Pick color")
+                    }
                 }
 
                 if (openColorPicker) {
@@ -80,15 +83,19 @@ fun AddNewTagDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    if (name.isNotBlank()) onConfirm(name.trim(), selectedColor)
-                },
-                enabled = name.isNotBlank()
-            ) { Text("Save") }
+            LongPressHint("Save this tag") {
+                TextButton(
+                    onClick = {
+                        if (name.isNotBlank()) onConfirm(name.trim(), selectedColor)
+                    },
+                    enabled = name.isNotBlank()
+                ) { Text("Save") }
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            LongPressHint("Close without saving") {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
         }
     )
 }

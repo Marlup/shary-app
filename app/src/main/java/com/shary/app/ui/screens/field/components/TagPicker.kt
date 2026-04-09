@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.enums.safeColor
+import com.shary.app.ui.screens.utils.LongPressHint
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.tag.TagViewModel
 
@@ -81,23 +82,27 @@ fun TagPicker(
                     },
                     trailingIcon = {
                         Row {
-                            IconButton(onClick = {
-                                // Check if tag is in use before allowing edit
-                                if (fieldViewModel.isTagInUse(tag)) {
-                                    errorMessage = "Cannot update tag '${tag.toTagString()}' - it is currently in use by fields"
-                                } else {
-                                    tagToUpdate = tag
-                                    showUpdateDialog = true
-                                }
-                            }) { Icon(Icons.Default.Edit, "Edit") }
-                            IconButton(onClick = {
-                                // Check if tag is in use before allowing delete
-                                if (fieldViewModel.isTagInUse(tag)) {
-                                    errorMessage = "Cannot delete tag '${tag.toTagString()}' - it is currently in use by fields"
-                                } else {
-                                    tagViewModel.removeTag(tag.toTagString())
-                                }
-                            }) { Icon(Icons.Default.Delete, "Delete") }
+                            LongPressHint("Edit this tag") {
+                                IconButton(onClick = {
+                                    // Check if tag is in use before allowing edit
+                                    if (fieldViewModel.isTagInUse(tag)) {
+                                        errorMessage = "Cannot update tag '${tag.toTagString()}' - it is currently in use by fields"
+                                    } else {
+                                        tagToUpdate = tag
+                                        showUpdateDialog = true
+                                    }
+                                }) { Icon(Icons.Default.Edit, "Edit") }
+                            }
+                            LongPressHint("Delete this tag") {
+                                IconButton(onClick = {
+                                    // Check if tag is in use before allowing delete
+                                    if (fieldViewModel.isTagInUse(tag)) {
+                                        errorMessage = "Cannot delete tag '${tag.toTagString()}' - it is currently in use by fields"
+                                    } else {
+                                        tagViewModel.removeTag(tag.toTagString())
+                                    }
+                                }) { Icon(Icons.Default.Delete, "Delete") }
+                            }
                         }
                     }
                 )
@@ -158,8 +163,10 @@ fun TagPicker(
             title = { Text("Cannot modify tag") },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
-                    Text("OK")
+                LongPressHint("Dismiss this message") {
+                    TextButton(onClick = { errorMessage = null }) {
+                        Text("OK")
+                    }
                 }
             }
         )

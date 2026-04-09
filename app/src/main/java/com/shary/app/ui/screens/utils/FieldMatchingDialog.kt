@@ -133,18 +133,24 @@ fun FieldMatchingDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(onClick = onDismiss) { Text("Cancel") }
+                    LongPressHint("Close and discard current matching") {
+                        Button(onClick = onDismiss) { Text("Cancel") }
+                    }
                     Spacer(Modifier.width(8.dp))
-                    Button(
-                        enabled = isFullyMatched,
-                        onClick = {
-                            onAccept(buildAcceptedSelection())
-                            onDismiss()
-                        }
-                    ) { Text("Accept") }
+                    LongPressHint("Accept all current matches") {
+                        Button(
+                            enabled = isFullyMatched,
+                            onClick = {
+                                onAccept(buildAcceptedSelection())
+                                onDismiss()
+                            }
+                        ) { Text("Accept") }
+                    }
                     Spacer(Modifier.width(12.dp))
-                    SmallFloatingActionButton(onClick = { openAddDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Field")
+                    LongPressHint("Add a new local field for matching") {
+                        SmallFloatingActionButton(onClick = { openAddDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Field")
+                        }
                     }
 
                     Spacer(Modifier.width(8.dp))
@@ -153,18 +159,22 @@ fun FieldMatchingDialog(
                 Row {
 
                 }
-                IconButton(
-                    onClick = { history.undo() },
-                    enabled = history.canUndo
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                LongPressHint("Undo last matching change") {
+                    IconButton(
+                        onClick = { history.undo() },
+                        enabled = history.canUndo
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                 }
 
-                IconButton(
-                    onClick = { history.redo() },
-                    enabled = history.canRedo
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
+                LongPressHint("Redo last undone change") {
+                    IconButton(
+                        onClick = { history.redo() },
+                        enabled = history.canRedo
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
+                    }
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -229,7 +239,6 @@ fun FieldMatchingDialog(
                                     val isMatched = match != null
 
                                     val backgroundColor = when {
-                                        isSelected -> field.tag.safeColor()
                                         isMatched -> MaterialTheme.colorScheme.secondaryContainer
                                         index % 2 == 0 -> MaterialTheme.colorScheme.surface
                                         else -> MaterialTheme.colorScheme.surfaceVariant
@@ -317,7 +326,6 @@ fun FieldMatchingDialog(
                                     val isMatched = match != null
 
                                     val backgroundColor = when {
-                                        isSelected -> MaterialTheme.colorScheme.secondaryContainer
                                         isMatched -> MaterialTheme.colorScheme.tertiaryContainer
                                         index % 2 == 0 -> MaterialTheme.colorScheme.surface
                                         else -> MaterialTheme.colorScheme.surfaceVariant
