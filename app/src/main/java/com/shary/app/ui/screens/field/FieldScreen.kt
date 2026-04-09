@@ -46,6 +46,7 @@ import com.shary.app.core.domain.types.enums.AddFlow
 import com.shary.app.core.domain.types.enums.SearchFieldBy
 import com.shary.app.core.domain.types.enums.safeColor
 import com.shary.app.core.domain.types.enums.safeTagString
+import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import com.shary.app.ui.screens.field.components.AddCopiedFieldDialog
 import com.shary.app.ui.screens.field.components.AddFieldDialog
 import com.shary.app.ui.screens.field.components.ChangePasswordDialog
@@ -98,6 +99,7 @@ fun FieldsScreen(navController: NavHostController) {
     val searchFieldBy by fieldViewModel.searchFieldBy.collectAsState()
 
     val filteredFields by fieldViewModel.filteredFields.collectAsState()
+    val recoverableKeys by fieldViewModel.recoverableKeys.collectAsState()
 
     // ======== Sort Fields Parameters ========
     val sortBy by fieldViewModel.sortByParameter.collectAsState()
@@ -133,6 +135,9 @@ fun FieldsScreen(navController: NavHostController) {
                 }
                 is FieldEvent.ValueUpdated -> {
                     snackbarMessage = "Value updated for '${ev.key}'"
+                }
+                is FieldEvent.ValueRecovered -> {
+                    snackbarMessage = "Previous value recovered for '${ev.key}'"
                 }
                 is FieldEvent.AliasUpdated -> {
                     snackbarMessage = "Alias updated for '${ev.key}'"
@@ -394,6 +399,9 @@ fun FieldsScreen(navController: NavHostController) {
                             key = { _, field -> field.key }
                         ) { _, field ->
                             val isSelected = selectedFields.contains(field)
+                            val displayValue = remember(field.value) {
+                                FieldValueContract.parse(field.value).plainData
+                            }
 
                             val stripeColor = field.tag.safeColor()
 
@@ -468,7 +476,7 @@ fun FieldsScreen(navController: NavHostController) {
                                                 maxLines = 1
                                             )
                                             Text(
-                                                field.value,
+                                                displayValue,
                                                 color = colorScheme.onSurfaceVariant,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 maxLines = 1
@@ -542,6 +550,12 @@ fun FieldsScreen(navController: NavHostController) {
                     snackbarMessage = "Field '${field.key}' updated"
                     editingField = null
                     lastSubmittedKey = field.key
+                    openUpdateFieldDialog = false
+                },
+                canRecoverPreviousValue = recoverableKeys.contains(field.key.trim().lowercase()),
+                onRecoverPreviousValue = {
+                    fieldViewModel.recoverPreviousValue(field)
+                    editingField = null
                     openUpdateFieldDialog = false
                 }
             )
