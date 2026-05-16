@@ -1,30 +1,40 @@
 package com.shary.app.ui.screens.user
 
+import android.content.ClipData
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material3.*
-import androidx.compose.material3.MaterialTheme.colorScheme
-import androidx.compose.runtime.*
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -32,78 +42,62 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.shary.app.core.domain.models.UserDomain
-import com.shary.app.core.domain.types.enums.AddFlow
-import com.shary.app.core.domain.types.enums.UserAttribute
-import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
+import com.shary.app.ui.components.DockAction
+import com.shary.app.ui.components.EmptyState
+import com.shary.app.ui.components.SharyCommandDock
+import com.shary.app.ui.components.SharyIconButton
+import com.shary.app.ui.components.SharySearchBar
+import com.shary.app.ui.components.SharySectionNavigationBar
+import com.shary.app.ui.components.SharyTopBar
+import com.shary.app.ui.components.SectionTab
+import com.shary.app.ui.components.UserCard
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
-import com.shary.app.ui.screens.utils.LongPressHint
-import com.shary.app.ui.screens.utils.RowSearcher
-import com.shary.app.ui.screens.utils.ScreenScaffold
+import com.shary.app.ui.screens.user.components.UserEditorDialog
+import com.shary.app.ui.theme.Violet50
+import com.shary.app.viewmodels.configuration.SettingsViewModel
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserEvent
 import com.shary.app.viewmodels.user.UserViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsersScreen(navController: NavHostController) {
-    // ---- ViewModel ----
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     val userViewModel: UserViewModel = hiltViewModel()
     val fieldViewModel: FieldViewModel = hiltViewModel()
     val requestViewModel: RequestViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
 
-    // ---- State from VM ----
     val userList by userViewModel.users.collectAsState()
     val selectedUsers by userViewModel.selectedUsers.collectAsState()
     val isLoading by userViewModel.isLoading.collectAsState()
+    val settings by settingsViewModel.settings.collectAsState()
 
-    // ---- UI state ----
     val snackbarHostState = remember { SnackbarHostState() }
     var openAddDialog by remember { mutableStateOf(false) }
     var openAddUserCopyDialog by remember { mutableStateOf(false) }
+    var openEditDialog by remember { mutableStateOf(false) }
     var targetAddUserCopy by remember { mutableStateOf<UserDomain?>(null) }
     var editingUser by remember { mutableStateOf<UserDomain?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var clipboardAutoClearJob by remember { mutableStateOf<Job?>(null) }
 
-    //  ---- Search Users ----
-    var searchCriteria by remember { mutableStateOf("") }
-    var userSearchAttribute by remember { mutableStateOf(UserAttribute.Username) }
-
-    val filteredUsers = remember(userList, searchCriteria, userSearchAttribute) {
-        userList.filter { it.matchBy(searchCriteria, userSearchAttribute) }.toMutableList()
-    }
-
-    // ---- Event-driven UX ----
-    var lastFlow by remember { mutableStateOf(AddFlow.NONE) }
-    val lastSubmittedEmail by remember { mutableStateOf<String?>(null) }
+    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
 
     LaunchedEffect(Unit) {
         userViewModel.events.collect { ev ->
             when (ev) {
-                is UserEvent.Saved -> {
-                    if (lastFlow == AddFlow.COPY) {
-                        openAddUserCopyDialog = false
-                        snackbarMessage = "Copied user '${lastSubmittedEmail.orEmpty()}' added"
-                    } else {
-                        openAddDialog = false
-                        snackbarMessage = "User '${lastSubmittedEmail.orEmpty()}' added"
-                    }
-                    lastFlow = AddFlow.NONE
-                }
-                is UserEvent.AlreadyExists -> {
-                    val label = if (lastFlow == AddFlow.COPY) "Copied user" else "User"
-                    snackbarMessage = "$label '${lastSubmittedEmail.orEmpty()}' already exists"
-                    lastFlow = AddFlow.NONE
-                }
-                is UserEvent.Deleted -> {
-                    snackbarMessage = "Deleted '${ev}'"
-                }
-                is UserEvent.Error -> {
-                    snackbarMessage = "Error: ${ev.throwable.message}"
-                    lastFlow = AddFlow.NONE
-                }
+                is UserEvent.Saved -> snackbarMessage = "Contact saved"
+                is UserEvent.AlreadyExists -> snackbarMessage = "A contact with this email already exists"
+                is UserEvent.Deleted -> snackbarMessage = "Deleted contact '${ev.email}'"
+                is UserEvent.Error -> snackbarMessage = "Error: ${ev.throwable.message}"
             }
             userViewModel.refreshUsers()
         }
@@ -112,16 +106,9 @@ fun UsersScreen(navController: NavHostController) {
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = ""
+            snackbarMessage = null
         }
     }
-
-    // ---- Lifecycle: persist selection and refresh data ----
-    fun clearEphemeralStates() {
-        searchCriteria = ""
-    }
-
-    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
 
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
@@ -129,305 +116,216 @@ fun UsersScreen(navController: NavHostController) {
                 Lifecycle.Event.ON_START -> userViewModel.refreshUsers()
                 Lifecycle.Event.ON_STOP -> {
                     userViewModel.cacheUsers(selectedUsers)
-                    clearEphemeralStates()
+                    searchQuery = ""
                 }
-                else -> {}
+                else -> Unit
             }
         }
-        val lifecycle = lifecycleOwner.value.lifecycle
-        lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
+        lifecycleOwner.value.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.value.lifecycle.removeObserver(observer) }
     }
 
-    // ---------------- UI ----------------
-    ScreenScaffold(
-        title = "Users",
-        snackbarHostState = snackbarHostState,
-        searchContent = {
-            RowSearcher(
-                queryText = searchCriteria,
-                onQueryTextChange = { searchCriteria = it },
-                currentAttribute = userSearchAttribute,
-                onAttributeChange = { userSearchAttribute = it },
-                availableAttributes = UserAttribute.entries,
-                resolveOptionText = { userSearchAttribute = it; it.name }
-            )
-        },
-        bottomBarContent = {
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // ---- Left: Delete ----
-                Box(
-                    modifier = Modifier
-                        .weight(0.15f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CompactActionButton(
-                        onClick = {
-                            if (selectedUsers.isNotEmpty()) {
-                                userViewModel.deleteUsers(selectedUsers)
-                                userViewModel.clearSelectedUsers()
-                                snackbarMessage = "Deleted ${selectedUsers.size} fields"
-                            }
-                        },
-                        backgroundColor = colorScheme.error,
-                        icon = Icons.Default.Delete,
-                        contentDescription = "Delete Users",
-                        enabled = selectedUsers.isNotEmpty()
-                    )
-                }
-
-                // ---- Center: Add + Fields ----
-                Row(
-                    modifier = Modifier.weight(0.70f),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CompactActionButton(
-                        onClick = { openAddDialog = true },
-                        icon = Icons.Default.Add,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Add Field"
-                    )
-
-                    CompactActionButton(
-                        onClick = { navController.navigate(Screen.Fields.route) },
-                        icon = Icons.Default.TextFields,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Go to Field Screen"
-                    )
-
-                    CompactActionButton(
-                        onClick = { navController.navigate(Screen.Requests.route) },
-                        icon = Icons.Default.Description,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Go to Request Screen"
-                    )
-                }
-
-                // ---- Right: Summary ----
-                Box(
-                    modifier = Modifier
-                        .weight(0.15f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CompactActionButton(
-                        onClick = {
-                            if (fieldViewModel.anyFieldCached() && selectedUsers.isNotEmpty()) {
-                                navController.navigate(Screen.SummaryField.route)
-                            }
-                            if (requestViewModel.anyDraftFieldCached() && selectedUsers.isNotEmpty()) {
-                                navController.navigate(Screen.SummaryRequest.route)
-                            }
-                        },
-                        icon = Icons.Default.AssignmentTurnedIn,
-                        backgroundColor = colorScheme.tertiary,
-                        contentDescription = "Summary",
-                        enabled = (
-                                fieldViewModel.anyFieldCached()
-                                        || requestViewModel.anyDraftFieldCached()
-                                )
-                                && selectedUsers.isNotEmpty()
-                    )
-                }
+    val filteredUsers = remember(userList, searchQuery) {
+        val query = searchQuery.trim()
+        if (query.isBlank()) {
+            userList
+        } else {
+            userList.filter { user ->
+                user.username.contains(query, ignoreCase = true) ||
+                        user.email.contains(query, ignoreCase = true)
             }
         }
+    }
+
+    val selectedSingle = selectedUsers.singleOrNull()
+    val cardVerticalPadding = if (settings.compactListMode) 2.dp else 4.dp
+
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Violet50),
+        topBar = {
+            Column(modifier = Modifier.statusBarsPadding()) {
+                SharyTopBar(
+                    title = "",
+                    subtitle = "${userList.size} stored",
+                    actions = {
+                        SharyIconButton(
+                            icon = Icons.Default.Add,
+                            contentDescription = "Add user",
+                            onClick = { openAddDialog = true }
+                        )
+                        if (selectedSingle != null) {
+                            SharyIconButton(
+                                icon = Icons.Default.Edit,
+                                contentDescription = "Edit selected user",
+                                onClick = {
+                                    editingUser = selectedSingle
+                                    openEditDialog = true
+                                }
+                            )
+                            SharyIconButton(
+                                icon = Icons.Default.ContentCopy,
+                                contentDescription = "Duplicate selected user",
+                                onClick = {
+                                    targetAddUserCopy = selectedSingle
+                                    openAddUserCopyDialog = true
+                                }
+                            )
+                        }
+                    }
+                )
+                SharySearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    placeholder = "Search contacts by alias or email..."
+                )
+            }
+        },
+        bottomBar = {
+            Column {
+                SharyCommandDock(
+                    selectedCount = selectedUsers.size,
+                    onClearSelection = userViewModel::clearSelectedUsers,
+                    primaryAction = DockAction(
+                        label = "Review & Send →",
+                        enabled = selectedUsers.isNotEmpty() &&
+                                (fieldViewModel.anyFieldCached() || requestViewModel.anyDraftFieldCached())
+                    ),
+                    secondaryActions = emptyList(),
+                    destructiveAction = DockAction(
+                        label = "Delete",
+                        icon = Icons.Default.Delete,
+                        enabled = selectedUsers.isNotEmpty()
+                    ) {
+                        if (selectedUsers.isNotEmpty()) {
+                            val deletedSnapshot = selectedUsers.toList()
+                            userViewModel.deleteUsers(deletedSnapshot)
+                            userViewModel.clearSelectedUsers()
+                            scope.launch {
+                                snackbarHostState.currentSnackbarData?.dismiss()
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "Deleted ${deletedSnapshot.size} contacts",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Long
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    userViewModel.restoreDeletedUsers(deletedSnapshot)
+                                }
+                            }
+                        }
+                    },
+                    onPrimaryClick = {
+                        when {
+                            fieldViewModel.anyFieldCached() && selectedUsers.isNotEmpty() -> {
+                                navController.navigate(Screen.SummaryField.route)
+                            }
+                            requestViewModel.anyDraftFieldCached() && selectedUsers.isNotEmpty() -> {
+                                navController.navigate(Screen.SummaryRequest.route)
+                            }
+                            else -> snackbarMessage = "Select at least one recipient and payload"
+                        }
+                    }
+                )
+                SharySectionNavigationBar(
+                    currentTab = SectionTab.USERS,
+                    onTabSelected = { tab ->
+                        when (tab) {
+                            SectionTab.FIELDS -> navController.navigate(Screen.Fields.route) {
+                                launchSingleTop = true
+                            }
+                            SectionTab.USERS -> Unit
+                            SectionTab.REQUESTS -> navController.navigate(Screen.Requests.route) {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                )
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f),
-            horizontalAlignment = Alignment.Start
+                .fillMaxSize()
+                .background(Violet50)
         ) {
-
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
-            } else if (filteredUsers.isNotEmpty()) {
+            if (filteredUsers.isEmpty() && !isLoading) {
+                EmptyState(
+                    title = "No contacts yet",
+                    body = "Add your first contact using email and a local alias",
+                    primaryAction = "Add your first contact",
+                    onPrimaryAction = { openAddDialog = true },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .padding(start=16.dp, end=16.dp),
+                        .padding(horizontal = 18.dp)
                 ) {
-                    itemsIndexed(
-                        items = filteredUsers,
-                        key = { _, user -> user.email }
-                    ) { index, user ->
-
-                        val isSelected = selectedUsers.any { it == user } // comparar por key
-
-                        val actionPanelWidth = 186.dp
-                        val cardEndPadding by animateDpAsState(
-                            targetValue = if (isSelected) actionPanelWidth else 0.dp,
-                            label = "userCardEndPadding"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                        ) {
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = isSelected,
-                                modifier = Modifier.align(Alignment.CenterEnd),
-                                enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                                exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
-                            ) {
-                                SwipeActionsRow(
-                                    modifier = Modifier
-                                        .width(actionPanelWidth)
-                                        .fillMaxHeight(),
-                                    onEdit = {
-                                        editingUser = user
-                                    },
-                                    onCopy = {
-                                        snackbarMessage = "User '${user.username}' copied"
-                                    },
-                                    onAddCopy = {
-                                        openAddUserCopyDialog = true
-                                        targetAddUserCopy = user
-                                    }
-                                )
-                            }
-
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(end = cardEndPadding),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = colorScheme.surface
-                                ),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                                onClick = { userViewModel.toggleUser(user) }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp, horizontal = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    val stripeColor = if (isSelected) {
-                                        colorScheme.primary
-                                    } else {
-                                        colorScheme.outlineVariant
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .width(6.dp)
-                                            .heightIn(min = 48.dp)
-                                            .background(stripeColor)
+                    items(filteredUsers, key = { it.email }) { user ->
+                        UserCard(
+                            name = user.username,
+                            email = user.email,
+                            isSelected = selectedUsers.any {
+                                it.email.trim().equals(user.email.trim(), ignoreCase = true)
+                            },
+                            onClick = { userViewModel.toggleUser(user) },
+                            onLongPressCopy = { email ->
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(ClipData.newPlainText("contact_email", email))
                                     )
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            user.username,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = colorScheme.onSurface,
-                                            maxLines = 1
-                                        )
-                                        Text(
-                                            user.email,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = colorScheme.onSurfaceVariant,
-                                            maxLines = 1
+                                }
+                                clipboardAutoClearJob?.cancel()
+                                if (settings.clipboardAutoClearSeconds > 0) {
+                                    clipboardAutoClearJob = scope.launch {
+                                        delay(settings.clipboardAutoClearSeconds * 1000L)
+                                        clipboard.setClipEntry(
+                                            ClipEntry(ClipData.newPlainText("", ""))
                                         )
                                     }
                                 }
-                            }
-                        }
+                                snackbarMessage = "Contact email copied"
+                            },
+                            copyLongPressMillis = settings.copyLongPressMillis.toLong(),
+                            modifier = Modifier.padding(vertical = cardVerticalPadding)
+                        )
                     }
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) { Text("No users available", style = MaterialTheme.typography.bodyMedium) }
             }
         }
-        HorizontalDivider(thickness = 1.dp, color = Color.Gray)
     }
 
-    // ---- Add User Dialog ----
     if (openAddDialog) {
         AddUserDialog(
             onDismiss = { openAddDialog = false },
-            onAddUser = { newUser ->
-                userViewModel.saveUser(newUser) // el VM orquesta corutinas, eventos y refresh
-            }
+            onAddUser = { newUser -> userViewModel.saveUser(newUser) }
         )
     }
 
-    // ---- Add Copy User Dialog ----
     if (openAddUserCopyDialog && targetAddUserCopy != null) {
         AddCopyUserDialog(
             targetUser = targetAddUserCopy!!,
             onDismiss = { openAddUserCopyDialog = false },
-            onAddUser = { newUser ->
-                userViewModel.saveUser(newUser)
-            }
+            onAddUser = { newUser -> userViewModel.saveUser(newUser) }
         )
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SwipeActionsRow(
-    modifier: Modifier = Modifier,
-    onEdit: () -> Unit,
-    onCopy: () -> Unit,
-    onAddCopy: () -> Unit
-) {
-    Row(
-        modifier = modifier
-            .background(Color.Transparent)
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SwipeActionButton(
-            label = "",
-            icon = Icons.Default.Edit,
-            onClick = onEdit
-        )
-        SwipeActionButton(
-            label = "",
-            icon = Icons.Default.ContentCopy,
-            onClick = onCopy
-        )
-        SwipeActionButton(
-            label = "",
-            icon = Icons.Default.CopyAll,
-            onClick = onAddCopy
-        )
-    }
-}
-
-@Composable
-private fun SwipeActionButton(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    LongPressHint("Run this quick action") {
-        TextButton(onClick = onClick) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(icon, contentDescription = label)
+    if (openEditDialog && editingUser != null) {
+        UserEditorDialog(
+            initial = editingUser!!,
+            title = "Edit Contact",
+            confirmLabel = "Save",
+            onDismiss = {
+                openEditDialog = false
+                editingUser = null
+            },
+            onConfirm = { updated ->
+                userViewModel.upsertUser(updated)
             }
-        }
+        )
     }
 }

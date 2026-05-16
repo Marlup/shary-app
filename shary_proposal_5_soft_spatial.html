@@ -1,0 +1,388 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Gupter:wght@400;500;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  .p5*{box-sizing:border-box;margin:0;padding:0}
+  .p5{
+    font-family:'Outfit',sans-serif;
+    background:#eeebf5;
+    color:#1e1630;
+    padding:24px 16px;
+    border-radius:16px;
+  }
+  .p5-hdr{text-align:center;margin-bottom:20px}
+  .p5-badge{display:inline-block;background:#7a5af8;color:#f0ecff;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:4px 12px;border-radius:99px;margin-bottom:10px}
+  .p5-hdr h1{font-family:'Gupter',serif;font-size:22px;color:#1e1630;font-weight:500}
+  .p5-hdr p{font-size:12px;color:#9088a8;margin-top:4px}
+
+  .p5-nav{display:flex;gap:5px;margin-bottom:20px;background:#e4e0ef;border-radius:14px;padding:4px}
+  .p5-nav button{flex:1;padding:7px 4px;border:none;background:transparent;color:#9088a8;font-family:'Outfit',sans-serif;font-size:12px;font-weight:500;border-radius:10px;cursor:pointer;transition:all .18s}
+  .p5-nav button.active{background:#ffffff;color:#1e1630}
+
+  .p5-scr{display:none}.p5-scr.active{display:block}
+
+  .p5-phone{background:#f5f3fb;border-radius:32px;overflow:hidden;max-width:340px;margin:0 auto;border:1px solid #ddd8ef}
+  .p5-notch{background:#eeebf5;height:28px;display:flex;align-items:center;justify-content:center}
+  .p5-npill{width:72px;height:10px;background:#ddd8ef;border-radius:99px}
+
+  .p5-topbar{padding:14px 20px 10px;background:#f5f3fb;display:flex;align-items:center;justify-content:space-between}
+  .p5-title{font-family:'Gupter',serif;font-size:24px;color:#1e1630;font-weight:500;letter-spacing:-.01em}
+  .p5-ibtn{width:32px;height:32px;background:#eae6f5;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:#5a4a7a;transition:background .15s}
+  .p5-ibtn:hover{background:#ddd8ef}
+
+  .p5-search-area{padding:8px 18px 14px;background:#f5f3fb}
+  .p5-search-wrap{background:#eae6f5;border-radius:14px;display:flex;align-items:center;padding:10px 14px;gap:8px}
+  .p5-search-wrap input{flex:1;border:none;background:transparent;font-family:'Outfit',sans-serif;font-size:13px;color:#1e1630;outline:none}
+  .p5-search-wrap input::placeholder{color:#b0a8c8}
+  .p5-chips-row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .p5-chip{background:#f5f3fb;color:#9088a8;font-size:11px;font-weight:500;padding:4px 12px;border-radius:99px;cursor:pointer;border:1px solid #ddd8ef;transition:all .15s}
+  .p5-chip.on{background:#7a5af8;color:#f0ecff;border-color:#7a5af8}
+
+  .p5-list{padding:12px 18px;background:#eeebf5;min-height:280px;max-height:340px;overflow-y:auto;scrollbar-width:none}
+  .p5-list::-webkit-scrollbar{display:none}
+
+  .p5-card{background:#ffffff;border-radius:18px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all .18s;border:1.5px solid transparent}
+  .p5-card:hover{border-color:#c4b8e8}
+  .p5-card.sel{border-color:#7a5af8;background:#faf8ff}
+
+  .p5-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+  .p5-card-key{font-family:'Gupter',serif;font-size:15px;font-weight:500;color:#1e1630}
+  .p5-tag{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:99px}
+  .p5-tag.violet{background:#ede9ff;color:#5a3fb8}
+  .p5-tag.mint{background:#e2f5f0;color:#1a6b52}
+  .p5-tag.peach{background:#fdeee8;color:#9a3c1c}
+  .p5-tag.sky{background:#e5f0fb;color:#1a4f8a}
+
+  .p5-card-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:#9088a8;margin-bottom:6px}
+  .p5-card-footer{display:flex;align-items:center;justify-content:space-between}
+  .p5-card-alias{font-size:10px;color:#b0a8c8}
+  .p5-sel-ring{width:20px;height:20px;border-radius:50%;border:1.5px solid #ddd8ef;display:flex;align-items:center;justify-content:center;font-size:11px;color:transparent;transition:all .18s}
+  .p5-card.sel .p5-sel-ring{background:#7a5af8;border-color:#7a5af8;color:#fff}
+
+  .p5-dock{background:#f5f3fb;padding:10px 18px 20px;border-top:1px solid #ddd8ef}
+  .p5-sel-pill{background:#ede9ff;border-radius:99px;padding:7px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .p5-sel-pill span{font-size:12px;color:#5a3fb8;font-weight:600}
+  .p5-dock-row{display:flex;gap:7px;align-items:center}
+  .p5-btn-prim{flex:1;background:#7a5af8;color:#fff;border:none;border-radius:14px;padding:12px;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .18s}
+  .p5-btn-prim:hover{background:#8a6aff}
+  .p5-btn-soft{background:#eae6f5;border:none;color:#5a4a7a;border-radius:12px;padding:11px 12px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:all .18s}
+  .p5-btn-soft:hover{background:#ddd8ef}
+  .p5-btn-del{background:#fdeee8;border:none;color:#9a3c1c;border-radius:12px;padding:11px 12px;font-family:'Outfit',sans-serif;font-size:12px;cursor:pointer;transition:all .15s}
+  .p5-btn-del:hover{background:#fad8c8}
+
+  .p5-auth{background:#f5f3fb;min-height:460px;padding:0}
+  .p5-auth-top{background:#7a5af8;padding:36px 24px 28px;text-align:center}
+  .p5-auth-circle{width:64px;height:64px;background:rgba(255,255,255,.2);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-family:'Gupter',serif;font-size:28px;color:#fff;font-weight:700}
+  .p5-auth-name{font-family:'Gupter',serif;font-size:34px;color:#fff;font-weight:500;letter-spacing:-.01em}
+  .p5-auth-tagline{font-size:12px;color:rgba(255,255,255,.65);margin-top:6px;line-height:1.5}
+  .p5-auth-body{padding:24px 22px 28px}
+  .p5-input-grp{margin-bottom:14px}
+  .p5-lbl{font-size:11px;font-weight:600;color:#9088a8;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:6px}
+  .p5-inp{width:100%;background:#eae6f5;border:1.5px solid #ddd8ef;border-radius:14px;padding:12px 16px;color:#1e1630;font-family:'Outfit',sans-serif;font-size:13px;outline:none;transition:all .15s}
+  .p5-inp:focus{border-color:#7a5af8;background:#faf8ff}
+  .p5-btn-full{width:100%;background:#7a5af8;color:#fff;border:none;border-radius:14px;padding:14px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;transition:all .18s}
+  .p5-btn-full:hover{background:#8a6aff}
+  .p5-auth-footer{text-align:center;font-size:12px;color:#9088a8;margin-top:14px}
+  .p5-auth-footer span{color:#7a5af8;cursor:pointer;font-weight:600}
+
+  .p5-req-header{background:#f5f3fb;padding:12px 18px;display:flex;gap:6px;border-bottom:1px solid #ddd8ef}
+  .p5-mode-btn{flex:1;padding:9px;border:1.5px solid #ddd8ef;background:#eae6f5;color:#9088a8;border-radius:12px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;text-align:center}
+  .p5-mode-btn.on{background:#7a5af8;border-color:#7a5af8;color:#fff}
+
+  .p5-req-card{background:#fff;border-radius:18px;padding:14px 16px;margin-bottom:10px;border:1.5px solid transparent;cursor:pointer;transition:all .15s}
+  .p5-req-card:hover{border-color:#c4b8e8}
+  .p5-req-card.active{border-color:#7a5af8}
+  .p5-req-from{font-family:'Gupter',serif;font-size:15px;font-weight:500;color:#1e1630}
+  .p5-req-meta{font-size:11px;color:#b0a8c8;margin-top:2px}
+  .p5-req-keys{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+  .p5-req-key{font-size:10px;font-weight:600;background:#eae6f5;color:#5a4a7a;padding:3px 9px;border-radius:99px}
+  .p5-req-action{width:100%;margin-top:10px;background:#ede9ff;border:1.5px solid #c4b8e8;color:#5a3fb8;border-radius:10px;padding:9px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+  .p5-req-action:hover{background:#ddd8ef}
+
+  .p5-sum-hero{background:#7a5af8;padding:16px 20px}
+  .p5-sum-title{font-family:'Gupter',serif;font-size:20px;color:#fff;font-weight:500}
+  .p5-sum-sub{font-size:11px;color:rgba(255,255,255,.65);margin-top:3px}
+  .p5-sum-body{padding:14px 18px;background:#eeebf5}
+  .p5-sec-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9088a8;margin-bottom:8px}
+  .p5-sum-card{background:#fff;border-radius:16px;padding:12px 14px;margin-bottom:14px}
+  .p5-srow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0edf8}
+  .p5-srow:last-child{border-bottom:none}
+  .p5-sk{font-size:12px;color:#9088a8}
+  .p5-sv{font-family:'JetBrains Mono',monospace;font-size:12px;color:#1e1630;font-weight:500}
+  .p5-recip-blob{display:inline-flex;align-items:center;gap:8px;background:#ede9ff;border-radius:14px;padding:9px 14px}
+  .p5-av5{width:30px;height:30px;border-radius:10px;background:#7a5af8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:'Outfit',sans-serif}
+  .p5-avname{font-size:13px;font-weight:600;color:#1e1630}
+  .p5-avemail{font-size:11px;color:#9088a8}
+  .p5-method5{background:#fff;border:1.5px solid #ddd8ef;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:8px;cursor:pointer;transition:all .15s}
+  .p5-method5:hover{border-color:#c4b8e8}
+  .p5-method5.on{border-color:#7a5af8;background:#faf8ff}
+  .p5-m5name{font-size:13px;font-weight:600;color:#1e1630}
+  .p5-m5desc{font-size:11px;color:#9088a8}
+  .p5-send5{width:100%;background:#7a5af8;color:#fff;border:none;border-radius:14px;padding:14px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .18s}
+  .p5-send5:hover{background:#8a6aff}
+</style>
+
+<h2 class="sr-only">Shary Design Proposal 5: Soft Spatial — lavender and violet with warm depth, rounded geometry, and Gupter serif display type across Login, Fields, Requests, and Summary screens</h2>
+
+<div class="p5">
+  <div class="p5-hdr">
+    <div class="p5-badge">Proposal 5</div>
+    <h1>Soft Spatial</h1>
+    <p>Lavender depth · Violet accent · Rounded warmth</p>
+  </div>
+
+  <div class="p5-nav">
+    <button class="active" onclick="p5s('login')">Login</button>
+    <button onclick="p5s('fields')">Fields</button>
+    <button onclick="p5s('requests')">Requests</button>
+    <button onclick="p5s('summary')">Summary</button>
+  </div>
+
+  <div class="p5-scr active" id="p5-login">
+    <div class="p5-phone">
+      <div class="p5-notch" style="background:#7a5af8"><div class="p5-npill" style="background:#9a7aff"></div></div>
+      <div class="p5-auth">
+        <div class="p5-auth-top">
+          <div class="p5-auth-circle">S</div>
+          <div class="p5-auth-name">Shary</div>
+          <div class="p5-auth-tagline">Your data. Your rules.<br>Shared only when you choose.</div>
+        </div>
+        <div class="p5-auth-body">
+          <div class="p5-input-grp">
+            <label class="p5-lbl">Email</label>
+            <input class="p5-inp" type="email" value="alice@secure.io">
+          </div>
+          <div class="p5-input-grp">
+            <label class="p5-lbl">Password</label>
+            <input class="p5-inp" type="password" value="••••••••">
+          </div>
+          <button class="p5-btn-full">Sign in</button>
+          <div class="p5-auth-footer">New here? <span>Create account</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="p5-scr" id="p5-fields">
+    <div class="p5-phone">
+      <div class="p5-notch"><div class="p5-npill"></div></div>
+      <div class="p5-topbar">
+        <span class="p5-title">Fields</span>
+        <div style="display:flex;gap:6px">
+          <div class="p5-ibtn">↻</div>
+          <div class="p5-ibtn">＋</div>
+        </div>
+      </div>
+      <div class="p5-search-area">
+        <div class="p5-search-wrap">
+          <span style="font-size:14px;color:#b0a8c8">⌕</span>
+          <input placeholder="Search your fields…">
+        </div>
+        <div class="p5-chips-row">
+          <span class="p5-chip on">All</span>
+          <span class="p5-chip" onclick="p5chip(this)">Identity</span>
+          <span class="p5-chip" onclick="p5chip(this)">Health</span>
+          <span class="p5-chip" onclick="p5chip(this)">Finance</span>
+        </div>
+      </div>
+      <div class="p5-list" id="p5-flist">
+        <div class="p5-card" onclick="p5t(this,'flist')">
+          <div class="p5-card-top">
+            <span class="p5-card-key">Passport Number</span>
+            <span class="p5-tag violet">identity</span>
+          </div>
+          <div class="p5-card-val">AB•••••• · exp 2029</div>
+          <div class="p5-card-footer">
+            <span class="p5-card-alias">alias: passport_no</span>
+            <div class="p5-sel-ring">✓</div>
+          </div>
+        </div>
+        <div class="p5-card sel" onclick="p5t(this,'flist')">
+          <div class="p5-card-top">
+            <span class="p5-card-key">Blood Type</span>
+            <span class="p5-tag mint">health</span>
+          </div>
+          <div class="p5-card-val">A+</div>
+          <div class="p5-card-footer">
+            <span class="p5-card-alias"></span>
+            <div class="p5-sel-ring">✓</div>
+          </div>
+        </div>
+        <div class="p5-card" onclick="p5t(this,'flist')">
+          <div class="p5-card-top">
+            <span class="p5-card-key">Insurance Code</span>
+            <span class="p5-tag mint">health</span>
+          </div>
+          <div class="p5-card-val">SAN-••••-2024</div>
+          <div class="p5-card-footer">
+            <span class="p5-card-alias">alias: ins_ref</span>
+            <div class="p5-sel-ring">✓</div>
+          </div>
+        </div>
+        <div class="p5-card" onclick="p5t(this,'flist')">
+          <div class="p5-card-top">
+            <span class="p5-card-key">Tax ID</span>
+            <span class="p5-tag sky">finance</span>
+          </div>
+          <div class="p5-card-val">••••••••X</div>
+          <div class="p5-card-footer">
+            <span class="p5-card-alias"></span>
+            <div class="p5-sel-ring">✓</div>
+          </div>
+        </div>
+        <div class="p5-card" onclick="p5t(this,'flist')">
+          <div class="p5-card-top">
+            <span class="p5-card-key">Phone</span>
+            <span class="p5-tag violet">identity</span>
+          </div>
+          <div class="p5-card-val">+34 6•• ••• •••</div>
+          <div class="p5-card-footer">
+            <span class="p5-card-alias"></span>
+            <div class="p5-sel-ring">✓</div>
+          </div>
+        </div>
+      </div>
+      <div class="p5-dock">
+        <div class="p5-sel-pill" id="p5-spill">
+          <span id="p5-scnt">1 field selected</span>
+          <span style="cursor:pointer;font-size:12px;color:#9088a8" onclick="p5clr('flist','spill','scnt')">Clear ✕</span>
+        </div>
+        <div class="p5-dock-row">
+          <button class="p5-btn-del">🗑</button>
+          <button class="p5-btn-soft">Users</button>
+          <button class="p5-btn-prim" onclick="p5s('summary')">Review & Send →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="p5-scr" id="p5-requests">
+    <div class="p5-phone">
+      <div class="p5-notch"><div class="p5-npill"></div></div>
+      <div class="p5-topbar">
+        <span class="p5-title">Requests</span>
+        <div class="p5-ibtn">＋</div>
+      </div>
+      <div class="p5-req-header">
+        <button class="p5-mode-btn on" id="p5-mb-r" onclick="p5rt('received')">Received (2)</button>
+        <button class="p5-mode-btn" id="p5-mb-s" onclick="p5rt('sent')">Sent</button>
+      </div>
+      <div class="p5-list" id="p5-rlist">
+        <div class="p5-req-card active" onclick="this.classList.toggle('active')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div class="p5-req-from">Dr. Martínez</div>
+              <div class="p5-req-meta">2 hours ago · 3 fields requested</div>
+            </div>
+            <span class="p5-tag violet">pending</span>
+          </div>
+          <div class="p5-req-keys">
+            <span class="p5-req-key">Passport</span>
+            <span class="p5-req-key">Blood Type</span>
+            <span class="p5-req-key">Insurance</span>
+          </div>
+          <button class="p5-req-action">Match to my fields →</button>
+        </div>
+        <div class="p5-req-card" onclick="this.classList.toggle('active')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div class="p5-req-from">Insurance Portal</div>
+              <div class="p5-req-meta">Yesterday · 1 field requested</div>
+            </div>
+            <span class="p5-tag mint">pending</span>
+          </div>
+          <div class="p5-req-keys">
+            <span class="p5-req-key">Policy Number</span>
+          </div>
+        </div>
+      </div>
+      <div class="p5-dock">
+        <div class="p5-dock-row">
+          <button class="p5-btn-soft">Fields</button>
+          <button class="p5-btn-prim">Match fields →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="p5-scr" id="p5-summary">
+    <div class="p5-phone">
+      <div class="p5-notch" style="background:#7a5af8"><div class="p5-npill" style="background:#9a7aff"></div></div>
+      <div class="p5-sum-hero">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="p5-ibtn" style="background:rgba(255,255,255,.15);color:#fff" onclick="p5s('fields')">←</div>
+          <div class="p5-sum-title">Review & Send</div>
+        </div>
+        <div class="p5-sum-sub">3 fields · 1 recipient · encrypted</div>
+      </div>
+      <div class="p5-sum-body">
+        <div style="margin-bottom:14px">
+          <div class="p5-sec-lbl">Recipient</div>
+          <div class="p5-recip-blob">
+            <div class="p5-av5">DM</div>
+            <div><div class="p5-avname">Dr. Martínez</div><div class="p5-avemail">dr.martinez@clinic.es</div></div>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <div class="p5-sec-lbl">Fields</div>
+          <div class="p5-sum-card">
+            <div class="p5-srow"><span class="p5-sk">Blood Type</span><span class="p5-sv">A+</span></div>
+            <div class="p5-srow"><span class="p5-sk">Insurance Code</span><span class="p5-sv">SAN-••••-2024</span></div>
+            <div class="p5-srow"><span class="p5-sk">Passport Number</span><span class="p5-sv">AB••••••</span></div>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <div class="p5-sec-lbl">Send method</div>
+          <div class="p5-method5 on" onclick="p5m5(this)">
+            <span style="font-size:18px">📧</span>
+            <div><div class="p5-m5name">Email</div><div class="p5-m5desc">to dr.martinez@clinic.es</div></div>
+          </div>
+          <div class="p5-method5" onclick="p5m5(this)">
+            <span style="font-size:18px">🔗</span>
+            <div><div class="p5-m5name">Secure link</div><div class="p5-m5desc">One-time sharable link</div></div>
+          </div>
+        </div>
+        <button class="p5-send5">Send securely</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function p5s(sc){
+  document.querySelectorAll('.p5-scr').forEach(x=>x.classList.remove('active'));
+  document.getElementById('p5-'+sc).classList.add('active');
+  const m=['login','fields','requests','summary'];
+  document.querySelectorAll('.p5-nav button').forEach((b,i)=>b.classList.toggle('active',m[i]===sc));
+}
+function p5t(card,listId){
+  card.classList.toggle('sel');
+  const n=document.querySelectorAll('#p5-'+listId+' .p5-card.sel').length;
+  const pill=document.getElementById('p5-spill');
+  const cnt=document.getElementById('p5-scnt');
+  if(n>0){pill.style.display='flex';cnt.textContent=n+' field'+(n>1?'s':'')+' selected';}
+  else pill.style.display='none';
+}
+function p5clr(listId,pillId,cntId){
+  document.querySelectorAll('#p5-'+listId+' .p5-card').forEach(c=>c.classList.remove('sel'));
+  document.getElementById(pillId).style.display='none';
+}
+function p5chip(el){
+  document.querySelectorAll('.p5-chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+function p5rt(tab){
+  const br=document.getElementById('p5-mb-r'),bs=document.getElementById('p5-mb-s');
+  if(tab==='sent'){
+    bs.classList.add('on');br.classList.remove('on');
+    document.getElementById('p5-rlist').innerHTML='<div style="padding:32px 16px;text-align:center"><div style="font-family:Gupter,serif;font-size:18px;color:#1e1630;margin-bottom:8px">No sent requests</div><div style="font-size:12px;color:#9088a8;margin-bottom:18px">Define what you need from others and send a request</div><button onclick="" style="background:#7a5af8;color:#fff;border:none;border-radius:14px;padding:12px 24px;font-family:Outfit,sans-serif;font-size:13px;font-weight:600;cursor:pointer">+ Add requested key</button></div>';
+  } else {
+    br.classList.add('on');bs.classList.remove('on');
+    document.getElementById('p5-rlist').innerHTML='<div class="p5-req-card active"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="p5-req-from">Dr. Martínez</div><div class="p5-req-meta">2 hours ago · 3 fields requested</div></div><span class="p5-tag violet">pending</span></div><div class="p5-req-keys"><span class="p5-req-key">Passport</span><span class="p5-req-key">Blood Type</span><span class="p5-req-key">Insurance</span></div><button class="p5-req-action">Match to my fields →</button></div><div class="p5-req-card"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="p5-req-from">Insurance Portal</div><div class="p5-req-meta">Yesterday · 1 field requested</div></div><span class="p5-tag mint">pending</span></div><div class="p5-req-keys"><span class="p5-req-key">Policy Number</span></div></div>';
+  }
+}
+function p5m5(card){
+  document.querySelectorAll('.p5-method5').forEach(c=>c.classList.remove('on'));
+  card.classList.add('on');
+}
+</script>

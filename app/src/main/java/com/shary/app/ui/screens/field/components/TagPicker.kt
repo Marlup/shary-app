@@ -1,6 +1,5 @@
 package com.shary.app.ui.screens.field.components
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +17,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.enums.safeColor
 import com.shary.app.ui.screens.utils.LongPressHint
+import com.shary.app.utils.log.AppLogger
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.tag.TagViewModel
 
@@ -125,7 +125,7 @@ fun TagPicker(
             initialName = "",
             initialColor = Color.Gray,
             onConfirm = { name, color ->
-                Log.d("FieldsScreen()", "tag : ${name}, color : $color")
+                AppLogger.debug("TagPicker", "event=create_tag")
 
                 showAddDialog = false
                 tagViewModel.addTag(name, color)
@@ -140,7 +140,7 @@ fun TagPicker(
             currentName = tagToUpdate!!.toTagString(),
             currentColor = tagToUpdate!!.safeColor(),
             onConfirm = { name, color ->
-                Log.d("TagPicker", "Updating tag: $name with color: $color")
+                AppLogger.debug("TagPicker", "event=update_tag")
                 showUpdateDialog = false
                 tagViewModel.updateTag(name, color)
                 // Update the selected tag if it was the one being edited

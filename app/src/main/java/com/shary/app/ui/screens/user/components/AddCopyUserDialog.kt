@@ -18,7 +18,7 @@ fun AddCopyUserDialog(
 
     UserEditorDialog(
         initial = initial,
-        title = "Add New User",
+        title = "Add Contact",
         confirmLabel = "Add",
         onDismiss = onDismiss,
         onConfirm = onAddUser

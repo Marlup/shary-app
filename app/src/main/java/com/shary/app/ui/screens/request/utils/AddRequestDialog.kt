@@ -1,6 +1,5 @@
 package com.shary.app.ui.screens.request.utils
 
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
@@ -15,8 +14,17 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import com.shary.app.core.domain.types.enums.PredefinedKey
+import com.shary.app.ui.components.SharyPrimaryButton
+import com.shary.app.ui.components.SharySoftButton
 import com.shary.app.ui.screens.field.components.InputWithSuggestions
-import com.shary.app.ui.screens.utils.LongPressHint
+import com.shary.app.ui.theme.SharyRadius
+import com.shary.app.ui.theme.SurfaceLight
+import com.shary.app.ui.theme.Violet200
+import com.shary.app.ui.theme.Violet500
+import com.shary.app.ui.theme.Violet900
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,26 +43,36 @@ fun AddRequestDialog(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        shape = SharyRadius.sheet,
+        containerColor = SurfaceLight,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 40.dp, height = 4.dp)
+                    .background(Violet200, RoundedCornerShape(99.dp))
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = sheetMaxHeight)
-                .padding(16.dp)
+                .padding(horizontal = 18.dp, vertical = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
                 "Add New Request",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.headlineLarge,
+                color = Violet900
             )
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 "Required",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = Violet500
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -67,6 +85,8 @@ fun AddRequestDialog(
                 showError = showErrors
             )
 
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = Violet200, thickness = 1.dp)
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
@@ -98,28 +118,27 @@ fun AddRequestDialog(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(
-                horizontalArrangement = Arrangement.End,
-                modifier = Modifier.fillMaxWidth()
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                LongPressHint("Close without adding a request") {
-                    OutlinedButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                }
-                LongPressHint("Add this new request") {
-                    FilledTonalButton(
-                        onClick = {
-                            showErrors = true
-                            if (key.isBlank()) return@FilledTonalButton
-                            onAddRequest(key, aliasKey)
-                        }
-                    ) {
-                        Text("Add")
-                    }
-                }
+                SharySoftButton(
+                    text = "Cancel",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                SharyPrimaryButton(
+                    text = "Add",
+                    onClick = {
+                        showErrors = true
+                        if (key.isBlank()) return@SharyPrimaryButton
+                        onAddRequest(key, aliasKey)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }

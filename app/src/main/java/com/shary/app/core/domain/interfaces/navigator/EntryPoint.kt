@@ -1,6 +1,7 @@
 package com.shary.app.core.domain.interfaces.navigator
 
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
+import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -9,4 +10,5 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 interface CredentialsEntryPoint {
     fun credentialsStore(): CredentialsStore
+    fun cryptographyManager(): CryptographyManager
 }

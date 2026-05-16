@@ -1,7 +1,6 @@
 package com.shary.app.infrastructure.security.auth
 
 import android.content.Context
-import android.util.Log
 import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
@@ -11,12 +10,19 @@ import com.shary.app.core.domain.interfaces.states.AuthState
 import com.shary.app.core.domain.types.valueobjects.Purpose
 import com.shary.app.infrastructure.security.helper.SecurityUtils
 import com.shary.app.infrastructure.security.helper.SecurityUtils.base64Encode
-import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
+import com.shary.app.infrastructure.security.helper.SecurityUtils.deleteCredentialsTimestamp
+import com.shary.app.infrastructure.security.helper.SecurityUtils.deleteSignatureFile
+import com.shary.app.infrastructure.security.manager.CredentialsWrapKeyException
+import com.shary.app.utils.log.AppLogger
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
-import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +42,7 @@ class AuthenticationServiceImpl @Inject constructor(
     private val store: CredentialsStore,
     private val cloud: CloudService,
     private val cache: CacheService,
+    private val firebaseAuth: FirebaseAuth,
 ) : AuthenticationService {
 
     private val DELAY_TIME_SECONDS = 40L
@@ -66,44 +73,57 @@ class AuthenticationServiceImpl @Inject constructor(
 
     /**
      * Sign-up flow:
-     * 1) Derive safe password from username + plain password.
+     * 1) Derive safe password from email + plain password.
      * 2) Initialize local keys with CryptographyManager.
      * 3) Persist signature file (contains only public keys).
      * 4) Persist encrypted JSON credentials in storage.
      */
     override suspend fun signUp(context: Context, username: String, email: String, password: String) = runCatching {
-        val safePassword = computeSafePassword(email, password)
-        Log.d("AuthenticationServiceImpl", "signUp - email: $email")
+        val canonicalEmail = normalizeEmail(email)
+        val safePassword = computeSafePassword(canonicalEmail, password)
+        AppLogger.info("AuthenticationServiceImpl", "event=signup_start email=${AppLogger.emailHint(canonicalEmail)}")
+        val isEmailVerified = ensureFirebaseEmailSignupAndVerification(canonicalEmail, password)
+        cloud.cloudState.value = cloud.cloudState.value.copy(
+            email = canonicalEmail,
+            isUserValidated = isEmailVerified
+        )
 
         // Initialize keys locally
-        crypto.initializeKeysWithUser(context, email, safePassword)
-        crypto.saveSignature(context, username, email, safePassword)
+        crypto.initializeKeysWithUser(context, canonicalEmail, safePassword)
+        crypto.saveSignature(context, username, canonicalEmail, safePassword)
 
         // --- CLOUD REGISTRATION ---
         val cloudReachable = cloud.sendPing()
-        Log.w("AuthenticationServiceImpl", "Cloud registration launched")
-        if (cloudReachable) {
-            val registered = cloud.isUserRegisteredInCloud(email)
-        Log.w("AuthenticationServiceImpl", "Cloud isUserRegisteredInCloud launched")
+        AppLogger.info("AuthenticationServiceImpl", "event=cloud_registration_start")
+        if (cloudReachable && isEmailVerified) {
+            val registered = cloud.isUserRegisteredInCloud(canonicalEmail)
+        AppLogger.debug("AuthenticationServiceImpl", "event=cloud_check_user_registered")
             if (!registered) {
-                val token = cloud.uploadUser(email)
+                val token = cloud.uploadUser(canonicalEmail)
                 if (token.isNotEmpty()) {
-                    Log.d("AuthenticationServiceImpl", "Cloud user uploaded, token received.")
+                    AppLogger.info("AuthenticationServiceImpl", "event=cloud_user_uploaded")
                     setAuthToken(token)
                 } else {
-                    Log.w("AuthenticationServiceImpl", "Cloud upload failed, using local only.")
+                    AppLogger.warn("AuthenticationServiceImpl", "event=cloud_upload_failed_using_local")
                 }
             } else {
-                Log.w("AuthenticationServiceImpl", "User already exists in cloud.")
+                AppLogger.info("AuthenticationServiceImpl", "event=cloud_user_already_exists")
             }
         } else {
-            Log.w("AuthenticationServiceImpl", "Cloud unreachable, continuing offline sign-up.")
+            if (!isEmailVerified) {
+                AppLogger.warn("AuthenticationServiceImpl", "event=signup_email_not_verified_cloud_registration_deferred")
+            } else {
+                AppLogger.warn("AuthenticationServiceImpl", "event=cloud_unreachable_offline_signup")
+            }
         }
 
         // Persist locally
-        cacheCredentials(username, email, safePassword,getAuthToken())
+        cacheCredentials(username, canonicalEmail, safePassword,getAuthToken())
         persistCredentials(context)
-        preLoadLocalKeys(email, safePassword)
+        preLoadLocalKeys(canonicalEmail, safePassword)
+        if (!isEmailVerified) {
+            AppLogger.info("AuthenticationServiceImpl", "event=signup_pending_email_verification")
+        }
     }
 
     /**
@@ -114,48 +134,35 @@ class AuthenticationServiceImpl @Inject constructor(
      * 4) Verify that provided email + password match stored credentials.
      */
     override suspend fun signIn(context: Context, email: String, password: String) = runCatching {
-        val safePassword = computeSafePassword(email, password)
-        crypto.initializeKeysWithUser(context, email, safePassword)
-        preLoadLocalKeys(email, safePassword)
+        val canonicalEmail = normalizeEmail(email)
+        val safePassword = computeSafePassword(canonicalEmail, password)
+        ensureFirebaseVerifiedSignIn(canonicalEmail, password)
+        cloud.cloudState.value = cloud.cloudState.value.copy(
+            email = canonicalEmail,
+            isUserValidated = true
+        )
+        crypto.initializeKeysWithUser(context, canonicalEmail, safePassword)
+        preLoadLocalKeys(canonicalEmail, safePassword)
 
-        loadCredentials(context, email)
-        check(isAuthenticated(email, safePassword)) { "Invalid credentials" }
-
-        // --- CLOUD VERIFICATION ---
-        val online = cloud.sendPing()
-        Log.w("AuthenticationServiceImpl", "Cloud verification launched")
-        if (online) {
-            val isRegistered = cloud.isUserRegisteredInCloud(email)
-            Log.w("AuthenticationServiceImpl", "Cloud isUserRegisteredInCloud launched")
-            if (!isRegistered) {
-                Log.w("AuthenticationServiceImpl", "After ping: User not found in cloud, forcing re-upload.")
-                cloud.uploadUser(email)
-            } else {
-                Log.d("AuthenticationServiceImpl", "After ping: User verified in cloud.")
-            }
-
-            // Obtain/refresh token for cloud sync
-            val refreshed = cloud.refreshIdToken().getOrNull()
-            if (!refreshed.isNullOrEmpty()) {
-                setAuthToken(refreshed)
-            } else {
-                Log.w("AuthenticationServiceImpl", "Failed to refresh ID token from cloud.")
-            }
-        } else {
-            Log.w("AuthenticationServiceImpl", "Cloud offline, continuing local sign-in.")
-        }
+        loadCredentials(context, email, safePassword)
+        check(isAuthenticated(canonicalEmail, safePassword)) { "Invalid credentials" }
+        AppLogger.info("AuthenticationServiceImpl", "event=signin_local_auth_completed")
+        AppLogger.info("StartupTrace", "event=local_auth_done")
     }
 
     override suspend fun logoutForRelogin() {
         _state.value = AuthState()
         cache.clearAllCaches()
         cloud.signOutCloud()
+        firebaseAuth.signOut()
     }
 
     /** Clears in-memory state and deletes the encrypted credentials file. */
     override suspend fun signOut(context: Context) {
         logoutForRelogin()
         store.deleteCredentials(context)
+        deleteSignatureFile(context)
+        deleteCredentialsTimestamp(context)
     }
 
     // -------------------- Helpers --------------------
@@ -176,14 +183,12 @@ class AuthenticationServiceImpl @Inject constructor(
     /** Persists credentials as an encrypted JSON blob using CryptographyManager. */
     private fun persistCredentials(context: Context) {
         val s = _state.value
-        Log.d("AuthenticationServiceImpl", "persistCredentials - username: ${s.username}")
+        AppLogger.debug("AuthenticationServiceImpl", "event=persist_credentials_start")
 
         val json = JSONObject().apply {
             put("user_email", s.email)
             put("user_username", s.username)
-            put("user_safe_password", s.safePassword)
-            put("user_validation_token", s.authToken)
-            put("version", 2)
+            put("version", 3)
             put("ts", SecurityUtils.getCurrentUtcTimestamp())
         }
         val bytes = crypto.encryptCredentialsByDerivation(
@@ -195,36 +200,59 @@ class AuthenticationServiceImpl @Inject constructor(
         store.writeCredentials(context, bytes)
         cache.cacheOwnerUsername(s.username)
         cache.cacheOwnerEmail(s.email)
-        Log.d("Auth", "Encrypted credentials stored (${bytes.size} bytes).")
+        AppLogger.info("AuthenticationServiceImpl", "event=credentials_stored size=${bytes.size}")
     }
 
     /** Loads credentials JSON from encrypted storage and updates AuthState. */
-    private fun loadCredentials(context: Context, email: String) {
+    private fun loadCredentials(context: Context, email: String, safePassword: String) {
         val encrypted = store.readCredentials(context) ?: error("Credentials file not found")
-        val data = crypto.decryptCredentials(
-            email,
-            getLocalKeyByPurpose(Purpose.Credentials)!!,
-            encrypted
-        )
-        Log.d("AuthenticationServiceImpl", "loadCredentials - username: ${data.optString("user_username")}")
+        val candidateEmails = listOf(normalizeEmail(email), email.trim())
+            .filter { it.isNotBlank() }
+            .distinct()
+        var wrapKeyFailureDetected = false
+
+        val data = candidateEmails.firstNotNullOfOrNull { candidate ->
+            runCatching {
+                val credentialsKey = crypto.deriveLocalKey(
+                    candidate,
+                    safePassword.toCharArray(),
+                    Purpose.Credentials.code
+                )
+                crypto.decryptCredentials(candidate, credentialsKey, encrypted)
+            }.getOrElse { error ->
+                if (error is CredentialsWrapKeyException) {
+                    wrapKeyFailureDetected = true
+                }
+                null
+            }
+        } ?: run {
+            if (wrapKeyFailureDetected) {
+                purgeCredentialsForRecovery(context)
+                throw SecurityException(
+                    "Secure storage was reset on this device. Local credentials were cleared. Please sign in again."
+                )
+            }
+            throw SecurityException("Invalid credentials")
+        }
+        AppLogger.debug("AuthenticationServiceImpl", "event=load_credentials_start")
         val username = data.optString("user_username");
-        val email = data.optString("user_email");
+        val storedEmail = normalizeEmail(data.optString("user_email"));
         cacheCredentials(
             username = data.optString("user_username"),
-            email    = data.optString("user_email"),
-            safePassword     = data.optString("user_safe_password"),
-            token    = data.optString("user_validation_token")
+            email    = storedEmail,
+            safePassword = safePassword,
+            token    = getAuthToken()
         )
         cache.cacheOwnerUsername(username)
-        cache.cacheOwnerEmail(email)
-        Log.d("AuthenticationServiceImpl", "Encrypted credentials loaded (${encrypted.size} bytes).")
+        cache.cacheOwnerEmail(storedEmail)
+        AppLogger.info("AuthenticationServiceImpl", "event=credentials_loaded size=${encrypted.size}")
     }
 
     /** Verifies if email + safePassword match in-memory AuthState. */
     private fun isAuthenticated(email: String, safePassword: String): Boolean {
         val s = _state.value
         return email.isNotBlank() && safePassword.isNotBlank() &&
-                s.email == email && s.safePassword == safePassword
+                normalizeEmail(s.email) == normalizeEmail(email) && s.safePassword == safePassword
     }
 
     // -------------------- In-memory backend simulation --------------------
@@ -259,5 +287,70 @@ class AuthenticationServiceImpl @Inject constructor(
                 )
             )
         }
+    }
+
+    private fun normalizeEmail(email: String): String = email.trim().lowercase()
+
+    private suspend fun ensureFirebaseEmailSignupAndVerification(email: String, password: String): Boolean {
+        val normalized = normalizeEmail(email)
+
+        runCatching {
+            firebaseAuth.createUserWithEmailAndPassword(normalized, password).await()
+            AppLogger.info("AuthenticationServiceImpl", "event=firebase_signup_created")
+        }.recoverCatching { error ->
+            if (error is FirebaseAuthUserCollisionException) {
+                AppLogger.warn("AuthenticationServiceImpl", "event=firebase_signup_user_exists")
+                firebaseAuth.signInWithEmailAndPassword(normalized, password).await()
+            } else {
+                throw error
+            }
+        }.getOrElse { error ->
+            throw mapFirebaseAuthException(error)
+        }
+
+        val user = firebaseAuth.currentUser ?: throw IllegalStateException("Firebase user unavailable after signup.")
+        user.reload().await()
+
+        if (!user.isEmailVerified) {
+            user.sendEmailVerification().await()
+            AppLogger.info("AuthenticationServiceImpl", "event=firebase_verification_email_sent")
+            return false
+        }
+
+        AppLogger.info("AuthenticationServiceImpl", "event=firebase_email_already_verified")
+        return true
+    }
+
+    private suspend fun ensureFirebaseVerifiedSignIn(email: String, password: String) {
+        val normalized = normalizeEmail(email)
+        runCatching {
+            firebaseAuth.signInWithEmailAndPassword(normalized, password).await()
+        }.getOrElse { error ->
+            throw mapFirebaseAuthException(error)
+        }
+
+        val user = firebaseAuth.currentUser ?: throw IllegalStateException("Firebase user unavailable after sign-in.")
+        user.reload().await()
+        if (!user.isEmailVerified) {
+            user.sendEmailVerification().await()
+            throw SecurityException("Email not verified. We sent a new verification email.")
+        }
+    }
+
+    private fun mapFirebaseAuthException(error: Throwable): Throwable {
+        return when (error) {
+            is FirebaseAuthInvalidUserException,
+            is FirebaseAuthInvalidCredentialsException -> SecurityException("Invalid email or password.")
+            else -> error
+        }
+    }
+
+    private fun purgeCredentialsForRecovery(context: Context) {
+        store.deleteCredentials(context)
+        deleteSignatureFile(context)
+        deleteCredentialsTimestamp(context)
+        cache.clearAllCaches()
+        _state.value = AuthState()
+        AppLogger.warn("AuthenticationServiceImpl", "event=credentials_recovery_purge_completed")
     }
 }

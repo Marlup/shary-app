@@ -1,8 +1,9 @@
 package com.shary.app.infrastructure.security.manager
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Base64
-import android.util.Log
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.security.DetachedVerifier
 import com.shary.app.core.domain.interfaces.security.Ed25519Factory
@@ -14,10 +15,17 @@ import com.shary.app.infrastructure.security.derivation.KeyDerivation
 import com.shary.app.infrastructure.security.shared.keyExchange.X25519KeyPair
 import com.shary.app.infrastructure.security.digitalSignature.Ed25519Signer
 import com.shary.app.infrastructure.security.helper.SecurityUtils
+import com.shary.app.infrastructure.security.helper.SecurityUtils.writeTextAtomic
 import com.shary.app.infrastructure.security.local.LocalVault
+import com.shary.app.utils.log.AppLogger
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import java.security.KeyStore
 import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 
 /**
@@ -48,6 +56,9 @@ class CryptographyManagerImpl(
     private companion object {
         private const val IV_LEN = 12
         private const val TAG_LEN = 16
+        private const val CREDENTIALS_WRAP_ALIAS = "com.shary.app.credentials.wrap.v1"
+        private const val CREDENTIALS_WRAP_TRANSFORMATION = "AES/GCM/NoPadding"
+        private val CREDENTIALS_WRAP_MAGIC = byteArrayOf('S'.code.toByte(), 'C'.code.toByte(), 'V'.code.toByte(), '3'.code.toByte())
     }
 
     // =====================================================================================
@@ -76,21 +87,22 @@ class CryptographyManagerImpl(
      * }
      */
     override fun saveSignature(context: Context, username: String, email: String, safePassword: String) {
-        if (cachedIdentity == null || cachedUserEmail != username) {
-            initializeKeysWithUser(context, username, safePassword)
+        if (cachedIdentity == null || cachedUserEmail != email) {
+            initializeKeysWithUser(context, email, safePassword)
         }
         val id = requireNotNull(cachedIdentity)
+        val signPublic = id.getSignPublic()
+        val kexPublic = id.getKexPublic()
         val json = JSONObject().apply {
-            put("username", username)
-            put("email", email)
-            put("pub_sign_b64", Base64.encodeToString(id.getSignPublic(), Base64.NO_WRAP))
-            put("pub_kex_b64", Base64.encodeToString(id.getKexPublic(), Base64.NO_WRAP))
+            put("pub_sign_b64", Base64.encodeToString(signPublic, Base64.NO_WRAP))
+            put("pub_kex_b64", Base64.encodeToString(kexPublic, Base64.NO_WRAP))
+            put("key_id", publicKeyId(signPublic))
             put("ts", SecurityUtils.getCurrentUtcTimestamp())
-            put("app_id", getAppId())
+            put("version", 2)
         }
         val f = SecurityUtils.signatureFile(context)
         if (!f.parentFile!!.exists()) f.parentFile!!.mkdirs()
-        f.writeText(json.toString())
+        writeTextAtomic(f, json.toString())
     }
 
     /**
@@ -130,7 +142,7 @@ class CryptographyManagerImpl(
     override fun signDetached(message: ByteArray): ByteArray {
         val identity = requireNotNull(cachedIdentity) { "Keys not initialized. Call initializeKeysWithUser first." }
         //val signer = Ed25519Signer.fromSeed(identity.getSignSeed())
-        Log.d("CryptographyManagerImpl", "signDetached - SignSeed: ${identity.getSignSeed()}")
+        AppLogger.debug("CryptographyManagerImpl", "event=sign_detached")
         val signer = factory.signerFromSeed(identity.getSignSeed()) // short‑lived
         return signer.sign(message)
     }
@@ -163,7 +175,8 @@ class CryptographyManagerImpl(
         json: JSONObject,
         aad: ByteArray?
     ): ByteArray {
-        return localVault.encryptCredentials(email, localKey, json, aad)
+        val inner = localVault.encryptCredentials(email, localKey, json, aad)
+        return wrapCredentialsBlob(inner)
     }
 
     override fun encryptCredentialsByDerivation(
@@ -173,7 +186,8 @@ class CryptographyManagerImpl(
         json: JSONObject,
         aad: ByteArray?
     ): ByteArray {
-        return localVault.encryptCredentialsByDerivation(email, p, json, aad)
+        val inner = localVault.encryptCredentialsByDerivation(email, p, json, aad)
+        return wrapCredentialsBlob(inner)
     }
 
     /**
@@ -188,7 +202,8 @@ class CryptographyManagerImpl(
         encrypted: ByteArray,
         aad: ByteArray?
     ): JSONObject {
-        return localVault.decryptCredentials(email, localKey, encrypted, aad)
+        val inner = unwrapCredentialsBlobOrLegacy(encrypted)
+        return localVault.decryptCredentials(email, localKey, inner, aad)
     }
 
     override fun decryptCredentialsByDerivation(
@@ -198,7 +213,19 @@ class CryptographyManagerImpl(
         encrypted: ByteArray,
         aad: ByteArray?
     ): JSONObject {
-        return localVault.decryptCredentialsByDerivation(email, p, encrypted, aad)
+        val inner = unwrapCredentialsBlobOrLegacy(encrypted)
+        return localVault.decryptCredentialsByDerivation(email, p, inner, aad)
+    }
+
+    override fun isCredentialsBlobUsable(encrypted: ByteArray): Boolean {
+        return runCatching {
+            if (!isWrappedCredentialsBlob(encrypted)) {
+                true
+            } else {
+                unwrapCredentialsBlobOrLegacy(encrypted)
+                true
+            }
+        }.getOrDefault(false)
     }
 
     // =====================================================================================
@@ -277,8 +304,8 @@ class CryptographyManagerImpl(
     ) = doOpenFrom(sealedBox, senderEphPublicOrStatic, email, password, appId, aad)
 
     /** Clave pública X25519 del usuario (base64) derivada ad hoc. */
-    fun deriveKexPublicKeyB64(username: String, password: CharArray): String {
-        val id = deriveIdentity(username, password, getAppId())
+    fun deriveKexPublicKeyB64(email: String, password: CharArray): String {
+        val id = deriveIdentity(email, password, getAppId())
         return Base64.encodeToString(id.getKexPublic(), Base64.NO_WRAP)
     }
 
@@ -357,5 +384,67 @@ class CryptographyManagerImpl(
         val tag  = encrypted.copyOfRange(encrypted.size - TAG_LEN, encrypted.size)
         val body = encrypted.copyOfRange(IV_LEN, encrypted.size - TAG_LEN)
         return Triple(iv, body, tag)
+    }
+
+    private fun publicKeyId(publicKey: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(publicKey)
+        return Base64.encodeToString(digest.copyOfRange(0, 16), Base64.NO_WRAP)
+    }
+
+    private fun wrapCredentialsBlob(inner: ByteArray): ByteArray {
+        val key = getOrCreateCredentialsWrapKey()
+        val cipher = Cipher.getInstance(CREDENTIALS_WRAP_TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        val iv = cipher.iv
+        require(iv.size == IV_LEN) { "Invalid Keystore IV length." }
+        val wrapped = cipher.doFinal(inner)
+        return ByteArray(CREDENTIALS_WRAP_MAGIC.size + iv.size + wrapped.size).apply {
+            System.arraycopy(CREDENTIALS_WRAP_MAGIC, 0, this, 0, CREDENTIALS_WRAP_MAGIC.size)
+            System.arraycopy(iv, 0, this, CREDENTIALS_WRAP_MAGIC.size, iv.size)
+            System.arraycopy(wrapped, 0, this, CREDENTIALS_WRAP_MAGIC.size + iv.size, wrapped.size)
+        }
+    }
+
+    private fun unwrapCredentialsBlobOrLegacy(blob: ByteArray): ByteArray {
+        if (!isWrappedCredentialsBlob(blob)) return blob
+        val ivStart = CREDENTIALS_WRAP_MAGIC.size
+        val bodyStart = ivStart + IV_LEN
+        val iv = blob.copyOfRange(ivStart, bodyStart)
+        val wrapped = blob.copyOfRange(bodyStart, blob.size)
+        return try {
+            val key = getOrCreateCredentialsWrapKey()
+            val cipher = Cipher.getInstance(CREDENTIALS_WRAP_TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            cipher.doFinal(wrapped)
+        } catch (e: Throwable) {
+            throw CredentialsWrapKeyException("Unable to unwrap credentials with Android Keystore key.", e)
+        }
+    }
+
+    private fun isWrappedCredentialsBlob(blob: ByteArray): Boolean {
+        if (blob.size <= CREDENTIALS_WRAP_MAGIC.size + IV_LEN + TAG_LEN) return false
+        return CREDENTIALS_WRAP_MAGIC.indices.all { idx -> blob[idx] == CREDENTIALS_WRAP_MAGIC[idx] }
+    }
+
+    private fun getOrCreateCredentialsWrapKey(): SecretKey {
+        return try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            (keyStore.getKey(CREDENTIALS_WRAP_ALIAS, null) as? SecretKey)?.let { return it }
+
+            val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+            val spec = KeyGenParameterSpec.Builder(
+                CREDENTIALS_WRAP_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .setKeySize(256)
+                .build()
+            generator.init(spec)
+            generator.generateKey()
+        } catch (e: Throwable) {
+            throw CredentialsWrapKeyException("Android Keystore key is unavailable for credentials wrapping.", e)
+        }
     }
 }

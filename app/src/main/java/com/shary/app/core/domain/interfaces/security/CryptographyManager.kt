@@ -51,13 +51,13 @@ interface CryptographyManager {
 
     /**
      * Encrypt a JSON credentials object using the manager’s **official** storage scheme.
-     * This should internally handle KDF (from username + safePassword), AEAD mode, IV/nonce,
-     * and (optionally) AAD binding (e.g., username).
+     * This should internally handle KDF (from email + safePassword), AEAD mode, IV/nonce,
+     * and (optionally) AAD binding (e.g., email).
      *
-     * @param email       Owner username (used for AAD/binding and/or salt derivation).
-     * @param localKey   Base64-encoded result of hashPassword(password, username) (the app's “safe”).
+     * @param email       Owner email (used for AAD/binding and/or salt derivation).
+     * @param localKey    Derived local key bytes for the target purpose.
      * @param json           JSON to encrypt.
-     * @param aad            Optional AAD to bind; default: username bytes. Can be ignored if impl does not use AAD.
+     * @param aad            Optional AAD to bind; default: email bytes. Can be ignored if impl does not use AAD.
      * @return Opaque ciphertext blob ready to write to disk.
      */
     fun encryptCredentials(
@@ -79,10 +79,10 @@ interface CryptographyManager {
      * Decrypt a credentials blob produced by [encryptCredentials].
      * Must support migration/legacy decoding if you still have older blobs.
      *
-     * @param email       Owner username (used for AAD/binding and/or salt derivation).
-     * @param localKey   Base64-encoded result of hashPassword(password, username).
+     * @param email       Owner email (used for AAD/binding and/or salt derivation).
+     * @param localKey    Derived local key bytes for the target purpose.
      * @param encrypted      Ciphertext blob read from disk.
-     * @param aad            Optional AAD used on encryption; default matches username.
+     * @param aad            Optional AAD used on encryption; default matches email.
      * @return Decrypted credentials JSON.
      * @throws SecurityException if authentication/tag check fails or format is invalid.
      */
@@ -100,6 +100,12 @@ interface CryptographyManager {
         encrypted: ByteArray,
         aad: ByteArray? = email.toByteArray()
     ): JSONObject
+
+    /**
+     * Best-effort check that a credentials blob can be unwrapped on this device.
+     * Does NOT require the user's password and must not throw.
+     */
+    fun isCredentialsBlobUsable(encrypted: ByteArray): Boolean
 
     fun getAppId(): String
 

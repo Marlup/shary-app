@@ -8,4 +8,5 @@ interface RequestRepository {
     fun getSentRequests(): Flow<List<RequestDomain>>
     suspend fun saveReceivedRequest(request: RequestDomain)
     suspend fun saveSentRequest(request: RequestDomain)
+    suspend fun markReceivedRequestResponded(request: RequestDomain, responded: Boolean = true): Boolean
 }

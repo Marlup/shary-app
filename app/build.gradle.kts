@@ -26,6 +26,44 @@ need version alignment.
     alias(libs.plugins.google.services)
 }
 
+tasks.register("checkNoDirectAndroidLogs") {
+    group = "verification"
+    description = "Fails if android.util.Log is used directly outside AppLogger."
+    doLast {
+        val srcRoot = file("src/main/java")
+        if (!srcRoot.exists()) return@doLast
+
+        val forbiddenFiles = srcRoot
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filterNot { it.invariantSeparatorsPath.endsWith("com/shary/app/utils/log/AppLogger.kt") }
+            .filterNot { it.name.endsWith(".disabled") }
+            .toList()
+
+        val regex = Regex("""\b(android\.util\.)?Log\.(d|i|w|e|v)\(""")
+        val violations = mutableListOf<String>()
+
+        forbiddenFiles.forEach { file ->
+            file.readLines().forEachIndexed { index, line ->
+                if (regex.containsMatchIn(line)) {
+                    violations += "${file.relativeTo(projectDir).invariantSeparatorsPath}:${index + 1}: ${line.trim()}"
+                }
+            }
+        }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                "Direct Log.* usage is forbidden outside AppLogger.\n" +
+                        violations.joinToString("\n")
+            )
+        }
+    }
+}
+
+tasks.named("check").configure {
+    dependsOn("checkNoDirectAndroidLogs")
+}
+
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
@@ -66,14 +104,14 @@ android {
             buildConfigField(
                 "String",
                 "FIREBASE_BASE_URL",
-                "\"https://us-central1-shary-21b61.cloudfunctions.net\""
+                "\"https://europe-southwest1-shary-21b61.cloudfunctions.net\""
             )
         }
         release {
             buildConfigField(
                 "String",
                 "FIREBASE_BASE_URL",
-                "\"https://us-central1-shary-21b61.cloudfunctions.net\""
+                "\"https://europe-southwest1-shary-21b61.cloudfunctions.net\""
             )
             signingConfig = signingConfigs.getByName("debug")
         }

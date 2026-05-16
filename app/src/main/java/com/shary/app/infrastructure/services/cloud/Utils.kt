@@ -8,9 +8,15 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 object Utils {
 
-    fun authBearerHeader(token: String?): Map<String, String> {
-        return if (token != null) mapOf("Authorization" to "Bearer $token")
-        else emptyMap()
+    fun authBearerHeader(token: String?, requestId: String? = null): Map<String, String> {
+        val headers = mutableMapOf<String, String>()
+        if (!token.isNullOrBlank()) {
+            headers["Authorization"] = "Bearer $token"
+        }
+        if (!requestId.isNullOrBlank()) {
+            headers[Constants.HEADER_X_REQUEST_ID] = requestId
+        }
+        return headers
     }
 
     fun buildPostRequest(

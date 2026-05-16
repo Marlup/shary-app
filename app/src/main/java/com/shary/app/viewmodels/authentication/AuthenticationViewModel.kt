@@ -1,7 +1,6 @@
 package com.shary.app.viewmodels.authentication
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
+import com.shary.app.utils.log.AppLogger
+import com.shary.app.utils.log.StartupTrace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
@@ -118,7 +119,11 @@ class AuthenticationViewModel @Inject constructor(
      */
     fun submit(context: Context) {
         val f = _logForm.value
-        Log.w("AuthenticationViewModel", "submit: $f")
+        AppLogger.info("AuthenticationViewModel", "event=submit mode=${_logForm.value.mode}")
+        if (_logForm.value.mode == AuthenticationMode.LOGIN) {
+            StartupTrace.markLoginStart()
+            AppLogger.info("StartupTrace", "event=login_start")
+        }
 
         // Validate form based on current mode
         val validationError = when (_logForm.value.mode) {
@@ -134,7 +139,7 @@ class AuthenticationViewModel @Inject constructor(
         // Launch login/signup in background
         viewModelScope.launch {
 
-            Log.i("AuthenticationViewModel", "submit: $f")
+            AppLogger.debug("AuthenticationViewModel", "event=submit_validated")
             _loading.value = true
             val result = withContext(Dispatchers.IO) {
                 when (_logForm.value.mode) {
@@ -219,15 +224,37 @@ class AuthenticationViewModel @Inject constructor(
 
     fun onLoginSuccess(email: String) {
         viewModelScope.launch {
-            val registered = runCatching { cloudService.isUserRegisteredInCloud(email) }
-                .getOrDefault(false)
+            withContext(Dispatchers.IO) {
+                val online = runCatching { cloudService.sendPing() }.getOrDefault(false)
+                if (!online) {
+                    AppLogger.warn("AuthenticationViewModel", "event=post_login_cloud_offline_local_only")
+                    return@withContext
+                }
 
-            if (registered) {
-                Log.d("AuthenticationViewModel", "User already registered in Cloud")
-                _events.trySend(AuthenticationEvent.UserRegisteredInCloud)
-            } else {
-                Log.d("AuthenticationViewModel", "User is not registered in Cloud")
-                _events.trySend(AuthenticationEvent.UserNotRegisteredInCloud)
+                val registered = runCatching { cloudService.isUserRegisteredInCloud(email) }
+                    .getOrDefault(false)
+                if (!registered) {
+                    runCatching { cloudService.uploadUser(email) }
+                        .onFailure {
+                            AppLogger.warn(
+                                "AuthenticationViewModel",
+                                "event=post_login_cloud_registration_failed"
+                            )
+                        }
+                    AppLogger.info("AuthenticationViewModel", "event=user_not_registered_in_cloud")
+                    _events.trySend(AuthenticationEvent.UserNotRegisteredInCloud)
+                } else {
+                    AppLogger.info("AuthenticationViewModel", "event=user_registered_in_cloud")
+                    _events.trySend(AuthenticationEvent.UserRegisteredInCloud)
+                }
+
+                runCatching { cloudService.refreshIdToken() }
+                    .onFailure {
+                        AppLogger.warn(
+                            "AuthenticationViewModel",
+                            "event=post_login_token_refresh_failed"
+                        )
+                    }
             }
         }
     }
@@ -248,7 +275,7 @@ class AuthenticationViewModel @Inject constructor(
         }
 
     private fun validateSignup(username: String, email: String, password: String, confirm: String): String? {
-        Log.i("AuthenticationViewModel", "validateSignup: $username, $email, $password, $confirm")
+        AppLogger.debug("AuthenticationViewModel", "event=validate_signup")
         return when {
             username.isBlank() -> "Username required"
             email.isBlank() -> "Email required"

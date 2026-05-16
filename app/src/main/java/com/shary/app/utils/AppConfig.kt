@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 import com.shary.app.R // **CRITICAL: Ensure this import points to your app's R class**
+import com.shary.app.utils.log.AppLogger
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -23,7 +24,7 @@ fun loadAppConfig(context: Context): AppConfig? {
         }
     } catch (e: Exception) {
         // Log IO or Resource Not Found errors
-        android.util.Log.e("ConfigLoader", "Failed to read raw resource R.raw.config", e)
+        AppLogger.error("ConfigLoader", "event=read_raw_config_failed", e)
         return null
     }
 
@@ -32,7 +33,7 @@ fun loadAppConfig(context: Context): AppConfig? {
         return try {
             Json.decodeFromString<AppConfig>(jsonString!!)
         } catch (e: Exception) {
-            android.util.Log.e("ConfigLoader", "JSON Parsing Failed!", e)
+            AppLogger.error("ConfigLoader", "event=parse_config_failed", e)
             null
         }
     }

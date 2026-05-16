@@ -16,7 +16,15 @@ sealed interface FieldEvent {
     data class TagUpdated(val key: String, val tag: Tag) : FieldEvent
     data object PasswordChanged : FieldEvent
     data class Error(val throwable: Throwable) : FieldEvent
-    data class FetchedFromCloud(val count: Int) : FieldEvent
+    data class FetchedFromCloud(
+        val count: Int,
+        val loadedKeys: List<String> = emptyList(),
+        val preDownloadedKeys: List<String> = emptyList()
+    ) : FieldEvent
+    data class CloudInboxLoaded(val count: Int) : FieldEvent
+    data object CloudInboxEmpty : FieldEvent
+    data class CloudInboxRejected(val backendAcknowledged: Boolean) : FieldEvent
+    data class CloudInboxAccepted(val backendAcknowledged: Boolean) : FieldEvent
     data object NoNewFields : FieldEvent
     data class FetchError(val throwable: Throwable) : FieldEvent
 }

@@ -10,8 +10,11 @@ import com.shary.app.infrastructure.mappers.toProto
 import com.shary.app.core.domain.interfaces.security.FieldCodec
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 @Singleton
@@ -27,6 +30,33 @@ class FieldRepositoryImpl @Inject constructor(
             fieldProtoList.fieldsList.map { it.toDomain(codec) }
         }
     }
+
+    override suspend fun getAllFieldsProgressive(
+        firstBatchSize: Int,
+        chunkSize: Int
+    ): Flow<List<FieldDomain>> = flow {
+        val safeFirstBatch = firstBatchSize.coerceAtLeast(1)
+        val safeChunkSize = chunkSize.coerceAtLeast(1)
+
+        val encryptedFields = dataStore.data.first().fieldsList
+        if (encryptedFields.isEmpty()) {
+            emit(emptyList())
+            return@flow
+        }
+
+        val progressive = ArrayList<FieldDomain>(encryptedFields.size)
+        encryptedFields.forEachIndexed { index, proto ->
+            progressive += proto.toDomain(codec)
+            val loadedCount = index + 1
+            val isWarmupReady = loadedCount == minOf(safeFirstBatch, encryptedFields.size)
+            val isChunkBoundary = loadedCount > safeFirstBatch &&
+                ((loadedCount - safeFirstBatch) % safeChunkSize == 0)
+            val isLast = loadedCount == encryptedFields.size
+            if (isWarmupReady || isChunkBoundary || isLast) {
+                emit(progressive.toList())
+            }
+        }
+    }.flowOn(Dispatchers.Default)
 
     override suspend fun getFieldsByTag(tag: Tag): List<FieldDomain> {
         val wanted = tag.toTagString().lowercase()
@@ -103,7 +133,7 @@ class FieldRepositoryImpl @Inject constructor(
         dataStore.updateData { current ->
             val updated = current.fieldsList.map { proto ->
                 val domain = proto.toDomain(codec)
-                if (domain.keyAlias.equals(key, ignoreCase = true)) {
+                if (domain.key.equals(key, ignoreCase = true)) {
                     domain.copy(keyAlias = newAlias).toProto(codec)
                 } else {
                     proto

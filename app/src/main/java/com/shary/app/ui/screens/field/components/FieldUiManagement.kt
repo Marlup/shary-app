@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalConfiguration
 import com.shary.app.core.domain.types.enums.PredefinedKey
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,7 +25,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -47,7 +51,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import com.shary.app.core.domain.types.valueobjects.FieldValueMeta
 import com.shary.app.core.domain.types.valueobjects.FieldValueSpec
-import com.shary.app.ui.screens.utils.LongPressHint
+import com.shary.app.ui.components.SharyPrimaryButton
+import com.shary.app.ui.components.SharySoftButton
+import com.shary.app.ui.theme.SharyRadius
+import com.shary.app.ui.theme.SurfaceLight
+import com.shary.app.ui.theme.Violet200
+import com.shary.app.ui.theme.Violet500
+import com.shary.app.ui.theme.Violet900
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -676,27 +686,37 @@ fun EditorAddFieldDialog(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        shape = SharyRadius.sheet,
+        containerColor = SurfaceLight,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 40.dp, height = 4.dp)
+                    .background(Violet200, RoundedCornerShape(99.dp))
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = sheetMaxHeight)
-                .padding(16.dp)
+                .padding(horizontal = 18.dp, vertical = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
                 "Add New Field",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.headlineLarge,
+                color = Violet900
             )
 
             Spacer(Modifier.height(16.dp))
 
             Text(
                 "Required",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = Violet500
             )
 
             Spacer(Modifier.height(8.dp))
@@ -729,6 +749,8 @@ fun EditorAddFieldDialog(
                 onBrowseFile = { filePickerLauncher.launch(arrayOf("*/*")) }
             )
 
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = Violet200, thickness = 1.dp)
             Spacer(Modifier.height(12.dp))
 
             Row(
@@ -778,36 +800,38 @@ fun EditorAddFieldDialog(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                LongPressHint("Close without saving") {
-                    OutlinedButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                }
-                LongPressHint("Save this field") {
-                    FilledTonalButton(
-                        onClick = {
-                            showErrors = true
-                            if (!isValid()) return@FilledTonalButton
-                            // Ensure timestamp is set at confirm time
-                            val normalizedField = editingField.copy(
-                                key = editingField.key.trim(),
-                                value = encodeValueFromDraft(
-                                    plainValue = currentValueToPersist(),
-                                    draft = valueSpecDraft
-                                ),
-                                keyAlias = editingField.keyAlias.trim(),
-                                tag = editingField.tag,
-                                dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded
-                            )
-                            onConfirm(normalizedField)
-                            Toast.makeText(context, "Field added", Toast.LENGTH_SHORT).show()
-                            onDismiss()
-                        }
-                    ) { Text(confirmLabel) }
-                }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SharySoftButton(
+                    text = "Cancel",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                SharyPrimaryButton(
+                    text = confirmLabel,
+                    onClick = {
+                        showErrors = true
+                        if (!isValid()) return@SharyPrimaryButton
+                        val normalizedField = editingField.copy(
+                            key = editingField.key.trim(),
+                            value = encodeValueFromDraft(
+                                plainValue = currentValueToPersist(),
+                                draft = valueSpecDraft
+                            ),
+                            keyAlias = editingField.keyAlias.trim(),
+                            tag = editingField.tag,
+                            dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded
+                        )
+                        onConfirm(normalizedField)
+                        Toast.makeText(context, "Field added", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -899,27 +923,37 @@ fun EditorUpdateFieldDialog(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        shape = SharyRadius.sheet,
+        containerColor = SurfaceLight,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 40.dp, height = 4.dp)
+                    .background(Violet200, RoundedCornerShape(99.dp))
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = sheetMaxHeight)
-                .padding(16.dp)
+                .padding(horizontal = 18.dp, vertical = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
                 title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.headlineLarge,
+                color = Violet900
             )
 
             Spacer(Modifier.height(16.dp))
 
             Text(
                 "Required",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = Violet500
             )
 
             Spacer(Modifier.height(8.dp))
@@ -952,6 +986,8 @@ fun EditorUpdateFieldDialog(
                 onBrowseFile = { filePickerLauncher.launch(arrayOf("*/*")) }
             )
 
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = Violet200, thickness = 1.dp)
             Spacer(Modifier.height(12.dp))
 
             Row(
@@ -1001,50 +1037,51 @@ fun EditorUpdateFieldDialog(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                if (canRecoverPreviousValue && onRecoverPreviousValue != null) {
-                    LongPressHint("Recover previous value for this field") {
-                        OutlinedButton(
-                            onClick = {
-                                onRecoverPreviousValue()
-                                Toast.makeText(context, "Previous value recovered", Toast.LENGTH_SHORT).show()
-                                onDismiss()
-                            }
-                        ) {
-                            Text("Recover value")
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
-                LongPressHint("Close without saving") {
-                    OutlinedButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                }
-                LongPressHint("Save this field") {
-                    FilledTonalButton(
-                        onClick = {
-                            showErrors = true
-                            if (!isValid()) return@FilledTonalButton
-                            // Ensure timestamp is set at confirm time
-                            val normalizedField = editingField.copy(
-                                key = editingField.key.trim(),
-                                value = encodeValueFromDraft(
-                                    plainValue = currentValueToPersist(),
-                                    draft = valueSpecDraft
-                                ),
-                                keyAlias = editingField.keyAlias.trim(),
-                                tag = editingField.tag,
-                                dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded
-                            )
-                            onConfirm(normalizedField)
-                            Toast.makeText(context, "Field saved", Toast.LENGTH_SHORT).show()
-                            onDismiss()
-                        }
-                    ) { Text(confirmLabel) }
-                }
+            if (canRecoverPreviousValue && onRecoverPreviousValue != null) {
+                SharySoftButton(
+                    text = "Recover value",
+                    onClick = {
+                        onRecoverPreviousValue()
+                        Toast.makeText(context, "Previous value recovered", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SharySoftButton(
+                    text = "Cancel",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                SharyPrimaryButton(
+                    text = confirmLabel,
+                    onClick = {
+                        showErrors = true
+                        if (!isValid()) return@SharyPrimaryButton
+                        val normalizedField = editingField.copy(
+                            key = editingField.key.trim(),
+                            value = encodeValueFromDraft(
+                                plainValue = currentValueToPersist(),
+                                draft = valueSpecDraft
+                            ),
+                            keyAlias = editingField.keyAlias.trim(),
+                            tag = editingField.tag,
+                            dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded
+                        )
+                        onConfirm(normalizedField)
+                        Toast.makeText(context, "Field saved", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }

@@ -10,6 +10,7 @@ import com.shary.app.UserList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.FieldValueHistoryRepository
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
+import com.shary.app.core.domain.interfaces.repositories.SettingsRepository
 import com.shary.app.core.domain.interfaces.repositories.TagRepository
 import com.shary.app.core.domain.interfaces.repositories.ThemeRepository
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
@@ -25,6 +26,7 @@ import com.shary.app.infrastructure.persistance.datastore.userListDataStore
 import com.shary.app.infrastructure.persistance.repositories.FieldRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.FieldValueHistoryRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.RequestRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.SettingsRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.TagRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.ThemeRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.UserRepositoryImpl
@@ -90,6 +92,10 @@ object DependenciesContainer {
     @Provides @Singleton fun provideThemeRepository(
         @ApplicationContext context: Context
     ): ThemeRepository = ThemeRepositoryImpl(context)
+
+    @Provides @Singleton fun provideSettingsRepository(
+        @ApplicationContext context: Context
+    ): SettingsRepository = SettingsRepositoryImpl(context)
 
     // ======== Services ========
 

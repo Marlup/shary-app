@@ -1,6 +1,7 @@
-package com.shary.app.infrastructure.di
+﻿package com.shary.app.infrastructure.di
 
 import android.content.Context
+import com.google.firebase.auth.FirebaseAuth
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.application.security.LoginUseCase
 import com.shary.app.application.security.RegisterUseCase
@@ -43,12 +44,14 @@ object AuthModule {
         crypto: CryptographyManager,
         fileCredentialsStore: FileCredentialsStore,
         cloudService: CloudService,
-        cacheService: CacheService
+        cacheService: CacheService,
+        firebaseAuth: FirebaseAuth
     ): AuthenticationService = AuthenticationServiceImpl(
         crypto,
         fileCredentialsStore,
         cloudService,
-        cacheService
+        cacheService,
+        firebaseAuth
     )
 
     @Provides @Singleton fun provideAuthBackend(

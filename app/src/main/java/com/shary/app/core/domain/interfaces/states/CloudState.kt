@@ -6,5 +6,6 @@ data class CloudState (
     var token: String? = "",
     var fcmToken: String? = "",
     var localKeys: MutableMap<String, ByteArray> = mutableMapOf(),
-    var isOnline: Boolean = false
+    var isOnline: Boolean = false,
+    var isUserValidated: Boolean = false
 )
