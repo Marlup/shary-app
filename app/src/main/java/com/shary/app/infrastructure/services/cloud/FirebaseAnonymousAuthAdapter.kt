@@ -1,6 +1,6 @@
 package com.shary.app.infrastructure.services.cloud
 
-import android.util.Log
+import com.shary.app.utils.log.AppLogger
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
 
@@ -16,12 +16,12 @@ internal class FirebaseAnonymousAuthAdapter(
     suspend fun ensureSession(): FirebaseAnonymousSession {
         val user = auth.currentUser ?: auth.signInAnonymously().await().user
             ?: error("Anonymous sign-in returned null user")
-        Log.d("FirebaseAnonymousAuthAdapter", "ensureSession() - user, uid: ${user.uid}")
+        AppLogger.debug("FirebaseAnonymousAuthAdapter", "event=ensure_session uid=${AppLogger.redacted(user.uid)}")
 
         // Guardamos token en Session para tus headers (true => forceRefresh)
         val token = user.getIdToken(true).await().token
             ?: error("Anonymous session missing ID token")
-        Log.d("FirebaseAnonymousAuthAdapter", "ensureSession() - token $token")
+        AppLogger.debug("FirebaseAnonymousAuthAdapter", "event=ensure_session_token_refreshed")
         return FirebaseAnonymousSession(user.uid, token)
     }
 

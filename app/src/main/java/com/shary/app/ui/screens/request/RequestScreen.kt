@@ -1,27 +1,45 @@
 package com.shary.app.ui.screens.request
 
-import android.util.Log
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material3.*
-import androidx.compose.material3.MaterialTheme.colorScheme
-import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -30,484 +48,366 @@ import androidx.navigation.NavHostController
 import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.RequestListMode
+import com.shary.app.infrastructure.security.helper.SecurityUtils.hashMessageB64
+import com.shary.app.ui.components.DockAction
+import com.shary.app.ui.components.EmptyState
+import com.shary.app.ui.components.RequestCard
+import com.shary.app.ui.components.RequestStatusTone
+import com.shary.app.ui.components.SharyCommandDock
+import com.shary.app.ui.components.SharyIconButton
+import com.shary.app.ui.components.SharySectionNavigationBar
+import com.shary.app.ui.components.SharyTopBar
+import com.shary.app.ui.components.SectionTab
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
+import com.shary.app.ui.screens.request.utils.RequestInboxReviewDialog
+import com.shary.app.ui.screens.utils.cloudErrorMessage
 import com.shary.app.ui.screens.utils.FieldMatchingDialog
-import com.shary.app.ui.screens.utils.SpecialComponents.CompactActionButton
-import com.shary.app.ui.screens.utils.ScreenScaffold
+import com.shary.app.ui.theme.SurfaceMid
+import com.shary.app.ui.theme.Violet50
+import com.shary.app.ui.theme.Violet500
+import com.shary.app.ui.theme.Violet600
+import com.shary.app.utils.BiometricAuthManager
+import com.shary.app.viewmodels.communication.CloudViewModel
+import com.shary.app.viewmodels.configuration.SettingsViewModel
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserViewModel
+import com.shary.app.ui.utils.isOnWifiNetwork
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RequestsScreen(navController: NavHostController) {
-
-    // ---------------- ViewModels ----------------
+    val context = LocalContext.current
     val fieldViewModel: FieldViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
     val requestViewModel: RequestViewModel = hiltViewModel()
+    val cloudViewModel: CloudViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
 
-    // ---------------- States from RequestViewModel ----------------
     val fields by fieldViewModel.fields.collectAsState()
-
-    // ---------------- States from RequestViewModel ----------------
+    val users by userViewModel.users.collectAsState()
     val listMode by requestViewModel.listMode.collectAsState()
     val draftFields by requestViewModel.draftFields.collectAsState()
     val receivedRequests by requestViewModel.receivedRequests.collectAsState()
     val sentRequests by requestViewModel.sentRequests.collectAsState()
-    val requestsToShow = if (listMode == RequestListMode.SENT) {
-        sentRequests
-    } else {
-        receivedRequests
-    }
+    val requestInboxItems by requestViewModel.requestInboxItems.collectAsState()
+    val isRequestInboxLoading by requestViewModel.isCloudInboxLoading.collectAsState()
+    val cloudState by cloudViewModel.cloudState.collectAsState()
+    val settings by settingsViewModel.settings.collectAsState()
+    val cloudReady = cloudState.isOnline && cloudState.isUserValidated
 
-    var openAddDialog by remember { mutableStateOf(false) }
+    val requestsToShow = if (listMode == RequestListMode.SENT) sentRequests else receivedRequests
     val snackbarHostState = remember { SnackbarHostState() }
-    var snackbarMessage by remember { mutableStateOf<String?>("") }
+    val scope = rememberCoroutineScope()
 
+    var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    var showAddRequestSheet by remember { mutableStateOf(false) }
+    var showMatchDialog by remember { mutableStateOf(false) }
+    var openRequestInboxDialog by remember { mutableStateOf(false) }
+    var autoInboxAttempted by rememberSaveable { mutableStateOf(false) }
+    var selectedReceivedIndex by remember { mutableStateOf<Int?>(null) }
+    val cardVerticalPadding = if (settings.compactListMode) 2.dp else 4.dp
+
+    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
+
+    fun openRequestInbox() {
+        val ownerEmail = userViewModel.getOwner().email
+        if (ownerEmail.isBlank()) {
+            snackbarMessage = "User not logged in"
+            return
+        }
+        if (settings.wifiOnlyCloudSync && !isOnWifiNetwork(context)) {
+            snackbarMessage = "Wi-Fi only sync is enabled. Connect to Wi-Fi to continue."
+            return
+        }
+
+        val runLoad = {
+            openRequestInboxDialog = true
+            requestViewModel.loadRequestInbox(ownerEmail)
+        }
+
+        if (settings.requireBiometricForCloudInbox) {
+            val hostActivity = context as? FragmentActivity
+            if (hostActivity == null) {
+                snackbarMessage = "Biometric check unavailable on this screen"
+                return
+            }
+            val biometric = BiometricAuthManager(
+                context = context,
+                activity = hostActivity,
+                onAuthSuccess = runLoad
+            )
+            val biometricError = biometric.authenticate()
+            if (biometricError != null) {
+                snackbarMessage = biometricError
+            }
+        } else {
+            runLoad()
+        }
+    }
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = ""
+            snackbarMessage = null
         }
     }
 
-    // Collect RequestViewModel events
     LaunchedEffect(Unit) {
         requestViewModel.events.collect { event ->
             when (event) {
                 is RequestEvent.FetchedFromCloud -> {
-                    snackbarMessage = "Fetched and matched ${event.matchedCount} fields from request"
+                    snackbarMessage = if (event.matchedCount > 0) {
+                        "Fetched and matched ${event.matchedCount} fields from request"
+                    } else {
+                        "No requests found in cloud"
+                    }
                 }
                 is RequestEvent.FetchError -> {
-                    snackbarMessage = "Fetch error: ${event.throwable.message}"
+                    snackbarMessage = cloudErrorMessage(event.throwable)
+                }
+                is RequestEvent.CloudInboxLoaded -> {
+                    snackbarMessage = "Pending cloud requests: ${event.count}. Review one by one."
+                }
+                RequestEvent.CloudInboxEmpty -> {
+                    snackbarMessage = "No pending request items"
+                }
+                is RequestEvent.CloudInboxRejected -> {
+                    snackbarMessage = if (event.backendAcknowledged) {
+                        "Request rejected and removed from cloud inbox"
+                    } else {
+                        "Request rejected locally. Backend acknowledgement unavailable."
+                    }
+                }
+                is RequestEvent.CloudInboxAccepted -> {
+                    snackbarMessage = if (event.backendAcknowledged) {
+                        "Accepted request and imported ${event.importedKeyCount} keys"
+                    } else {
+                        "Accepted request and imported ${event.importedKeyCount} keys. Backend acknowledgement unavailable."
+                    }
                 }
             }
         }
     }
-
-    val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
 
     DisposableEffect(lifecycleOwner.value) {
         val observer = LifecycleEventObserver { _, event ->
-            Log.d("RequestsScreen", "[1] Before updateDraftRequest()")
-            when (event) {
-                Lifecycle.Event.ON_START -> Unit
-                Lifecycle.Event.ON_STOP -> {
-                    if (listMode == RequestListMode.SENT) {
-                        Log.d("RequestsScreen", "[2] Before updateDraftRequest()")
-                        requestViewModel.setDraftFields()
-                    }
+            if (event == Lifecycle.Event.ON_STOP) {
+                autoInboxAttempted = false
+                if (listMode == RequestListMode.SENT) {
+                    requestViewModel.setDraftFields()
                 }
-                else -> {}
             }
         }
-        val lifecycle = lifecycleOwner.value.lifecycle
-        lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
+        lifecycleOwner.value.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.value.lifecycle.removeObserver(observer) }
     }
 
-    // ---------------- UI ----------------
-    ScreenScaffold(
-        title = "Requests",
-        snackbarHostState = snackbarHostState,
-        bottomBarContent = {
-            val actionButtonsEnabled = listMode == RequestListMode.SENT
-            val actionButtonsAvailable = actionButtonsEnabled && draftFields.isNotEmpty()
+    LaunchedEffect(settings.autoOpenCloudInboxOnStart, cloudReady) {
+        if (settings.autoOpenCloudInboxOnStart && cloudReady && !autoInboxAttempted) {
+            autoInboxAttempted = true
+            openRequestInbox()
+        }
+    }
 
-            HorizontalDivider(thickness = 1.dp)
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // ---- Left: Delete ----
-                Box(
-                    modifier = Modifier
-                        .weight(0.15f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CompactActionButton(
-                        onClick = {
-                            if (actionButtonsAvailable) {
-                                requestViewModel.clearDraftFields()
-                                requestViewModel.removeDraftFields()
-                                snackbarMessage = "Deleted ${draftFields.size} fields"
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Violet50),
+        topBar = {
+            Column(modifier = Modifier.statusBarsPadding()) {
+                SharyTopBar(
+                    title = "",
+                    actions = {
+                        SharyIconButton(
+                            icon = Icons.Default.CloudDownload,
+                            contentDescription = "Sync requests from cloud",
+                            enabled = cloudReady,
+                            onClick = ::openRequestInbox
+                        )
+                        SharyIconButton(
+                            icon = if (listMode == RequestListMode.SENT) Icons.Default.Add else Icons.Default.Compare,
+                            contentDescription = if (listMode == RequestListMode.SENT) "Add requested key" else "Match fields",
+                            onClick = {
+                                if (listMode == RequestListMode.SENT) {
+                                    showAddRequestSheet = true
+                                } else if (draftFields.isNotEmpty()) {
+                                    showMatchDialog = true
+                                } else {
+                                    snackbarMessage = "Select a received request first"
+                                }
                             }
-                        },
-                        backgroundColor = colorScheme.error,
-                        icon = Icons.Default.Delete,
-                        contentDescription = "Delete Fields",
-                        enabled = actionButtonsAvailable
-                    )
-                }
-
-                // ---- Center: Add + Download + Users ----
-                Row(
-                    modifier = Modifier.weight(0.70f),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    when (listMode) {
-                        RequestListMode.SENT ->
-                            CompactActionButton(
-                                onClick = { openAddDialog = true },
-                                icon = Icons.Default.Add,
-                                backgroundColor = colorScheme.primary,
-                                contentDescription = "Add Field",
-                                enabled = true
-                            )
-                        RequestListMode.RECEIVED ->
-                            CompactActionButton(
-                                onClick = { openAddDialog = true },
-                                icon = Icons.Default.Compare,
-                                backgroundColor = colorScheme.primary,
-                                contentDescription = "Go to Match Fields Dialog",
-                                enabled = draftFields.isNotEmpty()
-                            )
+                        )
                     }
-
-                    CompactActionButton(
-                        onClick = {
-                            val owner = userViewModel.getOwner()
-                            Log.d("RequestsScreen", "[1] owner: $owner")
-                            if (owner.username.isNotEmpty()) {
-                                Log.d("RequestsScreen", "[2] owner: $owner")
-                                requestViewModel.fetchRequestsFromCloud(owner)
-                            } else {
-                                snackbarMessage = "User not logged in"
-                            }
-                        },
-                        icon = Icons.Default.CloudDownload,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Fetch Requests from Cloud",
-                        enabled = true
-                    )
-
-                    CompactActionButton(
-                        onClick = { navController.navigate(Screen.Users.route) },
-                        icon = Icons.Default.Person,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Go to Users Screen",
-                        enabled = true
-                    )
-
-                    CompactActionButton(
-                        onClick = { navController.navigate(Screen.Fields.route) },
-                        icon = Icons.Default.TextFields,
-                        backgroundColor = colorScheme.primary,
-                        contentDescription = "Go to Field Screen",
-                        enabled = true
-                    )
-                }
-
-                // ---- Right: Summary ----
-                Box(
-                    modifier = Modifier
-                        .weight(0.15f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CompactActionButton(
-                        onClick = {
-                            Log.d("RequestsScreen", "[5] anyDraftRequestCached: ${requestViewModel.anyDraftFieldCached()}")
-                            Log.d("RequestsScreen", "[6] anyDraftRequestCached: ${requestViewModel.anyDraftFieldCached()}")
-                            if (draftFields.isNotEmpty() && userViewModel.anyCachedUser()) {
-                                requestViewModel.setDraftFields()
-                                navController.navigate(Screen.SummaryRequest.route)
-                            }
-                        },
-                        icon = Icons.Default.AssignmentTurnedIn,
-                        backgroundColor = colorScheme.tertiary,
-                        contentDescription = "Summary: Request",
-                        enabled = draftFields.isNotEmpty() && userViewModel.anyCachedUser()
+                )
+                AnimatedContent(targetState = listMode, label = "requests-mode-switcher") { mode ->
+                    RequestsModeSwitcher(
+                        listMode = mode,
+                        receivedCount = receivedRequests.size,
+                        onModeChange = requestViewModel::setListMode
                     )
                 }
             }
-        }
+        },
+        bottomBar = {
+            Column {
+                SharyCommandDock(
+                    selectedCount = draftFields.size,
+                    onClearSelection = {
+                        if (listMode == RequestListMode.SENT) {
+                            requestViewModel.clearDraftFields()
+                        } else {
+                            selectedReceivedIndex = null
+                            requestViewModel.clearDraftFields()
+                            requestViewModel.clearActiveReceivedRequest()
+                        }
+                    },
+                    primaryAction = DockAction(
+                        label = if (listMode == RequestListMode.RECEIVED) "Match fields →" else "Add requested key",
+                        enabled = if (listMode == RequestListMode.RECEIVED) draftFields.isNotEmpty() else true
+                    ),
+                    secondaryActions = emptyList(),
+                    destructiveAction = DockAction(
+                        label = "Delete",
+                        icon = Icons.Default.Delete,
+                        enabled = listMode == RequestListMode.SENT && draftFields.isNotEmpty()
+                    ) {
+                        if (listMode == RequestListMode.SENT && draftFields.isNotEmpty()) {
+                            val deletedSnapshot = draftFields.toList()
+                            requestViewModel.clearDraftFields()
+                            scope.launch {
+                                snackbarHostState.currentSnackbarData?.dismiss()
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "Deleted ${deletedSnapshot.size} drafted fields",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Long
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    requestViewModel.restoreDraftFields(deletedSnapshot)
+                                }
+                            }
+                        }
+                    },
+                    onPrimaryClick = {
+                        if (listMode == RequestListMode.RECEIVED) {
+                            if (draftFields.isNotEmpty()) showMatchDialog = true
+                            else snackbarMessage = "Select a request to match"
+                        } else {
+                            showAddRequestSheet = true
+                        }
+                    }
+                )
+                SharySectionNavigationBar(
+                    currentTab = SectionTab.REQUESTS,
+                    onTabSelected = { tab ->
+                        when (tab) {
+                            SectionTab.FIELDS -> navController.navigate(Screen.Fields.route) {
+                                launchSingleTop = true
+                            }
+                            SectionTab.USERS -> navController.navigate(Screen.Users.route) {
+                                launchSingleTop = true
+                            }
+                            SectionTab.REQUESTS -> Unit
+                        }
+                    }
+                )
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(16.dp)
-                .fillMaxWidth()
-                .fillMaxHeight(0.90f),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .background(Violet50)
+                .padding(horizontal = 18.dp)
         ) {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                SegmentedButton(
-                    selected = listMode == RequestListMode.RECEIVED,
-                    onClick = { requestViewModel.setListMode(RequestListMode.RECEIVED) },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                ) {
-                    Text("Received")
+            if (requestsToShow.isEmpty()) {
+                val (title, body, action) = if (listMode == RequestListMode.SENT) {
+                    Triple(
+                        "No sent requests",
+                        "Define what you need from others and send a request",
+                        "Add requested key"
+                    )
+                } else {
+                    Triple(
+                        "No received requests",
+                        "Incoming requests will appear here",
+                        "Sync from cloud"
+                    )
                 }
-                SegmentedButton(
-                    selected = listMode == RequestListMode.SENT,
-                    onClick = { requestViewModel.setListMode(RequestListMode.SENT) },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                ) {
-                    Text("Sent")
-                }
-            }
-
-            // -----------------------------------------------------------
-            // --------------- List of Received or Requested Fields ------
-            // -----------------------------------------------------------
-            /*
-            Text(
-                if (listMode == RequestListMode.SENT) "Sent Requests" else "Received Requests",
-                modifier = Modifier.padding(vertical = 8.dp),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-             */
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Text(
-                    "Requested Keys",
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-
-            if (requestsToShow.isNotEmpty()) {
-                Log.d("RequestsScreen", "requestsToShow: $requestsToShow")
-                Log.d("Number of requests", "${requestsToShow.size}")
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    itemsIndexed(
-                        items = requestsToShow,
-                        key = { i, _ -> i } // stable key
-                    ) { index, request ->
-                        val isSelected =
-                            request.fields.isNotEmpty() && request.fields.all {
-                                it in draftFields
+                EmptyState(
+                    title = title,
+                    body = body,
+                    primaryAction = action,
+                    onPrimaryAction = {
+                        if (listMode == RequestListMode.SENT) showAddRequestSheet = true
+                        else {
+                            if (!cloudReady) {
+                                snackbarMessage = "Cloud unavailable or not verified"
+                                return@EmptyState
                             }
-                        val requestRowButtonEnabled = listMode == RequestListMode.RECEIVED
-
-                        val backgroundColor = colorScheme.surface
-                        val stripeColor = if (isSelected) {
-                            colorScheme.primary
-                        } else {
-                            colorScheme.outlineVariant
+                            openRequestInbox()
                         }
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .wrapContentHeight(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = backgroundColor
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                            enabled = requestRowButtonEnabled,
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    itemsIndexed(requestsToShow) { index, request ->
+                        val isActive = selectedReceivedIndex == index && listMode == RequestListMode.RECEIVED
+                        RequestCard(
+                            senderName = request.user.ifBlank { "Unknown sender" },
+                            timestamp = request.dateAdded.formatRelativeLabel(),
+                            keys = request.fields.map { it.key },
+                            fieldCount = request.fields.size,
+                            statusLabel = if (listMode == RequestListMode.RECEIVED) {
+                                if (request.responded) "Responded" else "Pending"
+                            } else {
+                                "Sent"
+                            },
+                            statusTone = if (listMode == RequestListMode.RECEIVED) {
+                                if (request.responded) RequestStatusTone.RECEIVED else RequestStatusTone.PENDING
+                            } else {
+                                RequestStatusTone.SENT
+                            },
+                            isActive = isActive,
                             onClick = {
-                                requestViewModel.clearDraftFields()
-                                request.fields.forEach {
-                                    requestViewModel.toggleFieldSelection(it)
+                                if (listMode == RequestListMode.RECEIVED) {
+                                    selectedReceivedIndex = index
+                                    requestViewModel.clearDraftFields()
+                                    requestViewModel.setActiveReceivedRequest(request)
+                                    request.fields.forEach { requestViewModel.toggleFieldSelection(it) }
                                 }
                             },
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 12.dp, horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(6.dp)
-                                        .heightIn(min = 48.dp)
-                                        .background(stripeColor)
-                                )
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        request.fields.joinToString { it.key }.ifBlank { "No keys requested" },
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "${request.fields.size} keys",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
+                            onMatchClick = if (listMode == RequestListMode.RECEIVED) {
+                                { showMatchDialog = true }
+                            } else {
+                                null
+                            },
+                            modifier = Modifier.padding(vertical = cardVerticalPadding)
+                        )
                     }
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        if (listMode == RequestListMode.SENT) {
-                            "No sent requests available"
-                        } else {
-                            "No received requests available"
-                        },
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-
-            if (listMode == RequestListMode.SENT) {
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxHeight(0.5f),
-                    thickness = 1.dp,
-                    color = Color.Gray
-                )
-
-                // ----------------------------------------------------------------
-                // -------------------- List of Drafted Fields --------------------
-                // ----------------------------------------------------------------
-
-                Text(
-                    "Drafted Fields",
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 8.dp),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        "Key",
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "Key Alias",
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                HorizontalDivider(thickness = 1.dp, color = Color.Gray)
-
-                if (draftFields.isNotEmpty()) {
-                    Log.d("RequestsScreen", "draftFields: $draftFields")
-                    Log.d("Number of requests", "${draftFields.size}")
-                    LazyColumn(
-                        modifier = Modifier
-                            //.weight(1f)
-                            .fillMaxWidth(),
-                        contentPadding = PaddingValues(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        itemsIndexed(
-                            items = draftFields,
-                            key = { i, _ -> i } // stable key
-                        ) { _, field ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = colorScheme.surface
-                                ),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                                enabled = true,
-                                onClick = {},
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp, horizontal = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(6.dp)
-                                            .heightIn(min = 48.dp)
-                                            .background(colorScheme.outlineVariant)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            field.key,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = colorScheme.onSurface
-                                        )
-                                        Text(
-                                            field.keyAlias.orEmpty(),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No drafted fields available", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxHeight(1.0f),
-                    thickness = 1.dp,
-                    color = Color.Gray
-                )
             }
         }
     }
 
-    // Add field (for the in-progress request)
-    if (openAddDialog && listMode == RequestListMode.SENT) {
+    if (showAddRequestSheet && listMode == RequestListMode.SENT) {
         AddRequestDialog(
-            onDismiss = { openAddDialog = false },
+            onDismiss = { showAddRequestSheet = false },
             onAddRequest = { key, keyAlias ->
-                Log.d("[1] RequestsScreen", "onAddRequest: $key, $keyAlias")
                 if (key.isNotBlank()) {
-                    Log.d("[2] RequestsScreen", "onAddRequest: $key, $keyAlias")
-                    requestViewModel.addDraftField(FieldDomain.initialize().copy(
-                        key = key.trim(),
-                        value = keyAlias.trim()
-                    ))
-                    openAddDialog = false
+                    requestViewModel.addDraftField(
+                        FieldDomain.initialize().copy(
+                            key = key.trim(),
+                            value = keyAlias.trim()
+                        )
+                    )
+                    showAddRequestSheet = false
                     snackbarMessage = "Requested key '$key' added"
                 } else {
                     snackbarMessage = "Requested key is required"
@@ -515,21 +415,121 @@ fun RequestsScreen(navController: NavHostController) {
             }
         )
     }
-    // Match fields (for the selected received request)
-    if (openAddDialog && listMode == RequestListMode.RECEIVED) {
 
+    if (showMatchDialog && listMode == RequestListMode.RECEIVED) {
         FieldMatchingDialog(
             storedFields = fields,
             requestFields = draftFields,
-            onDismiss = { openAddDialog = false },
-            onAccept = { selectedFields ->
+            onDismiss = { showMatchDialog = false },
+            onAccept = { selected ->
                 if (userViewModel.anyCachedUser()) {
-                    fieldViewModel.setSelectedFields(selectedFields)
+                    fieldViewModel.setSelectedFields(selected)
                     navController.navigate(Screen.SummaryField.route)
+                } else {
+                    snackbarMessage = "Select recipient(s) first from Users"
                 }
             },
-            onAddField = { field -> fieldViewModel.addField(field) },
+            onAddField = { field -> fieldViewModel.addField(field) }
+        )
+    }
+
+    if (openRequestInboxDialog) {
+        val knownSendersByHash = remember(users) {
+            users.associateBy { user -> hashMessageB64(user.email.trim().lowercase()) }
+        }
+        RequestInboxReviewDialog(
+            isLoading = isRequestInboxLoading,
+            pendingItems = requestInboxItems,
+            resolveSenderLabel = { senderHash ->
+                if (settings.showFriendlySenderIdentity) {
+                    val matched = knownSendersByHash[senderHash]
+                    if (matched != null) {
+                        if (matched.username.isNotBlank()) {
+                            "${matched.username} <${matched.email}>"
+                        } else {
+                            matched.email
+                        }
+                    } else {
+                        "Unknown sender (${senderHash.take(12)}...)"
+                    }
+                } else {
+                    "Sender hash: ${senderHash.take(16)}..."
+                }
+            },
+            onAccept = { item ->
+                val ownerEmail = userViewModel.getOwner().email
+                if (ownerEmail.isNotBlank()) {
+                    requestViewModel.acceptRequestInboxItem(ownerEmail, item)
+                } else {
+                    snackbarMessage = "User not logged in"
+                }
+            },
+            onReject = { item ->
+                val ownerEmail = userViewModel.getOwner().email
+                if (ownerEmail.isNotBlank()) {
+                    requestViewModel.rejectRequestInboxItem(ownerEmail, item)
+                } else {
+                    snackbarMessage = "User not logged in"
+                }
+            },
+            onCancel = { openRequestInboxDialog = false }
         )
     }
 }
 
+@Composable
+private fun RequestsModeSwitcher(
+    listMode: RequestListMode,
+    receivedCount: Int,
+    onModeChange: (RequestListMode) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 10.dp)
+            .background(SurfaceMid, RoundedCornerShape(12.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        ModeButton(
+            text = if (receivedCount > 0) "Received ($receivedCount)" else "Received",
+            selected = listMode == RequestListMode.RECEIVED,
+            onClick = { onModeChange(RequestListMode.RECEIVED) },
+            modifier = Modifier.weight(1f)
+        )
+        ModeButton(
+            text = "Sent",
+            selected = listMode == RequestListMode.SENT,
+            onClick = { onModeChange(RequestListMode.SENT) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ModeButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.material3.TextButton(
+        onClick = onClick,
+        modifier = modifier.background(
+            if (selected) Violet600 else androidx.compose.ui.graphics.Color.Transparent,
+            RoundedCornerShape(12.dp)
+        )
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) androidx.compose.ui.graphics.Color.White else Violet500
+        )
+    }
+}
+
+private fun java.time.Instant.formatRelativeLabel(): String {
+    return DateTimeFormatter.ofPattern("dd MMM yyyy")
+        .withZone(ZoneId.systemDefault())
+        .format(this)
+}

@@ -27,13 +27,14 @@ fun PasswordOutlinedTextField(
     secret: String,
     isVisible: Boolean,
     onValueChange: (String) -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    label: String = "Password"
 ) {
 
     OutlinedTextField(
         value = secret,
         onValueChange = onValueChange,
-        label = { Text("Confirm Password") },
+        label = { Text(label) },
         singleLine = true,
         visualTransformation = if (isVisible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
@@ -74,7 +75,7 @@ fun PasswordTextField(
         ),
         trailingIcon = {
             val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
-            val description = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña"
+            val description = if (passwordVisible) "Hide password" else "Show password"
 
             LongPressHint(description) {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {

@@ -1,9 +1,9 @@
 package com.shary.app.utils
 
 import android.content.Context
-import android.util.Log
 import android.widget.Toast
 import com.shary.app.core.domain.models.FieldDomain
+import com.shary.app.utils.log.AppLogger
 import org.json.JSONObject
 import java.io.File
 import java.io.StringWriter
@@ -24,7 +24,12 @@ object Functions {
     fun buildJsonStringFromFields(fields: List<FieldDomain>): String {
         val json = JSONObject()
         fields.forEach { field ->
-            json.put(field.key, field.value)
+            json.put(
+                field.key,
+                JSONObject()
+                    .put("value", field.value)
+                    .put("alias", field.keyAlias)
+            )
         }
         return json.toString(4)
     }
@@ -93,7 +98,7 @@ object Functions {
         if (!Pattern.compile("[!@#\$%^&*(),.?\":{}|<>]").matcher(password).find())
             return false to "Password must contain at least one special character."
 
-        Log.d("Functions", "Password syntax validated.")
+        AppLogger.debug("Functions", "event=password_validated")
         return true to ""
     }
 
@@ -105,7 +110,7 @@ object Functions {
         if (email.startsWith("@"))
             return false to "Unexpected email format: starts with @."
 
-        Log.d("Functions", "Email syntax validated: '$email'")
+        AppLogger.debug("Functions", "event=email_syntax_validated")
         return true to ""
     }
 

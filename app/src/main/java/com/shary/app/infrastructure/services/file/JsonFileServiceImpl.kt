@@ -3,10 +3,10 @@ package com.shary.app.infrastructure.services.file
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Log
 import com.shary.app.core.domain.interfaces.services.JsonFileService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.DataFileMode
+import com.shary.app.utils.log.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -47,7 +47,7 @@ class JsonFileServiceImpl(
                 }
             }
         }.getOrElse { ex ->
-            Log.e("JsonFileServiceImpl", "Invalid fields in JSON", ex)
+            AppLogger.error("JsonFileServiceImpl", "event=invalid_fields_in_json", ex)
             emptyMap()
         }
     }
@@ -81,7 +81,7 @@ class JsonFileServiceImpl(
             } ?: return@withContext null
             destFile
         } catch (e: Exception) {
-            Log.e("JsonFileServiceImpl", "Failed to copy JSON", e)
+            AppLogger.error("JsonFileServiceImpl", "event=copy_json_failed", e)
             null
         }
     }
@@ -153,13 +153,15 @@ class JsonFileServiceImpl(
     override fun loadJsonFromUri(uri: Uri): File? {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val destFile = File(context.filesDir, uri.lastPathSegment ?: uniqueName("import.json"))
+            val originalName = getFileNameFromUri(uri) ?: "import.json"
+            val safeName = originalName.takeLast(100).ifBlank { "import.json" }
+            val destFile = File(context.filesDir, uniqueName(safeName))
             inputStream.use { input ->
                 FileOutputStream(destFile).use { output -> input.copyTo(output) }
             }
             destFile
         } catch (e: Exception) {
-            Log.e("JsonFileServiceImpl", "Failed to load JSON", e)
+            AppLogger.error("JsonFileServiceImpl", "event=load_json_failed", e)
             null
         }
     }

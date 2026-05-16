@@ -3,11 +3,11 @@ package com.shary.app.infrastructure.services.file
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Log
 import com.shary.app.core.constants.Constants.VALID_METADATA_FILENAMES
 import com.shary.app.core.domain.interfaces.services.ZipFileService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.DataFileMode
+import com.shary.app.utils.log.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -36,7 +36,7 @@ class ZipFileServiceImpl(
                 .find(meta)
                 ?.groupValues?.getOrNull(1)
                 ?.let { DataFileMode.fromString(it) }
-                ?.also { Log.d("getModeFromZip", it.name) }
+                ?.also { AppLogger.debug("ZipFileServiceImpl", "event=mode_from_zip mode=${it.name}") }
         }
     }
 
@@ -68,7 +68,7 @@ class ZipFileServiceImpl(
                 }
             }
         }.getOrElse { ex ->
-            Log.e("ZipFileServiceImpl", "Invalid content.json", ex)
+            AppLogger.error("ZipFileServiceImpl", "event=invalid_content_json", ex)
             emptyMap()
         }
     }
@@ -84,7 +84,7 @@ class ZipFileServiceImpl(
                 }
             }
         }.getOrElse { ex ->
-            Log.e("ZipFileServiceImpl", "Invalid content.json", ex)
+            AppLogger.error("ZipFileServiceImpl", "event=invalid_content_json", ex)
             emptyMap()
         }
     }
@@ -100,7 +100,7 @@ class ZipFileServiceImpl(
             } ?: return@withContext null
             destFile
         } catch (e: Exception) {
-            Log.e("ZipFileServiceImpl", "Failed to copy ZIP", e)
+            AppLogger.error("ZipFileServiceImpl", "event=copy_zip_failed", e)
             null
         }
     }
@@ -181,13 +181,15 @@ class ZipFileServiceImpl(
     override fun loadZipFromUri(uri: Uri): File? {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val destFile = File(context.filesDir, uri.lastPathSegment!!)
+            val originalName = getFileNameFromUri(uri) ?: "import.zip"
+            val safeName = originalName.takeLast(100).ifBlank { "import.zip" }
+            val destFile = File(context.filesDir, uniqueName(safeName))
             inputStream.use { input ->
                 FileOutputStream(destFile).use { output -> input.copyTo(output) }
             }
             destFile
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLogger.error("ZipFileServiceImpl", "event=load_zip_from_uri_failed", e)
             null
         }
     }
@@ -196,13 +198,15 @@ class ZipFileServiceImpl(
     override fun loadJsonFromUri(uri: Uri): File? {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val destFile = File(context.filesDir, uri.lastPathSegment!!)
+            val originalName = getFileNameFromUri(uri) ?: "import.json"
+            val safeName = originalName.takeLast(100).ifBlank { "import.json" }
+            val destFile = File(context.filesDir, uniqueName(safeName))
             inputStream.use { input ->
                 FileOutputStream(destFile).use { output -> input.copyTo(output) }
             }
             destFile
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLogger.error("ZipFileServiceImpl", "event=load_json_from_uri_failed", e)
             null
         }
     }

@@ -1,8 +1,8 @@
 package com.shary.app.viewmodels.request
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import com.shary.app.core.domain.interfaces.services.CacheService
@@ -10,10 +10,16 @@ import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.domain.types.enums.CloudPayloadDecision
 import com.shary.app.core.domain.types.enums.RequestListMode
+import com.shary.app.core.domain.types.valueobjects.CloudInboxItem
+import com.shary.app.core.domain.types.valueobjects.DataPayload
+import com.shary.app.infrastructure.services.cloud.CloudRateLimitedException
+import com.shary.app.utils.log.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,13 +27,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.time.Instant
-import kotlin.collections.plus
 
 @HiltViewModel
 class RequestViewModel @Inject constructor(
@@ -46,6 +50,10 @@ class RequestViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _isCloudInboxLoading = MutableStateFlow(false)
+    val isCloudInboxLoading: StateFlow<Boolean> = _isCloudInboxLoading.asStateFlow()
+    private val _requestInboxItems = MutableStateFlow<List<CloudInboxItem>>(emptyList())
+    val requestInboxItems: StateFlow<List<CloudInboxItem>> = _requestInboxItems.asStateFlow()
 
     val receivedRequests: StateFlow<List<RequestDomain>> =
         requestRepository.getReceivedRequests()
@@ -57,6 +65,7 @@ class RequestViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<RequestEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<RequestEvent> = _events.asSharedFlow()
+    private var decisionCooldownUntilEpochSeconds: Long = 0L
 
     // -------------------- Draft Request --------------------
 
@@ -68,6 +77,9 @@ class RequestViewModel @Inject constructor(
 
     fun setListMode(mode: RequestListMode) {
         _listMode.value = mode
+        if (mode == RequestListMode.SENT) {
+            clearActiveReceivedRequest()
+        }
     }
 
     // -------------------- Draft Fields --------------------
@@ -79,7 +91,7 @@ class RequestViewModel @Inject constructor(
     }
 
     fun addDraftField(field: FieldDomain) {
-        Log.d("RequestViewModel", "[3] Adding draft field: $field")
+        AppLogger.debug("RequestViewModel", "event=add_draft_field")
         _draftFields.update { current ->
             val exists = current.any { it.key.equals(field.key, ignoreCase = true) }
             if (exists) current else current + field
@@ -96,13 +108,42 @@ class RequestViewModel @Inject constructor(
         _draftFields.value = emptyList()
     }
 
+    fun restoreDraftFields(fields: List<FieldDomain>) {
+        if (fields.isEmpty()) return
+        setDraftFields(fields)
+    }
+
+    fun setActiveReceivedRequest(request: RequestDomain) {
+        _draftRequest.value = request
+        cacheSelection.cacheDraftRequest(request)
+    }
+
+    fun clearActiveReceivedRequest() {
+        _draftRequest.value = RequestDomain.initialize()
+        cacheSelection.clearCachedDraftRequest()
+    }
+
+    fun markActiveReceivedRequestAsResponded() {
+        val selected = _draftRequest.value
+        if (selected.fields.isEmpty() || selected.user.isBlank()) return
+
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                requestRepository.markReceivedRequestResponded(selected, responded = true)
+            }
+            _draftRequest.value = selected.copy(responded = true)
+            cacheSelection.cacheDraftRequest(_draftRequest.value)
+            clearActiveReceivedRequest()
+        }
+    }
+
     fun updateDraftRequest() {
-        Log.d("RequestViewModel", "[3] Before Adding draft request: ${_draftFields.value}")
+        AppLogger.debug("RequestViewModel", "event=update_draft_request_start")
         if (draftFields.value.isNotEmpty()){
             cacheSelection.cacheDraftRequest(
                 RequestDomain.initialize().copy(fields = draftFields.value)
             )
-            Log.d("RequestViewModel", "[4] After Adding draft request: ${_draftFields.value}")
+            AppLogger.debug("RequestViewModel", "event=update_draft_request_success count=${_draftFields.value.size}")
         }
     }
 
@@ -111,10 +152,10 @@ class RequestViewModel @Inject constructor(
     }
 
     fun setDraftFields(fields: List<FieldDomain>) {
-        Log.d("RequestViewModel", "[3] Before Updating draft request: ${_draftFields.value}")
+        AppLogger.debug("RequestViewModel", "event=set_draft_fields_start")
         val draftFields = fields.distinctBy { it.key.lowercase() }
         _draftFields.value = draftFields
-        Log.d("RequestViewModel", "[4] After Updating draft fields: ${_draftFields.value}")
+        AppLogger.debug("RequestViewModel", "event=set_draft_fields_success count=${_draftFields.value.size}")
         cacheSelection.cacheDraftFields(draftFields)
     }
 
@@ -122,66 +163,18 @@ class RequestViewModel @Inject constructor(
      * Fetches request data from Firebase and saves it as a received request.
      */
     fun fetchRequestsFromCloud(targetUser: UserDomain) {
-        Log.d("RequestViewModel", "[3] Fetching requests " +
-                "from cloud for user: ${targetUser.email}")
+        AppLogger.info("RequestViewModel", "event=fetch_requests_start")
 
         viewModelScope.launch {
             _isLoading.value = true
 
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-
-                    // requestData: Result<List<String>>
                     val requestsData = cloudService.fetchRequestDataFromEmail(targetUser.email)
-
-                    val jsonStrings: List<String> = requestsData.getOrThrow()
-                    if (jsonStrings.isEmpty()) {
-                        throw IllegalStateException("No requests returned from cloud")
-                    }
-
-                    var totalMatchedFields = 0
-
-                    jsonStrings.forEachIndexed { idx, jsonString ->
-                        Log.d("RequestViewModel", "Fetched request[$idx] data: $jsonString")
-
-                        val jsonObject = JSONObject(jsonString)
-
-                        // Extract request sender user
-                        val userEmail = jsonObject.optString("user", "").trim()
-                        if (userEmail.isBlank()) {
-                            throw IllegalStateException("Request[$idx] has empty 'user'")
-                        }
-
-                        // Extract keys array
-                        val keysJson = jsonObject.optJSONArray("keys")
-                        if (keysJson == null || keysJson.length() == 0) {
-                            throw IllegalStateException("Request[$idx] has no 'keys'")
-                        }
-
-                        // Build requested fields
-                        val requestedFields = MutableList(keysJson.length()) { i ->
-                            FieldDomain.initialize().copy(key = keysJson.getString(i))
-                        }
-
-                        Log.d("RequestViewModel", "[4] Request[$idx] keys: $requestedFields")
-
-                        // Create RequestDomain
-                        val request = RequestDomain(
-                            fields = requestedFields,
-                            user = userEmail,
-                            recipients = listOf(targetUser.email),
-                            dateAdded = Instant.now(),
-                            owned = false,
-                            responded = false
-                        )
-
-                        // Save request
-                        requestRepository.saveReceivedRequest(request)
-
-                        totalMatchedFields += requestedFields.size
-                    }
-
-                    totalMatchedFields
+                    importDecryptedRequestJsons(
+                        jsonStrings = requestsData.getOrThrow(),
+                        targetUserEmail = targetUser.email
+                    )
                 }
             }
 
@@ -190,9 +183,217 @@ class RequestViewModel @Inject constructor(
             result.onSuccess { totalMatchedFields ->
                 _events.tryEmit(RequestEvent.FetchedFromCloud(totalMatchedFields))
             }.onFailure { e ->
-                Log.e("RequestViewModel", "Error fetching requests from cloud: ${e.message}", e)
+                AppLogger.error("RequestViewModel", "event=fetch_requests_failed", e)
                 _events.tryEmit(RequestEvent.FetchError(e))
             }
         }
     }
+
+    /**
+     * Fetches pending encrypted request payloads and keeps them in-memory for user review.
+     */
+    fun loadRequestInbox(email: String) {
+        viewModelScope.launch {
+            _isCloudInboxLoading.value = true
+            _requestInboxItems.value = emptyList()
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val payloads = cloudService.fetchRequestInboxFromEmail(email).getOrThrow()
+                    payloads
+                        .sortedByDescending { it.creationAt }
+                        .map { payload ->
+                            val previewKeys = if (CloudInboxPolicy.ENABLE_FIELD_NAME_PREVIEW) {
+                                cloudService.decryptRequestFromInbox(email, payload)
+                                    .getOrNull()
+                                    ?.let(::extractPreviewRequestKeys)
+                                    .orEmpty()
+                            } else {
+                                emptyList()
+                            }
+                            CloudInboxItem(
+                                payload = payload,
+                                previewFieldNames = previewKeys
+                            )
+                        }
+                }
+            }
+            _isCloudInboxLoading.value = false
+
+            result.onSuccess { inbox ->
+                _requestInboxItems.value = inbox
+                if (inbox.isEmpty()) {
+                    _events.tryEmit(RequestEvent.CloudInboxEmpty)
+                } else {
+                    _events.tryEmit(RequestEvent.CloudInboxLoaded(inbox.size))
+                }
+            }.onFailure { error ->
+                _events.tryEmit(RequestEvent.FetchError(error))
+            }
+        }
+    }
+
+    fun acceptRequestInboxItem(email: String, item: CloudInboxItem) {
+        viewModelScope.launch {
+            _isCloudInboxLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    enforceDecisionCooldownOrThrow()
+                    val decryptedJson = cloudService.decryptRequestFromInbox(email, item.payload).getOrThrow()
+                    val importedKeyCount = importDecryptedRequestJsons(
+                        jsonStrings = listOf(decryptedJson),
+                        targetUserEmail = email
+                    )
+                    val backendAcknowledged = cloudService.sendRequestDecision(
+                        email = email,
+                        payload = item.payload,
+                        decision = CloudPayloadDecision.ACCEPT,
+                        notifySender = false
+                    ).getOrThrow()
+                    importedKeyCount to backendAcknowledged
+                }
+            }
+            _isCloudInboxLoading.value = false
+
+            result.onSuccess { (importedKeyCount, backendAcknowledged) ->
+                removeRequestInboxItem(item.payload)
+                _events.tryEmit(
+                    RequestEvent.CloudInboxAccepted(
+                        importedKeyCount = importedKeyCount,
+                        backendAcknowledged = backendAcknowledged
+                    )
+                )
+            }.onFailure { error ->
+                captureDecisionCooldown(error)
+                _events.tryEmit(RequestEvent.FetchError(error))
+            }
+        }
+    }
+
+    fun rejectRequestInboxItem(email: String, item: CloudInboxItem) {
+        viewModelScope.launch {
+            _isCloudInboxLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    enforceDecisionCooldownOrThrow()
+                    cloudService.sendRequestDecision(
+                        email = email,
+                        payload = item.payload,
+                        decision = CloudPayloadDecision.REJECT,
+                        notifySender = CloudInboxPolicy.ENABLE_REJECT_NOTIFY_SENDER
+                    ).getOrThrow()
+                }
+            }
+            _isCloudInboxLoading.value = false
+
+            result.onSuccess { backendAcknowledged ->
+                removeRequestInboxItem(item.payload)
+                _events.tryEmit(RequestEvent.CloudInboxRejected(backendAcknowledged))
+            }.onFailure { error ->
+                captureDecisionCooldown(error)
+                _events.tryEmit(RequestEvent.FetchError(error))
+            }
+        }
+    }
+
+    private fun enforceDecisionCooldownOrThrow() {
+        val remaining = remainingDecisionCooldownSeconds()
+        if (remaining > 0) {
+            throw CloudRateLimitedException(
+                retryAfterSeconds = remaining,
+                message = "Decision cooldown is still active."
+            )
+        }
+    }
+
+    private fun captureDecisionCooldown(error: Throwable) {
+        val rateLimited = error as? CloudRateLimitedException ?: return
+        val retryAfter = rateLimited.retryAfterSeconds ?: return
+        if (retryAfter <= 0) return
+        val cooldownUntil = Instant.now().epochSecond + retryAfter
+        if (cooldownUntil > decisionCooldownUntilEpochSeconds) {
+            decisionCooldownUntilEpochSeconds = cooldownUntil
+        }
+    }
+
+    private fun remainingDecisionCooldownSeconds(): Long {
+        val now = Instant.now().epochSecond
+        val remaining = decisionCooldownUntilEpochSeconds - now
+        return if (remaining > 0) remaining else 0
+    }
+
+    private suspend fun importDecryptedRequestJsons(
+        jsonStrings: List<String>,
+        targetUserEmail: String
+    ): Int {
+        if (jsonStrings.isEmpty()) return 0
+
+        var totalMatchedFields = 0
+        jsonStrings.forEachIndexed { idx, jsonString ->
+            AppLogger.debug("RequestViewModel", "event=fetch_request_item index=$idx")
+            val request = parseRequestFromJson(
+                jsonString = jsonString,
+                targetUserEmail = targetUserEmail,
+                sourceIndex = idx
+            )
+            requestRepository.saveReceivedRequest(request)
+            totalMatchedFields += request.fields.size
+        }
+        return totalMatchedFields
+    }
+
+    private fun parseRequestFromJson(
+        jsonString: String,
+        targetUserEmail: String,
+        sourceIndex: Int
+    ): RequestDomain {
+        val jsonObject = JSONObject(jsonString)
+
+        val userEmail = jsonObject.optString("user", "").trim()
+        if (userEmail.isBlank()) {
+            throw IllegalStateException("Request[$sourceIndex] has empty 'user'")
+        }
+
+        val keysJson = jsonObject.optJSONArray("keys")
+        if (keysJson == null || keysJson.length() == 0) {
+            throw IllegalStateException("Request[$sourceIndex] has no 'keys'")
+        }
+
+        val requestedFields = MutableList(keysJson.length()) { i ->
+            FieldDomain.initialize().copy(key = keysJson.getString(i))
+        }
+        AppLogger.debug(
+            "RequestViewModel",
+            "event=fetch_request_keys index=$sourceIndex count=${requestedFields.size}"
+        )
+
+        return RequestDomain(
+            fields = requestedFields,
+            user = userEmail,
+            recipients = listOf(targetUserEmail),
+            dateAdded = Instant.now(),
+            owned = false,
+            responded = false
+        )
+    }
+
+    private fun removeRequestInboxItem(payload: DataPayload) {
+        _requestInboxItems.update { current ->
+            current.filterNot { item ->
+                item.payload.verification == payload.verification &&
+                    item.payload.user == payload.user &&
+                    item.payload.recipient == payload.recipient
+            }
+        }
+    }
+
+    private fun extractPreviewRequestKeys(jsonString: String): List<String> = runCatching {
+        val jsonObject = JSONObject(jsonString)
+        val keysJson = jsonObject.optJSONArray("keys") ?: return@runCatching emptyList()
+        buildList {
+            repeat(keysJson.length()) { idx ->
+                val key = keysJson.optString(idx).trim()
+                if (key.isNotBlank()) add(key)
+            }
+        }.distinctBy { it.lowercase() }.sortedBy { it.lowercase() }.take(12)
+    }.getOrDefault(emptyList())
 }

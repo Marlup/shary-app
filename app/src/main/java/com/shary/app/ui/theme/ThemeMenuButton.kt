@@ -7,6 +7,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,13 +19,18 @@ import com.shary.app.ui.screens.utils.LongPressHint
 
 @Composable
 fun ThemeMenuButton(
+    enabled: Boolean = true,
     onThemeChosen: (theme: AppTheme) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     // Theme menu button
     Box {
-        LongPressHint("Open theme picker") {
-            IconButton(onClick = { expanded = true }) {
+        LongPressHint(if (enabled) "Open theme picker" else "Theme selector pending rework") {
+            IconButton(
+                onClick = { expanded = true },
+                enabled = enabled,
+                colors = IconButtonDefaults.iconButtonColors()
+            ) {
                 Icon(
                     imageVector = Icons.Default.Palette,
                     contentDescription = "Choose Theme"

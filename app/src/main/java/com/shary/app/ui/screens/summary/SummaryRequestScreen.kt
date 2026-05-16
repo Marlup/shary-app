@@ -1,191 +1,313 @@
 package com.shary.app.ui.screens.summary
 
+import CloudEvent
 import android.content.Intent
-import android.util.Log
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material3.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import com.shary.app.ui.screens.home.utils.Screen
+import com.shary.app.ui.components.RecipientBlob
+import com.shary.app.ui.components.ReviewKeyValueRow
+import com.shary.app.ui.components.ReviewSectionCard
+import com.shary.app.ui.components.SendMethodCard
+import com.shary.app.ui.components.SharyPrimaryButton
 import com.shary.app.ui.screens.home.utils.SendOption
-import com.shary.app.ui.screens.home.utils.SendCommunicationDialog
-import com.shary.app.ui.screens.home.utils.SendFieldsGenericButton
-import com.shary.app.ui.screens.summary.utils.SummaryTopAppBar
-import com.shary.app.ui.screens.utils.GoToScreen
+import com.shary.app.ui.theme.Violet50
+import com.shary.app.ui.theme.Violet500
+import com.shary.app.ui.theme.Violet600
+import com.shary.app.ui.utils.cloudUiStatus
+import com.shary.app.utils.log.AppLogger
+import com.shary.app.core.domain.types.enums.StatusDataSentDb
 import com.shary.app.viewmodels.communication.CloudViewModel
 import com.shary.app.viewmodels.communication.EmailViewModel
+import com.shary.app.viewmodels.configuration.SettingsViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
+import com.shary.app.ui.screens.utils.cloudErrorMessage
+import com.shary.app.ui.utils.isOnWifiNetwork
 import com.shary.app.viewmodels.user.UserViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun SummaryRequestScreen(navController: NavHostController) {
     val context = LocalContext.current
-
-    // ---------------- ViewModels ----------------
     val emailViewModel: EmailViewModel = hiltViewModel()
     val cloudViewModel: CloudViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
     val requestViewModel: RequestViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
 
-    var openSendDialog by remember { mutableStateOf(false) }
+    val fields = remember { requestViewModel.getDraftFields() }
+    val recipients = remember { userViewModel.getCachedUsers() }
+    val recipient = recipients.firstOrNull()
+    var selectedMethod: SendOption by remember { mutableStateOf(SendOption.Cloud) }
+    val cloudLoading by cloudViewModel.isLoading.collectAsState()
+    val cloudState by cloudViewModel.cloudState.collectAsState()
+    val settings by settingsViewModel.settings.collectAsState()
+    val cloudStatus = cloudUiStatus(cloudState)
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         emailViewModel.intent.collect { intent ->
-            context.startActivity(
-                Intent.createChooser(intent, "Choose Email App")
-            )
+            context.startActivity(Intent.createChooser(intent, "Choose Email App"))
         }
     }
 
-    Scaffold(
-        topBar = { SummaryTopAppBar(navController) },
-        modifier = Modifier.background(color = Color(0xFFF7F3FF)),
-        floatingActionButton = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-
-                // Go back to Fields
-                GoToScreen(
-                    navController,
-                    Screen.Fields,
-                    Icons.Filled.TextFields
-                )
-
-                // Go back to Users
-                GoToScreen(
-                    navController,
-                    Screen.Users,
-                    Icons.Filled.Person
-                )
-                // Go back to Users
-                GoToScreen(
-                    navController,
-                    Screen.Requests,
-                    Icons.Filled.Description
-                )
-
-                SendFieldsGenericButton(
-                    onClick = { openSendDialog = true }
-                )
-            }
-        }
-    ) { padding ->
-
-        if (openSendDialog) {
-            SendCommunicationDialog(
-                options = SendOption.all,
-                onSend = { selectedOption ->
-                    openSendDialog = false
-                    when (selectedOption) {
-
-                        SendOption.Email -> {
-                            emailViewModel.sendRequest(
-                                requestViewModel.getCachedDraftRequest().fields,
-                                userViewModel.getCachedUsers()
-                            )
-                        }
-
-                        SendOption.Cloud -> {
-                            Log.d("SummaryRequestScreen", "Sending Request to cloud: "
-                                    + "email: ${userViewModel.getOwnerEmail()}")
-                            cloudViewModel.uploadRequest(
-                                requestViewModel.getDraftFields(),
-                                userViewModel.getOwner(),
-                                userViewModel.getCachedUsers(),
-                            )
-                        }
-                    }
-                },
-                onDismiss = { openSendDialog = false }
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "You Are Going to Send:",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            // ==== Table Header ====
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(vertical = 8.dp, horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Emails",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Start
-                )
-                Text(
-                    text = "Fields",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Start
-                )
-            }
-
-            HorizontalDivider()
-
-            // ==== Table Rows ====
-            val fields = requestViewModel.getDraftFields()
-            val emails = userViewModel.getCachedUsers().map { it.email }
-            val maxRows = maxOf(emails.size, fields.size)
-
-            LazyColumn {
-                items(maxRows) { index ->
-                    val email = emails.getOrNull(index) ?: ""
-                    val field = fields.getOrNull(index)?.key ?: ""
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp, horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = email,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = field,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    HorizontalDivider()
+    LaunchedEffect(Unit) {
+        cloudViewModel.events.collect { event ->
+            when (event) {
+                is CloudEvent.RequestUploaded -> {
+                    snackbarHostState.showSnackbar(formatCloudAck(event.result))
                 }
+                is CloudEvent.Error -> {
+                    snackbarHostState.showSnackbar(cloudErrorMessage(event.throwable))
+                }
+                else -> Unit
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        emailViewModel.events.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Violet50)
+    ) {
+        Column {
+            SummaryRequestHero(
+                title = "Review & Send",
+                subtitle = "${fields.size} requested keys · ${recipients.size} recipient(s) · encrypted",
+                onBack = { navController.popBackStack() }
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                ReviewSectionCard(sectionLabel = "Recipient") {
+                    if (recipient != null) {
+                        RecipientBlob(name = recipient.username, email = recipient.email)
+                    } else {
+                        Text("No recipient selected", color = Violet500)
+                    }
+                }
+
+                ReviewSectionCard(sectionLabel = "Fields") {
+                    if (fields.isEmpty()) {
+                        Text("No requested keys", color = Violet500)
+                    } else {
+                        fields.forEachIndexed { index, field ->
+                            ReviewKeyValueRow(
+                                key = field.key,
+                                value = field.value.ifBlank { field.keyAlias.ifBlank { "-" } },
+                                last = index == fields.lastIndex
+                            )
+                        }
+                    }
+                }
+
+                ReviewSectionCard(sectionLabel = "Send method") {
+                    SendMethodCard(
+                        icon = Icons.Default.Email,
+                        title = "Email",
+                        description = recipient?.email?.let { "to $it" } ?: "No recipient",
+                        isSelected = selectedMethod == SendOption.Email,
+                        onClick = { selectedMethod = SendOption.Email }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SendMethodCard(
+                        icon = Icons.Default.Cloud,
+                        title = "Cloud",
+                        description = "Secure upload to cloud relay",
+                        isSelected = selectedMethod == SendOption.Cloud,
+                        onClick = { selectedMethod = SendOption.Cloud },
+                        enabled = cloudStatus.ready,
+                        onDisabledClick = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Cloud disabled: ${cloudStatus.reason}")
+                            }
+                        }
+                    )
+                    if (!cloudStatus.ready) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Cloud disabled: ${cloudStatus.reason}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Violet500
+                        )
+                    }
+                }
+
+                SharyPrimaryButton(
+                    text = if (cloudLoading && selectedMethod == SendOption.Cloud) {
+                        "Sending..."
+                    } else {
+                        "Send securely"
+                    },
+                    onClick = {
+                        when (selectedMethod) {
+                            SendOption.Email -> {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Preparing email composer...")
+                                }
+                                emailViewModel.sendRequest(fields, recipients)
+                            }
+                            SendOption.Cloud -> {
+                                if (settings.wifiOnlyCloudSync && !isOnWifiNetwork(context)) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Wi-Fi only sync is enabled. Connect to Wi-Fi to continue.")
+                                    }
+                                    return@SharyPrimaryButton
+                                }
+                                val owner = userViewModel.getOwner()
+                                if (owner.email.isBlank()) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Owner email unavailable. Sign in again.")
+                                    }
+                                    return@SharyPrimaryButton
+                                }
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Sending request securely, please wait...")
+                                }
+                                AppLogger.info("SummaryRequestScreen", "event=send_request_to_cloud")
+                                cloudViewModel.uploadRequest(
+                                    fields = fields,
+                                    owner = owner,
+                                    recipients = recipients,
+                                    expiryDays = settings.defaultCloudExpiryDays
+                                )
+                            }
+                        }
+                    },
+                    enabled = fields.isNotEmpty() && recipients.isNotEmpty() && !cloudLoading &&
+                        (selectedMethod != SendOption.Cloud || cloudStatus.ready),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp)
+                )
+
+                Text(
+                    text = "End-to-end encrypted · data never stored",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Violet500,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp)
+        )
+    }
+}
+
+private fun formatCloudAck(result: Map<String, StatusDataSentDb>): String {
+    if (result.isEmpty()) return "No backend acknowledgement received."
+
+    val successCount = result.count { (_, status) ->
+        status == StatusDataSentDb.SUCCESS || status == StatusDataSentDb.STORED
+    }
+    val failedCount = result.size - successCount
+
+    return when {
+        successCount == result.size -> "Sent successfully to $successCount recipient(s)."
+        successCount == 0 -> "Send failed for all recipients."
+        else -> "Sent to $successCount recipient(s), $failedCount failed."
+    }
+}
+
+@Composable
+private fun SummaryRequestHero(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Violet600)
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .minimumInteractiveComponentSize()
+                    .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge,
+                color = Color.White
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.65f)
+        )
     }
 }

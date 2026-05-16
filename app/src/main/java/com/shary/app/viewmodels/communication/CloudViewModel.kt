@@ -1,14 +1,15 @@
 package com.shary.app.viewmodels.communication
 
 import CloudEvent
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.utils.log.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,16 @@ class CloudViewModel @Inject constructor(
     private val requestRepository: RequestRepository
 ) : ViewModel() {
 
+    val cloudState = cloudService.cloudState
+
+    fun refreshOnlineStatus() {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { cloudService.sendPing() }
+            }
+        }
+    }
+
     /** Loading state */
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -35,14 +46,18 @@ class CloudViewModel @Inject constructor(
     fun uploadUser(email: String) {
         viewModelScope.launch {
             _isLoading.value = true
-            val token = runCatching {
+            val result = runCatching {
                 withContext(Dispatchers.IO) { cloudService.uploadUser(email) }
-            }.getOrDefault("")
+            }
             _isLoading.value = false
-            if (token.isNotBlank()) {
-                _events.tryEmit(CloudEvent.UserUploaded(email, token))
-            } else {
-                _events.tryEmit(CloudEvent.Error(Exception("Upload failed")))
+            result.onSuccess { token ->
+                if (token.isNotBlank()) {
+                    _events.tryEmit(CloudEvent.UserUploaded(email, token))
+                } else {
+                    _events.tryEmit(CloudEvent.Error(IllegalStateException("Identity registration returned empty token.")))
+                }
+            }.onFailure { error ->
+                _events.tryEmit(CloudEvent.Error(error))
             }
         }
     }
@@ -52,17 +67,25 @@ class CloudViewModel @Inject constructor(
         fields: List<FieldDomain>,
         owner: UserDomain,
         recipients: List<UserDomain>,
+        expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS,
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            val resultMap = runCatching {
+            val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    //Log.d("CloudViewModel", "uploadData() - ownerUsername: ${owner.username}")
-                    cloudService.uploadData(fields, owner, recipients)
+                    cloudService.uploadData(fields, owner, recipients, expiryDays)
                 }
-            }.getOrDefault(emptyMap())
+            }
             _isLoading.value = false
-            _events.tryEmit(CloudEvent.DataUploaded(resultMap))
+            result.onSuccess { resultMap ->
+                if (resultMap.isEmpty()) {
+                    _events.tryEmit(CloudEvent.Error(IllegalStateException("No backend acknowledgement received.")))
+                } else {
+                    _events.tryEmit(CloudEvent.DataUploaded(resultMap))
+                }
+            }.onFailure { throwable ->
+                _events.tryEmit(CloudEvent.Error(throwable))
+            }
         }
     }
 
@@ -71,32 +94,42 @@ class CloudViewModel @Inject constructor(
         fields: List<FieldDomain>,
         owner: UserDomain,
         recipients: List<UserDomain>,
+        expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS,
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            val resultMap = runCatching {
+            val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    //Log.d("CloudViewModel", "uploadRequest() - ownerUsername: ${owner.username}")
-                    cloudService.uploadRequest(fields, owner, recipients)
+                    cloudService.uploadRequest(fields, owner, recipients, expiryDays)
                 }
-            }.getOrDefault(emptyMap())
-            _isLoading.value = false
-            val request = RequestDomain(
-                fields = fields,
-                user = owner.email,
-                recipients = recipients.map { it.email },
-                dateAdded = Instant.now(),
-                owned = true,
-                responded = false
-            )
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    requestRepository.saveSentRequest(request)
-                }
-            }.onFailure { error ->
-                Log.e("CloudViewModel", "Failed to save sent request: ${error.message}")
             }
-            _events.tryEmit(CloudEvent.RequestUploaded(resultMap))
+            _isLoading.value = false
+            result.onSuccess { resultMap ->
+                if (resultMap.isEmpty()) {
+                    _events.tryEmit(CloudEvent.Error(IllegalStateException("No backend acknowledgement received.")))
+                    return@onSuccess
+                }
+
+                val request = RequestDomain(
+                    fields = fields,
+                    user = owner.email,
+                    recipients = recipients.map { it.email },
+                    dateAdded = Instant.now(),
+                    owned = true,
+                    responded = false
+                )
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        requestRepository.saveSentRequest(request)
+                    }
+                }.onFailure { error ->
+                    AppLogger.error("CloudViewModel", "event=save_sent_request_failed", error)
+                }
+
+                _events.tryEmit(CloudEvent.RequestUploaded(resultMap))
+            }.onFailure { throwable ->
+                _events.tryEmit(CloudEvent.Error(throwable))
+            }
         }
     }
 }

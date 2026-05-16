@@ -24,8 +24,11 @@ class UserViewModel @Inject constructor(
     private val _users = MutableStateFlow<List<UserDomain>>(emptyList())
     val users: StateFlow<List<UserDomain>> = _users.asStateFlow()
 
-    private val _cachedUsers = MutableStateFlow<List<UserDomain>>(emptyList())
-    val selectedUsers: StateFlow<List<UserDomain>> = _cachedUsers.asStateFlow()
+    private val _selectedEmails = MutableStateFlow<Set<String>>(emptySet())
+    val selectedUsers: StateFlow<List<UserDomain>> =
+        combine(_users, _selectedEmails) { allUsers, selectedEmails ->
+            allUsers.filter { user -> selectedEmails.contains(user.email.trim().lowercase()) }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _selectedPhoneNumber = MutableStateFlow<String?>(null)
     val selectedPhoneNumber: StateFlow<String?> = _selectedPhoneNumber.asStateFlow()
@@ -49,13 +52,16 @@ class UserViewModel @Inject constructor(
     fun getOwnerEmail() = appCache.getOwnerEmail()
     fun getOwnerUsername() = appCache.getOwnerUsername()
 
-    fun toggleUser(user: UserDomain) = _cachedUsers.update { current ->
-        if (user in current) current - user else current + user
+    fun toggleUser(user: UserDomain) = _selectedEmails.update { current ->
+        val normalized = user.email.trim().lowercase()
+        if (current.contains(normalized)) current - normalized else current + normalized
     }
 
     fun cacheUsers(users: List<UserDomain>) {
-        _cachedUsers.value = users.distinctBy { it.email.trim().lowercase() }
-        appCache.cacheUsers(_cachedUsers.value) // <— persistencia cross-screen
+        val normalizedEmails = users.map { it.email.trim().lowercase() }.toSet()
+        _selectedEmails.value = normalizedEmails
+        val selectedByEmail = _users.value.filter { normalizedEmails.contains(it.email.trim().lowercase()) }
+        appCache.cacheUsers(selectedByEmail)
     }
 
     fun getCachedUsers(): List<UserDomain> = appCache.getUsers()
@@ -64,7 +70,10 @@ class UserViewModel @Inject constructor(
         _selectedPhoneNumber.value = number
         appCache.cachePhoneNumber(number) // opcional para WhatsApp/Telegram
     }
-    fun clearSelectedUsers() { appCache.clearCachedUsers() }
+    fun clearSelectedUsers() {
+        _selectedEmails.value = emptySet()
+        appCache.clearCachedUsers()
+    }
 
     // ----------------------------- Loading -------------------------------
 
@@ -177,6 +186,33 @@ class UserViewModel @Inject constructor(
 
             result.onSuccess { removedCount ->
                 if (removedCount > 0) refresh()
+            }.onFailure { e ->
+                _events.tryEmit(UserEvent.Error(e))
+            }
+        }
+    }
+
+    fun restoreDeletedUsers(users: Collection<UserDomain>) {
+        if (users.isEmpty()) return
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock {
+                        users.forEach { user ->
+                            userRepository.saveUserIfNotExists(
+                                user.copy(
+                                    username = user.username.trim(),
+                                    email = user.email.trim()
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            _isLoading.value = false
+            result.onSuccess {
+                refresh()
             }.onFailure { e ->
                 _events.tryEmit(UserEvent.Error(e))
             }

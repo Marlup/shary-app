@@ -1,25 +1,62 @@
 package com.shary.app.ui.screens.utils
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.domain.types.enums.safeColor
-import com.shary.app.core.domain.types.valueobjects.MatchingState
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
+import com.shary.app.core.domain.types.valueobjects.MatchingState
+import com.shary.app.ui.components.SharyIconButton
+import com.shary.app.ui.components.SharyPrimaryButton
+import com.shary.app.ui.components.SharySoftButton
 import com.shary.app.ui.screens.field.components.AddFieldDialog
+import com.shary.app.ui.theme.SelectionCardBg
+import com.shary.app.ui.theme.SharyRadius
+import com.shary.app.ui.theme.SurfaceLight
+import com.shary.app.ui.theme.SurfaceWhite
+import com.shary.app.ui.theme.Violet200
+import com.shary.app.ui.theme.Violet500
+import com.shary.app.ui.theme.Violet600
+import com.shary.app.ui.theme.Violet900
 import com.shary.app.utils.MatchingHistoryController
 
 @Composable
@@ -41,20 +78,6 @@ fun FieldMatchingDialog(
     var isStorageFirst by rememberSaveable { mutableStateOf(false) }
     var openAddDialog by remember { mutableStateOf(false) }
 
-    // --- Undo/Redo containers ---
-    val past = remember { mutableStateListOf<MatchingState>() }
-    val future = remember { mutableStateListOf<MatchingState>() }
-
-    // --- Snapshot current state ---
-    fun snapshot(): MatchingState = MatchingState(
-        selectedStorageIndex = selectedStorageIndex,
-        selectedRequestIndex = selectedRequestIndex,
-        isStorageFirst = isStorageFirst,
-        matches = matches.toList(),
-        freeLabelsFromUnmatched = freeLabelsFromUnmatched.toList(),
-    )
-
-    // --- Snapshot current matching-related state ---
     fun snapshotState(): MatchingState = MatchingState(
         selectedStorageIndex = selectedStorageIndex,
         selectedRequestIndex = selectedRequestIndex,
@@ -63,7 +86,6 @@ fun FieldMatchingDialog(
         freeLabelsFromUnmatched = freeLabelsFromUnmatched.toList(),
     )
 
-    // --- Restore a previously stored matching state ---
     fun restoreState(state: MatchingState) {
         selectedStorageIndex = state.selectedStorageIndex
         selectedRequestIndex = state.selectedRequestIndex
@@ -76,14 +98,12 @@ fun FieldMatchingDialog(
         freeLabelsFromUnmatched.addAll(state.freeLabelsFromUnmatched)
     }
 
-    // --- Controller ---
     val history = remember {
         MatchingHistoryController(
             snapshot = ::snapshotState,
             restore = ::restoreState
         )
     }
-
 
     LaunchedEffect(storedFields, requestFields) {
         history.clear()
@@ -113,288 +133,255 @@ fun FieldMatchingDialog(
         matches.sortedBy { it.second }
             .mapNotNull { (sIdx, _, _) -> localStoredFields.getOrNull(sIdx) }
 
-    val isFullyMatched = matches.size == requestFields.size
+    val totalToMatch = requestFields.size
     val matchedCount = matches.size
-    val totalToMatch = requestFields.size.coerceAtLeast(0)
+    val isFullyMatched = totalToMatch > 0 && matchedCount == totalToMatch
+    val progress = if (totalToMatch == 0) 0f else matchedCount.toFloat() / totalToMatch.toFloat()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = MaterialTheme.shapes.extraLarge,
-            tonalElevation = 3.dp
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 320.dp, max = 720.dp),
+            shape = SharyRadius.dialog,
+            color = SurfaceLight,
+            border = BorderStroke(1.dp, Violet200),
+            tonalElevation = 0.dp
         ) {
             Column(
                 modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth()
-                    .heightIn(min = 240.dp, max = 620.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                // Actions row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    LongPressHint("Close and discard current matching") {
-                        Button(onClick = onDismiss) { Text("Cancel") }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    LongPressHint("Accept all current matches") {
-                        Button(
-                            enabled = isFullyMatched,
-                            onClick = {
-                                onAccept(buildAcceptedSelection())
-                                onDismiss()
-                            }
-                        ) { Text("Accept") }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    LongPressHint("Add a new local field for matching") {
-                        SmallFloatingActionButton(onClick = { openAddDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Field")
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-                }
-
-                Row {
-
-                }
-                LongPressHint("Undo last matching change") {
-                    IconButton(
-                        onClick = { history.undo() },
-                        enabled = history.canUndo
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-
-                LongPressHint("Redo last undone change") {
-                    IconButton(
-                        onClick = { history.redo() },
-                        enabled = history.canRedo
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Status row (simple, optional but useful)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    AssistChip(
-                        onClick = { /* no-op */ },
-                        label = { Text("Matched: $matchedCount/$totalToMatch") }
+                    Text(
+                        text = "Match fields",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = Violet900
                     )
-                    if (totalToMatch > 0) {
-                        val progress = matchedCount.toFloat() / totalToMatch.toFloat()
-                        LinearProgressIndicator(
-                            progress = { progress.coerceIn(0f, 1f) },
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SharyIconButton(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Undo",
+                            onClick = { if (history.canUndo) history.undo() },
                             modifier = Modifier
-                                .width(160.dp)
-                                .height(8.dp)
+                        )
+                        SharyIconButton(
+                            icon = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Redo",
+                            onClick = { if (history.canRedo) history.redo() },
+                            modifier = Modifier
+                        )
+                        SharyIconButton(
+                            icon = Icons.Default.Add,
+                            contentDescription = "Add field",
+                            onClick = { openAddDialog = true }
+                        )
+                    }
+                }
+
+                Text(
+                    text = "$matchedCount/$totalToMatch matched",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Violet500,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp)
+                        .height(8.dp),
+                    color = Violet600,
+                    trackColor = Violet200
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        MatchColumn(
+                            title = "Stored",
+                            fields = localStoredFields,
+                            selectedIndex = selectedStorageIndex,
+                            matches = matches,
+                            isStoredColumn = true,
+                            onSelect = { index, isSelected ->
+                                history.commit()
+                                selectedStorageIndex = if (isSelected) null else index
+                                matchIfPossible()
+                            }
+                        )
+                    }
+
+                    VerticalDivider(
+                        modifier = Modifier
+                            .heightIn(min = 120.dp)
+                            .padding(horizontal = 8.dp),
+                        color = Violet200
+                    )
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        MatchColumn(
+                            title = "Requested",
+                            fields = requestFields,
+                            selectedIndex = selectedRequestIndex,
+                            matches = matches,
+                            isStoredColumn = false,
+                            onSelect = { index, isSelected ->
+                                history.commit()
+                                selectedRequestIndex = if (isSelected) null else index
+                                matchIfPossible()
+                            }
                         )
                     }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                // Content
-                Row(modifier = Modifier.fillMaxWidth()) {
-
-                    // LEFT: Stored
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Stored",
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-
-                        if (localStoredFields.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 180.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("No stored fields", style = MaterialTheme.typography.bodyMedium)
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 460.dp),
-                                contentPadding = PaddingValues(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                itemsIndexed(
-                                    items = localStoredFields,
-                                    key = { index, field -> "${field.key}#$index" }
-                                ) { index, field ->
-                                    val isSelected = selectedStorageIndex == index
-                                    val match = matches.firstOrNull { it.first == index }
-                                    val isMatched = match != null
-
-                                    val backgroundColor = when {
-                                        isMatched -> MaterialTheme.colorScheme.secondaryContainer
-                                        index % 2 == 0 -> MaterialTheme.colorScheme.surface
-                                        else -> MaterialTheme.colorScheme.surfaceVariant
-                                    }
-
-                                    ElevatedCard(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.elevatedCardColors(
-                                            containerColor = backgroundColor
-                                        ),
-                                        onClick = {
-                                            history.commit()
-
-                                            selectedStorageIndex = if (isSelected) null else index
-                                            matchIfPossible()
-                                        }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                if (match != null && match.third > 0) {
-                                                    Text(
-                                                        text = "matched ${match.third}",
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                    Spacer(Modifier.height(4.dp))
-                                                }
-
-                                                Text(
-                                                    field.key,
-                                                    maxLines = 1,
-                                                    style = MaterialTheme.typography.bodyLarge
-                                                )
-                                                Spacer(Modifier.height(2.dp))
-                                                Text(
-                                                    FieldValueContract.parse(field.value).plainData,
-                                                    maxLines = 1,
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    // RIGHT: Requested
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Requested",
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-
-                        if (requestFields.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 180.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("No requested fields", style = MaterialTheme.typography.bodyMedium)
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 460.dp),
-                                contentPadding = PaddingValues(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                itemsIndexed(
-                                    items = requestFields,
-                                    key = { index, field -> "${field.key}#$index" }
-                                ) { index, field ->
-                                    val isSelected = selectedRequestIndex == index
-                                    val match = matches.firstOrNull { it.second == index }
-                                    val isMatched = match != null
-
-                                    val backgroundColor = when {
-                                        isMatched -> MaterialTheme.colorScheme.tertiaryContainer
-                                        index % 2 == 0 -> MaterialTheme.colorScheme.surface
-                                        else -> MaterialTheme.colorScheme.surfaceVariant
-                                    }
-
-                                    ElevatedCard(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.elevatedCardColors(
-                                            containerColor = backgroundColor
-                                        ),
-                                        onClick = {
-                                            history.commit()
-
-                                            selectedRequestIndex = if (isSelected) null else index
-                                            matchIfPossible()
-                                        }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                if (match != null && match.third > 0) {
-                                                    Text(
-                                                        text = "matched ${match.third}\n",
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                    Spacer(Modifier.height(4.dp))
-                                                }
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text(
-                                                        field.key,
-                                                        maxLines = 1,
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                }
-                                                /*
-                                                Spacer(Modifier.height(2.dp))
-                                                Text(
-                                                    field.keyAlias,
-                                                    maxLines = 1,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = Color.Unspecified
-                                                )
-                                                 */
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Add dialog
-                if (openAddDialog) {
-                    AddFieldDialog(
-                        onDismiss = { openAddDialog = false },
-                        onAddField = { newField ->
-                            history.commit()
-
-                            localStoredFields.add(newField)
-                            onAddField(newField)
-                            openAddDialog = false
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SharySoftButton(
+                        text = "Cancel",
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
                     )
+                    SharyPrimaryButton(
+                        text = "Accept",
+                        onClick = {
+                            onAccept(buildAcceptedSelection())
+                            onDismiss()
+                        },
+                        enabled = isFullyMatched,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+
+    if (openAddDialog) {
+        AddFieldDialog(
+            onDismiss = { openAddDialog = false },
+            onAddField = { newField ->
+                history.commit()
+                localStoredFields.add(newField)
+                onAddField(newField)
+                openAddDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun MatchColumn(
+    title: String,
+    fields: List<FieldDomain>,
+    selectedIndex: Int?,
+    matches: List<Triple<Int, Int, Int>>,
+    isStoredColumn: Boolean,
+    onSelect: (index: Int, isSelected: Boolean) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = Violet500,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+        )
+
+        if (fields.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isStoredColumn) "No stored fields" else "No requested fields",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Violet500
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(fields, key = { index, field -> "${field.key}#$index" }) { index, field ->
+                    val match = if (isStoredColumn) {
+                        matches.firstOrNull { it.first == index }
+                    } else {
+                        matches.firstOrNull { it.second == index }
+                    }
+                    val isMatched = match != null
+                    val isSelected = selectedIndex == index
+                    val borderColor = if (isMatched || isSelected) Violet600 else Violet200
+                    val bgColor = if (isMatched || isSelected) SelectionCardBg else SurfaceWhite
+
+                    Card(
+                        onClick = { onSelect(index, isSelected) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = bgColor),
+                        border = BorderStroke(1.5.dp, borderColor),
+                        shape = SharyRadius.card,
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = field.key,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = Violet900,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                if (isStoredColumn) {
+                                    Text(
+                                        text = FieldValueContract.parse(field.value).plainData,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Violet500,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            match?.let {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .background(Violet600, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = it.third.toString(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

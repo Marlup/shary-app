@@ -3,12 +3,13 @@ package com.shary.app.infrastructure.security.helper
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
-import android.util.Log
+import android.util.AtomicFile
 import com.shary.app.core.constants.Constants.PATH_AUTHENTICATION
 import com.shary.app.core.constants.Constants.PATH_AUTH_SIGNATURE
 import com.shary.app.infrastructure.services.cloud.Constants.TIME_ALIVE_FIREBASE_DOCUMENT
 
 import org.json.JSONObject
+import com.shary.app.utils.log.AppLogger
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -68,7 +69,7 @@ object SecurityUtils {
 
     fun hashMessageB64(message: String): String {
         val hashB64 = base64Encode(hashMessage(message))
-        Log.i("SecurityUtils", "hashMessageB64() - message: $message to hash: $hashB64")
+        AppLogger.debug("SecurityUtils", "event=hash_message_b64")
         return hashB64
     }
 
@@ -94,7 +95,19 @@ object SecurityUtils {
     fun credentialsFile(context: Context): File {
         val dir = File(context.filesDir, PATH_AUTHENTICATION)
         if (!dir.exists()) dir.mkdirs()
+        return File(dir, "credentials.v3")
+    }
+
+    fun legacyCredentialsFile(context: Context): File {
+        val dir = File(context.filesDir, PATH_AUTHENTICATION)
+        if (!dir.exists()) dir.mkdirs()
         return File(dir, ".credentials")
+    }
+
+    fun credentialsLockFile(context: Context): File {
+        val dir = File(context.filesDir, PATH_AUTHENTICATION)
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, "credentials.locked")
     }
 
     private fun timestampFile(context: Context): File {
@@ -109,8 +122,7 @@ object SecurityUtils {
 
     /** Returns a timestamp after [extraTime] seconds (default 1h). */
     fun getTimestampAfterExpiry(baseTimestamp: Long = getCurrentUtcTimestamp(), extraTime: Long = TIME_ALIVE_FIREBASE_DOCUMENT): Long {
-        Log.d("getTimestampAfterExpiry", "baseTimestamp: $baseTimestamp, extraTime: $extraTime")
-        Log.d("getTimestampAfterExpiry", "baseTimestamp + extraTime: ${baseTimestamp + extraTime}")
+        AppLogger.debug("SecurityUtils", "event=timestamp_after_expiry")
         return baseTimestamp + extraTime
     }
 
@@ -119,10 +131,49 @@ object SecurityUtils {
         val file = timestampFile(context)
         return if (file.exists()) file.readText() else {
             val ts = System.currentTimeMillis().toString()
-            file.writeText(ts)
+            writeTextAtomic(file, ts)
             ts
         }
     }
+
+    // ---------------- Atomic writes ----------------
+    fun writeBytesAtomic(file: File, bytes: ByteArray) {
+        val atomic = AtomicFile(file)
+        var output = atomic.startWrite()
+        try {
+            output.write(bytes)
+            atomic.finishWrite(output)
+        } catch (e: Throwable) {
+            atomic.failWrite(output)
+            throw e
+        }
+    }
+
+    fun writeTextAtomic(file: File, text: String) {
+        writeBytesAtomic(file, text.toByteArray(Charsets.UTF_8))
+    }
+
+    // ---------------- Cleanup helpers ----------------
+    fun deleteSignatureFile(context: Context) {
+        signatureFile(context).takeIf { it.exists() }?.delete()
+    }
+
+    fun deleteCredentialsTimestamp(context: Context) {
+        timestampFile(context).takeIf { it.exists() }?.delete()
+    }
+
+    fun markCredentialsLocked(context: Context, reason: String = "unlock_failed") {
+        val file = credentialsLockFile(context)
+        if (!file.exists()) {
+            writeTextAtomic(file, "$reason:${getCurrentUtcTimestamp()}")
+        }
+    }
+
+    fun clearCredentialsLocked(context: Context) {
+        credentialsLockFile(context).takeIf { it.exists() }?.delete()
+    }
+
+    fun isCredentialsLocked(context: Context): Boolean = credentialsLockFile(context).exists()
 
     // ---------------- Base64 ----------------
     fun base64Decode(encoded: String): ByteArray = Base64.decode(encoded, Base64.NO_WRAP)

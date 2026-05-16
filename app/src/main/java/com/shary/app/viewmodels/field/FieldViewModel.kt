@@ -1,12 +1,13 @@
 package com.shary.app.viewmodels.field
 
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.application.security.ChangePasswordAndRewrapDataKeyUseCase
+import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.events.FieldEvent
 import com.shary.app.core.domain.models.FieldDomain
+import com.shary.app.core.domain.types.enums.CloudPayloadDecision
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.FieldValueHistoryRepository
@@ -16,10 +17,16 @@ import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.types.enums.SearchFieldBy
 import com.shary.app.core.domain.types.enums.SortByParameter
 import com.shary.app.core.domain.types.enums.getSafeTag
+import com.shary.app.core.domain.types.valueobjects.CloudInboxItem
+import com.shary.app.core.domain.types.valueobjects.DataPayload
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
+import com.shary.app.infrastructure.services.cloud.CloudRateLimitedException
+import com.shary.app.utils.log.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.time.Instant
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -27,6 +34,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.json.JSONArray
 
 @HiltViewModel
 class FieldViewModel @Inject constructor(
@@ -37,17 +45,29 @@ class FieldViewModel @Inject constructor(
     private val authenticationService: AuthenticationService,
     private val changePasswordAndRewrapDataKeyUseCase: ChangePasswordAndRewrapDataKeyUseCase
 ) : ViewModel() {
+    private data class CloudFetchSummary(
+        val downloadedKeys: List<String>,
+        val loadedKeys: List<String>,
+        val preDownloadedKeys: List<String>
+    )
 
     // Domain state exposed to UI
     private val _fields = MutableStateFlow<List<FieldDomain>>(emptyList())
     val fields: StateFlow<List<FieldDomain>> = _fields.asStateFlow()
 
-    private val _selectedFields = MutableStateFlow<List<FieldDomain>>(emptyList())
-    val selectedFields: StateFlow<List<FieldDomain>> = _selectedFields.asStateFlow()
+    private val _selectedKeys = MutableStateFlow<Set<String>>(emptySet())
+    val selectedFields: StateFlow<List<FieldDomain>> =
+        combine(_fields, _selectedKeys) { allFields, selectedKeys ->
+            allFields.filter { field -> selectedKeys.contains(field.key.trim().lowercase()) }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Loading flag for long-running operations
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _isCloudInboxLoading = MutableStateFlow(false)
+    val isCloudInboxLoading: StateFlow<Boolean> = _isCloudInboxLoading.asStateFlow()
+    private val _cloudInboxItems = MutableStateFlow<List<CloudInboxItem>>(emptyList())
+    val cloudInboxItems: StateFlow<List<CloudInboxItem>> = _cloudInboxItems.asStateFlow()
 
     // One-shot events (snackbar/toast/navigation)
     private val _events = MutableSharedFlow<FieldEvent>(extraBufferCapacity = 1)
@@ -57,8 +77,6 @@ class FieldViewModel @Inject constructor(
 
     private val _searchFieldBy = MutableStateFlow(SearchFieldBy.KEY)
     val searchFieldBy: StateFlow<SearchFieldBy> = _searchFieldBy.asStateFlow()
-
-    private val _selectedKeys = MutableStateFlow<Set<String>>(emptySet())
 
     private val _sortByParameter = MutableStateFlow(SortByParameter.KEY)
     val sortByParameter: StateFlow<SortByParameter> = _sortByParameter.asStateFlow()
@@ -97,6 +115,9 @@ class FieldViewModel @Inject constructor(
 
     // Serialize writes to avoid concurrent edits on the same store
     private val writeMutex = Mutex()
+    private var refreshJob: Job? = null
+    private var refreshSequence: Long = 0L
+    private var decisionCooldownUntilEpochSeconds: Long = 0L
 
     init {
         refresh()
@@ -211,22 +232,28 @@ class FieldViewModel @Inject constructor(
     }
 
     fun setSelectedFields() {
-        setSelectedFields(_selectedFields.value)
+        setSelectedFields(selectedFields.value)
     }
 
     fun setSelectedFields(fields: List<FieldDomain>) {
-        val selectedFields = fields.distinctBy { it.key.lowercase() }
-        _selectedFields.value = selectedFields
-        cacheSelection.cacheFields(selectedFields)
+        val normalizedKeys = fields
+            .map { it.key.trim().lowercase() }
+            .toSet()
+        _selectedKeys.value = normalizedKeys
+        val selectedByKey = _fields.value.filter { normalizedKeys.contains(it.key.trim().lowercase()) }
+        cacheSelection.cacheFields(selectedByKey)
     }
 
     fun clearSelectedFields() {
+        _selectedKeys.value = emptySet()
         cacheSelection.clearCachedFields()
-        _selectedFields.value = emptyList()
     }
 
     fun toggleFieldSelection(field: FieldDomain) {
-        _selectedFields.update { current -> if (field in current) current - field else current + field }
+        val normalized = field.key.trim().lowercase()
+        _selectedKeys.update { current ->
+            if (current.contains(normalized)) current - normalized else current + normalized
+        }
     }
 
     fun updateSearch(query: String, attribute: SearchFieldBy) {
@@ -259,13 +286,25 @@ class FieldViewModel @Inject constructor(
     // ----------------------------- Internals --------------------------------
 
     private fun refresh() {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        val sequence = ++refreshSequence
+        refreshJob = viewModelScope.launch {
             _isLoading.value = true
-            val fields = withContext(Dispatchers.IO) {
-                fieldRepository.getAllFields().first()
+            try {
+                fieldRepository
+                    .getAllFieldsProgressive(firstBatchSize = 1, chunkSize = 1)
+                    .collect { progressivelyLoaded ->
+                        _fields.value = progressivelyLoaded
+                    }
+            } catch (_: CancellationException) {
+                return@launch
+            } catch (throwable: Throwable) {
+                _events.tryEmit(FieldEvent.Error(throwable))
+            } finally {
+                if (refreshSequence == sequence) {
+                    _isLoading.value = false
+                }
             }
-            _fields.value = fields
-            _isLoading.value = false
         }
     }
 
@@ -323,7 +362,7 @@ class FieldViewModel @Inject constructor(
                             fieldRepository.updateAlias(field.key, aliasTrimmed)
                         }
                         if (shouldUpdateTag) {
-                            Log.d("FieldViewModel", "Updating tag for ${field.key} to ${newField.tag.getSafeTag()}")
+                            AppLogger.debug("FieldViewModel", "event=update_tag key=${field.key}")
                             fieldRepository.updateTag(field.key, newField.tag.getSafeTag())
                         }
                     }
@@ -370,73 +409,295 @@ class FieldViewModel @Inject constructor(
         }
     }
 
+    fun restoreDeletedFields(fields: List<FieldDomain>) {
+        if (fields.isEmpty()) return
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMutex.withLock {
+                        fields.forEach { field ->
+                            fieldRepository.saveFieldIfNotExists(normalize(field))
+                        }
+                    }
+                }
+            }
+            _isLoading.value = false
+            result.onSuccess {
+                refresh()
+            }.onFailure { e ->
+                _events.tryEmit(FieldEvent.Error(e))
+            }
+        }
+    }
+
     /**
-     * Fetches fields from Firebase, decrypts them, and saves them to the local database.
-     * Returns the number of fields successfully added.
+     * Fetches pending encrypted payloads and keeps them in-memory for user review.
+     */
+    fun loadCloudInbox(email: String) {
+        viewModelScope.launch {
+            _isCloudInboxLoading.value = true
+            _cloudInboxItems.value = emptyList()
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val payloads = cloudService.fetchPayloadInboxFromEmail(email).getOrThrow()
+                    payloads
+                        .sortedByDescending { it.creationAt }
+                        .map { payload ->
+                            val previewNames = if (CloudInboxPolicy.ENABLE_FIELD_NAME_PREVIEW) {
+                                cloudService.decryptPayloadFromInbox(email, payload)
+                                    .getOrNull()
+                                    ?.let(::extractPreviewFieldNames)
+                                    .orEmpty()
+                            } else {
+                                emptyList()
+                            }
+                            CloudInboxItem(
+                                payload = payload,
+                                previewFieldNames = previewNames
+                            )
+                        }
+                }
+            }
+            _isCloudInboxLoading.value = false
+
+            result.onSuccess { inbox ->
+                _cloudInboxItems.value = inbox
+                if (inbox.isEmpty()) {
+                    _events.tryEmit(FieldEvent.CloudInboxEmpty)
+                } else {
+                    _events.tryEmit(FieldEvent.CloudInboxLoaded(inbox.size))
+                }
+            }.onFailure { error ->
+                _events.tryEmit(FieldEvent.FetchError(error))
+            }
+        }
+    }
+
+    fun acceptCloudInboxItem(email: String, item: CloudInboxItem) {
+        viewModelScope.launch {
+            _isCloudInboxLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    enforceDecisionCooldownOrThrow()
+                    val decryptedJson = cloudService.decryptPayloadFromInbox(email, item.payload).getOrThrow()
+                    val summary = importDecryptedPayloadJsons(listOf(decryptedJson))
+                    val backendAcknowledged = cloudService.sendPayloadDecision(
+                        email = email,
+                        payload = item.payload,
+                        decision = CloudPayloadDecision.ACCEPT,
+                        notifySender = false
+                    ).getOrThrow()
+                    summary to backendAcknowledged
+                }
+            }
+            _isCloudInboxLoading.value = false
+
+            result.onSuccess { (summary, backendAcknowledged) ->
+                removeCloudInboxItem(item.payload)
+                emitCloudImportSummary(summary)
+                _events.tryEmit(FieldEvent.CloudInboxAccepted(backendAcknowledged))
+            }.onFailure { error ->
+                captureDecisionCooldown(error)
+                _events.tryEmit(FieldEvent.FetchError(error))
+            }
+        }
+    }
+
+    fun rejectCloudInboxItem(email: String, item: CloudInboxItem) {
+        viewModelScope.launch {
+            _isCloudInboxLoading.value = true
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    enforceDecisionCooldownOrThrow()
+                    cloudService.sendPayloadDecision(
+                        email = email,
+                        payload = item.payload,
+                        decision = CloudPayloadDecision.REJECT,
+                        notifySender = CloudInboxPolicy.ENABLE_REJECT_NOTIFY_SENDER
+                    ).getOrThrow()
+                }
+            }
+            _isCloudInboxLoading.value = false
+
+            result.onSuccess { backendAcknowledged ->
+                removeCloudInboxItem(item.payload)
+                _events.tryEmit(FieldEvent.CloudInboxRejected(backendAcknowledged))
+            }.onFailure { error ->
+                captureDecisionCooldown(error)
+                _events.tryEmit(FieldEvent.FetchError(error))
+            }
+        }
+    }
+
+    private fun enforceDecisionCooldownOrThrow() {
+        val remaining = remainingDecisionCooldownSeconds()
+        if (remaining > 0) {
+            throw CloudRateLimitedException(
+                retryAfterSeconds = remaining,
+                message = "Decision cooldown is still active."
+            )
+        }
+    }
+
+    private fun captureDecisionCooldown(error: Throwable) {
+        val rateLimited = error as? CloudRateLimitedException ?: return
+        val retryAfter = rateLimited.retryAfterSeconds ?: return
+        if (retryAfter <= 0) return
+        val cooldownUntil = Instant.now().epochSecond + retryAfter
+        if (cooldownUntil > decisionCooldownUntilEpochSeconds) {
+            decisionCooldownUntilEpochSeconds = cooldownUntil
+        }
+    }
+
+    private fun remainingDecisionCooldownSeconds(): Long {
+        val now = Instant.now().epochSecond
+        val remaining = decisionCooldownUntilEpochSeconds - now
+        return if (remaining > 0) remaining else 0
+    }
+
+    /**
+     * Legacy immediate-sync entrypoint. Kept for compatibility, but current UI uses inbox review flow.
      */
     fun fetchFieldsFromCloud(email: String) {
         viewModelScope.launch {
             _isLoading.value = true
-
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-
-                    // payloadData: Result<List<String>>
-                    val payloadData = cloudService.fetchPayloadDataFromEmail(email)
-
-                    val jsonStrings: List<String> = payloadData.getOrThrow()
-                    if (jsonStrings.isEmpty()) {
-                        throw IllegalStateException("No payloads returned from cloud")
+                    val payloads = cloudService.fetchPayloadInboxFromEmail(email).getOrThrow()
+                    val jsonStrings = payloads.map { payload ->
+                        cloudService.decryptPayloadFromInbox(email, payload).getOrThrow()
                     }
-
-                    var addedCount = 0
-
-                    // One lock for the whole batch to keep repository writes consistent
-                    writeMutex.withLock {
-                        jsonStrings.forEachIndexed { idx, jsonString ->
-                            Log.d("FieldViewModel", "Fetched payload[$idx]: $jsonString")
-
-                            val jsonObject = JSONObject(jsonString)
-                            val keys = jsonObject.keys()
-
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                val value = jsonObject.getString(key)
-
-                                val field = FieldDomain(
-                                    key = key,
-                                    value = value,
-                                    keyAlias = "",
-                                    tag = Tag.Unknown,
-                                    dateAdded = Instant.now()
-                                )
-
-                                val created = fieldRepository.saveFieldIfNotExists(normalize(field))
-                                if (created) addedCount++
-
-                                Log.d("FieldViewModel", "Fetched key: $key")
-                            }
-                        }
-                    }
-
-                    addedCount
+                    importDecryptedPayloadJsons(jsonStrings)
                 }
             }
-
             _isLoading.value = false
 
-            result.onSuccess { count ->
-                if (count > 0) {
-                    _events.tryEmit(FieldEvent.FetchedFromCloud(count))
-                    refresh()
-                } else {
-                    _events.tryEmit(FieldEvent.NoNewFields)
-                }
-            }.onFailure { e ->
-                _events.tryEmit(FieldEvent.FetchError(e))
+            result.onSuccess(::emitCloudImportSummary).onFailure { error ->
+                _events.tryEmit(FieldEvent.FetchError(error))
             }
         }
     }
+
+    private suspend fun importDecryptedPayloadJsons(jsonStrings: List<String>): CloudFetchSummary {
+        if (jsonStrings.isEmpty()) {
+            return CloudFetchSummary(
+                downloadedKeys = emptyList(),
+                loadedKeys = emptyList(),
+                preDownloadedKeys = emptyList()
+            )
+        }
+
+        val downloadedKeys = mutableListOf<String>()
+        val loadedKeys = mutableListOf<String>()
+        val preDownloadedKeys = mutableListOf<String>()
+
+        writeMutex.withLock {
+            val existingKeys = fieldRepository
+                .getAllFields()
+                .first()
+                .map { it.key.trim().lowercase() }
+                .toMutableSet()
+
+            jsonStrings.forEachIndexed { idx, jsonString ->
+                AppLogger.debug("FieldViewModel", "event=fetched_payload index=$idx")
+
+                val jsonObject = JSONObject(jsonString)
+                val keys = jsonObject.keys()
+
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val normalizedKey = key.trim()
+                    downloadedKeys += normalizedKey
+
+                    val rawValue = jsonObject.opt(key)
+                    val (value, alias) = when (rawValue) {
+                        is JSONObject -> {
+                            val nestedValue = rawValue.optString("value")
+                            val nestedAlias = rawValue.optString("alias")
+                            nestedValue to nestedAlias
+                        }
+                        is String -> rawValue to ""
+                        is JSONArray -> rawValue.toString() to ""
+                        null -> "" to ""
+                        else -> rawValue.toString() to ""
+                    }
+
+                    if (existingKeys.contains(normalizedKey.lowercase())) {
+                        preDownloadedKeys += normalizedKey
+                        continue
+                    }
+
+                    val field = FieldDomain(
+                        key = normalizedKey,
+                        value = value,
+                        keyAlias = alias,
+                        tag = Tag.Unknown,
+                        dateAdded = Instant.now()
+                    )
+
+                    val created = fieldRepository.saveFieldIfNotExists(normalize(field))
+                    if (created) {
+                        loadedKeys += normalizedKey
+                        existingKeys += normalizedKey.lowercase()
+                    } else {
+                        preDownloadedKeys += normalizedKey
+                    }
+
+                    AppLogger.debug("FieldViewModel", "event=fetched_key key=$key")
+                }
+            }
+        }
+
+        return CloudFetchSummary(
+            downloadedKeys = downloadedKeys.distinctBy { it.lowercase() },
+            loadedKeys = loadedKeys.distinctBy { it.lowercase() },
+            preDownloadedKeys = preDownloadedKeys.distinctBy { it.lowercase() }
+        )
+    }
+
+    private fun emitCloudImportSummary(summary: CloudFetchSummary) {
+        if (summary.loadedKeys.isNotEmpty()) {
+            _events.tryEmit(
+                FieldEvent.FetchedFromCloud(
+                    count = summary.loadedKeys.size,
+                    loadedKeys = summary.loadedKeys,
+                    preDownloadedKeys = summary.preDownloadedKeys
+                )
+            )
+            refresh()
+        } else if (summary.downloadedKeys.isNotEmpty()) {
+            _events.tryEmit(
+                FieldEvent.FetchedFromCloud(
+                    count = 0,
+                    loadedKeys = emptyList(),
+                    preDownloadedKeys = summary.preDownloadedKeys
+                )
+            )
+        } else {
+            _events.tryEmit(FieldEvent.NoNewFields)
+        }
+    }
+
+    private fun removeCloudInboxItem(payload: DataPayload) {
+        _cloudInboxItems.update { current ->
+            current.filterNot { item ->
+                item.payload.verification == payload.verification &&
+                    item.payload.user == payload.user &&
+                    item.payload.recipient == payload.recipient
+            }
+        }
+    }
+
+    private fun extractPreviewFieldNames(jsonString: String): List<String> = runCatching {
+        val jsonObject = JSONObject(jsonString)
+        val names = mutableListOf<String>()
+        val keys = jsonObject.keys()
+        while (keys.hasNext()) {
+            names += keys.next()
+        }
+        names.distinctBy { it.lowercase() }.sortedBy { it.lowercase() }.take(12)
+    }.getOrDefault(emptyList())
 
     fun changePasswordAndRewrapDataKey(
         context: Context,
