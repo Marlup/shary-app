@@ -1,7 +1,7 @@
 package com.shary.app.core.domain.types.enums
 
-enum class SortByParameter(uiName: String) {
+enum class SortByParameter(val label: String) {
     KEY("Key"),
     TAG("Tag"),
-    DATE_ADDED("Date Added")
+    DATE_ADDED("Added at")
 }

@@ -13,8 +13,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalConfiguration
 import com.shary.app.core.domain.types.enums.PredefinedKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,11 +59,14 @@ import com.shary.app.ui.theme.SurfaceLight
 import com.shary.app.ui.theme.Violet200
 import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet900
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 private enum class ValueTypeOption(val wireKind: String, val label: String) {
     List("list", "List"),
+    LinkUrl("link_url", "Link/URL"),
     Json("json", "JSON"),
     Questionnaire("questionnaire", "Questionnaire"),
     Yaml("yaml", "YAML"),
@@ -70,7 +74,10 @@ private enum class ValueTypeOption(val wireKind: String, val label: String) {
 
     companion object {
         fun fromWire(kind: String?): ValueTypeOption =
-            entries.firstOrNull { it.wireKind.equals(kind.orEmpty(), ignoreCase = true) } ?: Json
+            when (kind.orEmpty().trim().lowercase()) {
+                "link", "url" -> LinkUrl
+                else -> entries.firstOrNull { it.wireKind.equals(kind.orEmpty(), ignoreCase = true) } ?: Json
+            }
     }
 }
 
@@ -92,6 +99,50 @@ private data class ParsedValueDraft(
 )
 
 private val valueSpecJson = Json { ignoreUnknownKeys = true }
+private val httpUrlRegex = Regex("^(https?|ftp)://\\S+$", RegexOption.IGNORE_CASE)
+private val mailtoRegex = Regex("^mailto:\\S+@\\S+\\.\\S+$", RegexOption.IGNORE_CASE)
+private val fileUriRegex = Regex("^(content|file)://\\S+$", RegexOption.IGNORE_CASE)
+
+private fun autoDetectValueSpec(plainValue: String): ValueSpecDraft? {
+    val candidate = plainValue.trim()
+    if (candidate.isBlank()) return null
+
+    if (fileUriRegex.matches(candidate)) {
+        return ValueSpecDraft(
+            typedEnabled = true,
+            type = ValueTypeOption.File
+        )
+    }
+    if (httpUrlRegex.matches(candidate) || mailtoRegex.matches(candidate)) {
+        return ValueSpecDraft(
+            typedEnabled = true,
+            type = ValueTypeOption.LinkUrl
+        )
+    }
+    val jsonDetected = runCatching {
+        val parsed = valueSpecJson.decodeFromString(JsonElement.serializer(), candidate)
+        parsed is JsonObject || parsed is JsonArray
+    }.getOrDefault(false)
+    if (jsonDetected) {
+        return ValueSpecDraft(
+            typedEnabled = true,
+            type = ValueTypeOption.Json
+        )
+    }
+
+    val commaItems = candidate.split(",")
+        .map(String::trim)
+        .filter { it.isNotEmpty() }
+    if (commaItems.size >= 2) {
+        return ValueSpecDraft(
+            typedEnabled = true,
+            type = ValueTypeOption.List,
+            separator = ","
+        )
+    }
+
+    return null
+}
 
 private fun parseValueDraft(rawValue: String): ParsedValueDraft {
     val parsed = FieldValueContract.parse(rawValue)
@@ -471,7 +522,10 @@ private fun TypedValueEditor(
             label = { Text("Value type") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
-                .menuAnchor()
+                .menuAnchor(
+                    type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                    enabled = true
+                )
                 .fillMaxWidth()
         )
         ExposedDropdownMenu(
@@ -558,7 +612,7 @@ private fun TypedValueEditor(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        ValueTypeOption.Json, ValueTypeOption.Yaml -> {
+        ValueTypeOption.Json, ValueTypeOption.Yaml, ValueTypeOption.LinkUrl -> {
             Text(
                 "No extra options for this type.",
                 style = MaterialTheme.typography.bodySmall,
@@ -632,8 +686,9 @@ fun EditorAddFieldDialog(
     confirmLabel: String
 ) {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val sheetMaxHeight = (configuration.screenHeightDp * 0.7f).dp
+    val density = LocalDensity.current
+    val windowInfo = LocalWindowInfo.current
+    val sheetMaxHeight = with(density) { (windowInfo.containerSize.height.toDp() * 0.7f) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Seed empty domain model (dateAdded set on confirm inside FieldEditorDialog)
@@ -642,6 +697,7 @@ fun EditorAddFieldDialog(
     var showAdvanced by remember { mutableStateOf(false) }
     var valueSpecDraft by remember { mutableStateOf(ValueSpecDraft()) }
     var listItems by remember { mutableStateOf(emptyList<String>()) }
+    var typedSpecTouched by remember { mutableStateOf(false) }
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -668,6 +724,7 @@ fun EditorAddFieldDialog(
         }
     fun isValid(): Boolean = editingField.key.isNotBlank() && currentValueToPersist().isNotBlank()
     fun onSpecDraftChange(updatedDraft: ValueSpecDraft) {
+        typedSpecTouched = true
         val previousDraft = valueSpecDraft
         val wasList = previousDraft.typedEnabled && previousDraft.type == ValueTypeOption.List
         val isList = updatedDraft.typedEnabled && updatedDraft.type == ValueTypeOption.List
@@ -816,11 +873,18 @@ fun EditorAddFieldDialog(
                     onClick = {
                         showErrors = true
                         if (!isValid()) return@SharyPrimaryButton
+                        val persistedPlainValue = currentValueToPersist()
+                        val draftToPersist =
+                            if (!typedSpecTouched && !valueSpecDraft.typedEnabled) {
+                                autoDetectValueSpec(persistedPlainValue) ?: valueSpecDraft
+                            } else {
+                                valueSpecDraft
+                            }
                         val normalizedField = editingField.copy(
                             key = editingField.key.trim(),
                             value = encodeValueFromDraft(
-                                plainValue = currentValueToPersist(),
-                                draft = valueSpecDraft
+                                plainValue = persistedPlainValue,
+                                draft = draftToPersist
                             ),
                             keyAlias = editingField.keyAlias.trim(),
                             tag = editingField.tag,
@@ -849,8 +913,9 @@ fun EditorUpdateFieldDialog(
     onRecoverPreviousValue: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val sheetMaxHeight = (configuration.screenHeightDp * 0.7f).dp
+    val density = LocalDensity.current
+    val windowInfo = LocalWindowInfo.current
+    val sheetMaxHeight = with(density) { (windowInfo.containerSize.height.toDp() * 0.7f) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val parsedDraft = remember(initialField) { parseValueDraft(initialField.value) }
@@ -869,6 +934,7 @@ fun EditorUpdateFieldDialog(
     var showErrors by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
     var valueSpecDraft by remember(initialField) { mutableStateOf(parsedDraft.specDraft) }
+    var typedSpecTouched by remember(initialField) { mutableStateOf(false) }
     var listItems by remember(initialField) {
         mutableStateOf(
             if (parsedDraft.specDraft.typedEnabled && parsedDraft.specDraft.type == ValueTypeOption.List) {
@@ -904,6 +970,7 @@ fun EditorUpdateFieldDialog(
         }
     fun isValid(): Boolean = editingField.key.isNotBlank() && currentValueToPersist().isNotBlank()
     fun onSpecDraftChange(updatedDraft: ValueSpecDraft) {
+        typedSpecTouched = true
         val previousDraft = valueSpecDraft
         val wasList = previousDraft.typedEnabled && previousDraft.type == ValueTypeOption.List
         val isList = updatedDraft.typedEnabled && updatedDraft.type == ValueTypeOption.List
@@ -1066,11 +1133,18 @@ fun EditorUpdateFieldDialog(
                     onClick = {
                         showErrors = true
                         if (!isValid()) return@SharyPrimaryButton
+                        val persistedPlainValue = currentValueToPersist()
+                        val draftToPersist =
+                            if (!typedSpecTouched && !valueSpecDraft.typedEnabled) {
+                                autoDetectValueSpec(persistedPlainValue) ?: valueSpecDraft
+                            } else {
+                                valueSpecDraft
+                            }
                         val normalizedField = editingField.copy(
                             key = editingField.key.trim(),
                             value = encodeValueFromDraft(
-                                plainValue = currentValueToPersist(),
-                                draft = valueSpecDraft
+                                plainValue = persistedPlainValue,
+                                draft = draftToPersist
                             ),
                             keyAlias = editingField.keyAlias.trim(),
                             tag = editingField.tag,
