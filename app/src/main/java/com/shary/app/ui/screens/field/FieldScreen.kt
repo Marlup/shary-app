@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,12 +17,11 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -78,11 +76,16 @@ import com.shary.app.ui.screens.field.components.AddCopiedFieldDialog
 import com.shary.app.ui.screens.field.components.AddFieldDialog
 import com.shary.app.ui.screens.field.components.ChangePasswordDialog
 import com.shary.app.ui.screens.field.components.CloudInboxReviewDialog
+import com.shary.app.ui.screens.field.components.EditFieldAliasDialog
+import com.shary.app.ui.screens.field.components.EditFieldTagDialog
+import com.shary.app.ui.screens.field.components.EditFieldValueDialog
+import com.shary.app.ui.screens.field.components.FieldDetailDialog
 import com.shary.app.ui.screens.field.components.SortMenu
 import com.shary.app.ui.screens.field.components.UpdateFieldDialog
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.cloudErrorMessage
 import com.shary.app.ui.theme.Violet50
+import com.shary.app.ui.utils.CopyFeedback
 import com.shary.app.ui.utils.isOnWifiNetwork
 import com.shary.app.utils.BiometricAuthManager
 import com.shary.app.utils.log.AppLogger
@@ -95,6 +98,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@Suppress("ASSIGNED_VALUE_IS_NEVER_READ", "UNUSED_VALUE")
 @Composable
 fun FieldsScreen(navController: NavHostController) {
     val context = LocalContext.current
@@ -125,18 +129,24 @@ fun FieldsScreen(navController: NavHostController) {
     var openAddFieldCopyDialog by remember { mutableStateOf(false) }
     var openUpdateFieldDialog by remember { mutableStateOf(false) }
     var openCloudInboxDialog by remember { mutableStateOf(false) }
+    var openEditValueDialog by remember { mutableStateOf(false) }
+    var openEditAliasDialog by remember { mutableStateOf(false) }
+    var openEditTagDialog by remember { mutableStateOf(false) }
     var autoInboxAttempted by rememberSaveable { mutableStateOf(false) }
     var editingField by remember { mutableStateOf<FieldDomain?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var lastSubmittedKey by remember { mutableStateOf<String?>(null) }
     var lastFlow by remember { mutableStateOf(AddFlow.NONE) }
     var searchQuery by remember { mutableStateOf("") }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var activeFilter by remember { mutableStateOf("All") }
     var filterExpanded by remember { mutableStateOf(false) }
     var moreExpanded by remember { mutableStateOf(false) }
     var suppressNextMultiDeletedFeedback by remember { mutableStateOf(false) }
     var hasLoggedFirstBatchRender by rememberSaveable { mutableStateOf(false) }
     var clipboardAutoClearJob by remember { mutableStateOf<Job?>(null) }
+    var detailField by remember { mutableStateOf<FieldDomain?>(null) }
+    var quickActionField by remember { mutableStateOf<FieldDomain?>(null) }
 
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
 
@@ -279,6 +289,19 @@ fun FieldsScreen(navController: NavHostController) {
         }
     }
 
+    fun typedValueLabel(field: FieldDomain): String? {
+        val kind = FieldValueContract.parse(field.value).envelope?.spec?.kind?.trim()?.lowercase()
+        return when (kind) {
+            "json" -> "JSON"
+            "yaml", "yml" -> "YAML"
+            "list" -> "List"
+            "questionnaire" -> "Questionnaire"
+            "file" -> "File"
+            "link_url", "url", "link" -> "Link/URL"
+            else -> null
+        }
+    }
+
     LaunchedEffect(visibleFields.size) {
         if (!hasLoggedFirstBatchRender && visibleFields.isNotEmpty()) {
             hasLoggedFirstBatchRender = true
@@ -297,7 +320,6 @@ fun FieldsScreen(navController: NavHostController) {
         }
     }
 
-    val selectedSingle = selectedFields.singleOrNull()
     val cardVerticalPadding = if (settings.compactListMode) 2.dp else 4.dp
     val skeletonHeight = if (settings.compactListMode) 80.dp else 96.dp
 
@@ -358,6 +380,17 @@ fun FieldsScreen(navController: NavHostController) {
                         "${visibleFields.size} shown"
                     },
                     actions = {
+                        SharyIconButton(
+                            icon = Icons.Default.Search,
+                            contentDescription = if (showSearch) "Hide search" else "Show search",
+                            selected = showSearch,
+                            onClick = {
+                                showSearch = !showSearch
+                                if (!showSearch) {
+                                    searchQuery = ""
+                                }
+                            }
+                        )
                         SortMenu(
                             currentSort = sortBy,
                             isAscendingMap = ascendingSortByMap,
@@ -365,7 +398,7 @@ fun FieldsScreen(navController: NavHostController) {
                         )
                         Box {
                             SharyIconButton(
-                                icon = Icons.Default.FilterList,
+                                icon = Icons.Default.LocalOffer,
                                 contentDescription = "Filter tags",
                                 onClick = { filterExpanded = true }
                             )
@@ -410,24 +443,6 @@ fun FieldsScreen(navController: NavHostController) {
                             contentDescription = "Add field",
                             onClick = { openAddDialog = true }
                         )
-                        if (selectedSingle != null) {
-                            SharyIconButton(
-                                icon = Icons.Default.Edit,
-                                contentDescription = "Edit selected field",
-                                onClick = {
-                                    editingField = selectedSingle
-                                    openUpdateFieldDialog = true
-                                }
-                            )
-                            SharyIconButton(
-                                icon = Icons.Default.ContentCopy,
-                                contentDescription = "Duplicate selected field",
-                                onClick = {
-                                    editingField = selectedSingle
-                                    openAddFieldCopyDialog = true
-                                }
-                            )
-                        }
                         Box {
                             SharyIconButton(
                                 icon = Icons.Default.MoreVert,
@@ -475,11 +490,13 @@ fun FieldsScreen(navController: NavHostController) {
                         }
                     }
                 )
-                SharySearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    placeholder = "Search your fields…"
-                )
+                if (showSearch) {
+                    SharySearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = "Search your fields…"
+                    )
+                }
             }
         },
         bottomBar = {
@@ -488,7 +505,7 @@ fun FieldsScreen(navController: NavHostController) {
                     selectedCount = selectedFields.size,
                     onClearSelection = fieldViewModel::clearSelectedFields,
                     primaryAction = DockAction(
-                        label = "Review & Send →",
+                        label = "Review",
                         enabled = selectedFields.isNotEmpty() && userViewModel.anyCachedUser()
                     ),
                     secondaryActions = emptyList(),
@@ -597,17 +614,20 @@ fun FieldsScreen(navController: NavHostController) {
                                 fieldKey = field.key,
                                 fieldValue = FieldValueContract.parse(field.value).plainData,
                                 tag = field.tag,
+                                typedValueLabel = typedValueLabel(field),
                                 alias = field.keyAlias.takeIf { it.isNotBlank() }?.let { "alias: $it" },
                                 isSelected = selectedFields.any {
                                     it.key.trim().equals(field.key.trim(), ignoreCase = true)
                                 },
-                                onClick = { fieldViewModel.toggleFieldSelection(field) },
+                                onCardTap = { detailField = field },
+                                onToggleSelection = { fieldViewModel.toggleFieldSelection(field) },
                                 onLongPressCopy = { value ->
                                     scope.launch {
                                         clipboard.setClipEntry(
                                             ClipEntry(ClipData.newPlainText("field_value", value))
                                         )
                                     }
+                                    CopyFeedback.playSuccessTone()
                                     clipboardAutoClearJob?.cancel()
                                     if (settings.clipboardAutoClearSeconds > 0) {
                                         clipboardAutoClearJob = scope.launch {
@@ -627,6 +647,73 @@ fun FieldsScreen(navController: NavHostController) {
                 }
             }
         }
+    }
+
+    detailField?.let { field ->
+        FieldDetailDialog(
+            keyName = field.key,
+            value = FieldValueContract.parse(field.value).plainData,
+            alias = field.keyAlias,
+            tag = field.tag,
+            typedValueLabel = typedValueLabel(field),
+            onCopyValue = {
+                val plainValue = FieldValueContract.parse(field.value).plainData
+                scope.launch {
+                    clipboard.setClipEntry(
+                        ClipEntry(ClipData.newPlainText("field_value", plainValue))
+                    )
+                }
+                CopyFeedback.playSuccessTone()
+                clipboardAutoClearJob?.cancel()
+                if (settings.clipboardAutoClearSeconds > 0) {
+                    clipboardAutoClearJob = scope.launch {
+                        delay(settings.clipboardAutoClearSeconds * 1000L)
+                        clipboard.setClipEntry(
+                            ClipEntry(ClipData.newPlainText("", ""))
+                        )
+                    }
+                }
+                snackbarMessage = "Value copied to clipboard"
+            },
+            onDuplicateField = {
+                editingField = field
+                openAddFieldCopyDialog = true
+            },
+            onEditValue = {
+                quickActionField = field
+                detailField = null
+                openEditValueDialog = true
+            },
+            onEditTag = {
+                quickActionField = field
+                detailField = null
+                openEditTagDialog = true
+            },
+            onEditAlias = {
+                quickActionField = field
+                detailField = null
+                openEditAliasDialog = true
+            },
+            onDeleteField = {
+                val deletedSnapshot = listOf(field)
+                suppressNextMultiDeletedFeedback = true
+                fieldViewModel.deleteFields(deletedSnapshot)
+                fieldViewModel.clearSelectedFields()
+                detailField = null
+                scope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Deleted 1 field",
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Long
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        fieldViewModel.restoreDeletedFields(deletedSnapshot)
+                    }
+                }
+            },
+            onDismiss = { detailField = null }
+        )
     }
 
     if (openAddDialog) {
@@ -672,6 +759,63 @@ fun FieldsScreen(navController: NavHostController) {
                 fieldViewModel.recoverPreviousValue(editingField!!)
                 editingField = null
                 openUpdateFieldDialog = false
+            }
+        )
+    }
+
+    val editValueTarget = quickActionField
+    if (openEditValueDialog && editValueTarget != null) {
+        EditFieldValueDialog(
+            initialValue = FieldValueContract.parse(editValueTarget.value).plainData,
+            onDismiss = {
+                openEditValueDialog = false
+                quickActionField = null
+            },
+            onConfirm = { newValue ->
+                fieldViewModel.updateField(
+                    editValueTarget,
+                    editValueTarget.copy(value = newValue)
+                )
+                openEditValueDialog = false
+                quickActionField = null
+            }
+        )
+    }
+
+    val editAliasTarget = quickActionField
+    if (openEditAliasDialog && editAliasTarget != null) {
+        EditFieldAliasDialog(
+            initialAlias = editAliasTarget.keyAlias,
+            onDismiss = {
+                openEditAliasDialog = false
+                quickActionField = null
+            },
+            onConfirm = { newAlias ->
+                fieldViewModel.updateField(
+                    editAliasTarget,
+                    editAliasTarget.copy(keyAlias = newAlias)
+                )
+                openEditAliasDialog = false
+                quickActionField = null
+            }
+        )
+    }
+
+    val editTagTarget = quickActionField
+    if (openEditTagDialog && editTagTarget != null) {
+        EditFieldTagDialog(
+            initialTag = editTagTarget.tag,
+            onDismiss = {
+                openEditTagDialog = false
+                quickActionField = null
+            },
+            onConfirm = { newTag ->
+                fieldViewModel.updateField(
+                    editTagTarget,
+                    editTagTarget.copy(tag = newTag)
+                )
+                openEditTagDialog = false
+                quickActionField = null
             }
         )
     }

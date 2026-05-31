@@ -2,7 +2,6 @@ package com.shary.app.ui.screens.user
 
 import android.content.ClipData
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,8 +14,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarDuration
@@ -30,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,8 +54,10 @@ import com.shary.app.ui.components.UserCard
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.user.components.AddCopyUserDialog
 import com.shary.app.ui.screens.user.components.AddUserDialog
+import com.shary.app.ui.screens.user.components.UserDetailDialog
 import com.shary.app.ui.screens.user.components.UserEditorDialog
 import com.shary.app.ui.theme.Violet50
+import com.shary.app.ui.utils.CopyFeedback
 import com.shary.app.viewmodels.configuration.SettingsViewModel
 import com.shary.app.viewmodels.field.FieldViewModel
 import com.shary.app.viewmodels.request.RequestViewModel
@@ -65,6 +67,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@Suppress("ASSIGNED_VALUE_IS_NEVER_READ", "UNUSED_VALUE")
 @Composable
 fun UsersScreen(navController: NavHostController) {
     val clipboard = LocalClipboard.current
@@ -87,7 +90,9 @@ fun UsersScreen(navController: NavHostController) {
     var editingUser by remember { mutableStateOf<UserDomain?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var clipboardAutoClearJob by remember { mutableStateOf<Job?>(null) }
+    var detailUser by remember { mutableStateOf<UserDomain?>(null) }
 
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
 
@@ -151,6 +156,17 @@ fun UsersScreen(navController: NavHostController) {
                     subtitle = "${userList.size} stored",
                     actions = {
                         SharyIconButton(
+                            icon = Icons.Default.Search,
+                            contentDescription = if (showSearch) "Hide search" else "Show search",
+                            selected = showSearch,
+                            onClick = {
+                                showSearch = !showSearch
+                                if (!showSearch) {
+                                    searchQuery = ""
+                                }
+                            }
+                        )
+                        SharyIconButton(
                             icon = Icons.Default.Add,
                             contentDescription = "Add user",
                             onClick = { openAddDialog = true }
@@ -175,11 +191,13 @@ fun UsersScreen(navController: NavHostController) {
                         }
                     }
                 )
-                SharySearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    placeholder = "Search contacts by alias or email..."
-                )
+                if (showSearch) {
+                    SharySearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = "Search contacts by alias or email..."
+                    )
+                }
             }
         },
         bottomBar = {
@@ -188,7 +206,7 @@ fun UsersScreen(navController: NavHostController) {
                     selectedCount = selectedUsers.size,
                     onClearSelection = userViewModel::clearSelectedUsers,
                     primaryAction = DockAction(
-                        label = "Review & Send →",
+                        label = "Review",
                         enabled = selectedUsers.isNotEmpty() &&
                                 (fieldViewModel.anyFieldCached() || requestViewModel.anyDraftFieldCached())
                     ),
@@ -272,13 +290,15 @@ fun UsersScreen(navController: NavHostController) {
                             isSelected = selectedUsers.any {
                                 it.email.trim().equals(user.email.trim(), ignoreCase = true)
                             },
-                            onClick = { userViewModel.toggleUser(user) },
+                            onCardTap = { detailUser = user },
+                            onToggleSelection = { userViewModel.toggleUser(user) },
                             onLongPressCopy = { email ->
                                 scope.launch {
                                     clipboard.setClipEntry(
                                         ClipEntry(ClipData.newPlainText("contact_email", email))
                                     )
                                 }
+                                CopyFeedback.playSuccessTone()
                                 clipboardAutoClearJob?.cancel()
                                 if (settings.clipboardAutoClearSeconds > 0) {
                                     clipboardAutoClearJob = scope.launch {
@@ -297,6 +317,14 @@ fun UsersScreen(navController: NavHostController) {
                 }
             }
         }
+    }
+
+    detailUser?.let { user ->
+        UserDetailDialog(
+            name = user.username,
+            email = user.email,
+            onDismiss = { detailUser = null }
+        )
     }
 
     if (openAddDialog) {

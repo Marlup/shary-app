@@ -60,6 +60,7 @@ import com.shary.app.ui.components.SharyTopBar
 import com.shary.app.ui.components.SectionTab
 import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.request.utils.AddRequestDialog
+import com.shary.app.ui.screens.request.utils.RequestDetailDialog
 import com.shary.app.ui.screens.request.utils.RequestInboxReviewDialog
 import com.shary.app.ui.screens.utils.cloudErrorMessage
 import com.shary.app.ui.screens.utils.FieldMatchingDialog
@@ -78,6 +79,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
+@Suppress("ASSIGNED_VALUE_IS_NEVER_READ", "UNUSED_VALUE")
 @Composable
 fun RequestsScreen(navController: NavHostController) {
     val context = LocalContext.current
@@ -109,6 +111,7 @@ fun RequestsScreen(navController: NavHostController) {
     var openRequestInboxDialog by remember { mutableStateOf(false) }
     var autoInboxAttempted by rememberSaveable { mutableStateOf(false) }
     var selectedReceivedIndex by remember { mutableStateOf<Int?>(null) }
+    var detailRequestIndex by remember { mutableStateOf<Int?>(null) }
     val cardVerticalPadding = if (settings.compactListMode) 2.dp else 4.dp
 
     val lifecycleOwner = rememberUpdatedState(LocalLifecycleOwner.current)
@@ -375,12 +378,21 @@ fun RequestsScreen(navController: NavHostController) {
                                 RequestStatusTone.SENT
                             },
                             isActive = isActive,
-                            onClick = {
+                            onCardTap = {
+                                detailRequestIndex = index
+                            },
+                            onToggleSelection = {
                                 if (listMode == RequestListMode.RECEIVED) {
-                                    selectedReceivedIndex = index
-                                    requestViewModel.clearDraftFields()
-                                    requestViewModel.setActiveReceivedRequest(request)
-                                    request.fields.forEach { requestViewModel.toggleFieldSelection(it) }
+                                    if (selectedReceivedIndex == index) {
+                                        selectedReceivedIndex = null
+                                        requestViewModel.clearDraftFields()
+                                        requestViewModel.clearActiveReceivedRequest()
+                                    } else {
+                                        selectedReceivedIndex = index
+                                        requestViewModel.clearDraftFields()
+                                        requestViewModel.setActiveReceivedRequest(request)
+                                        request.fields.forEach { requestViewModel.toggleFieldSelection(it) }
+                                    }
                                 }
                             },
                             onMatchClick = if (listMode == RequestListMode.RECEIVED) {
@@ -394,6 +406,16 @@ fun RequestsScreen(navController: NavHostController) {
                 }
             }
         }
+    }
+
+    val detailRequest = detailRequestIndex?.let { idx -> requestsToShow.getOrNull(idx) }
+    if (detailRequest != null) {
+        RequestDetailDialog(
+            senderName = detailRequest.user.ifBlank { "Unknown sender" },
+            timestamp = detailRequest.dateAdded.formatRelativeLabel(),
+            keys = detailRequest.fields.map { it.key },
+            onDismiss = { detailRequestIndex = null }
+        )
     }
 
     if (showAddRequestSheet && listMode == RequestListMode.SENT) {
