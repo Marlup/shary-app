@@ -3,6 +3,8 @@ package com.shary.app.viewmodels.field
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.application.cloud.CloudFieldImportPlanner
+import com.shary.app.application.cloud.CloudImportDiff
 import com.shary.app.application.security.ChangePasswordAndRewrapDataKeyUseCase
 import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.events.FieldEvent
@@ -33,8 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import org.json.JSONArray
 
 @HiltViewModel
 class FieldViewModel @Inject constructor(
@@ -48,7 +48,8 @@ class FieldViewModel @Inject constructor(
     private data class CloudFetchSummary(
         val downloadedKeys: List<String>,
         val loadedKeys: List<String>,
-        val preDownloadedKeys: List<String>
+        val preDownloadedKeys: List<String>,
+        val diff: CloudImportDiff = CloudImportDiff()
     )
 
     // Domain state exposed to UI
@@ -441,20 +442,22 @@ class FieldViewModel @Inject constructor(
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val payloads = cloudService.fetchPayloadInboxFromEmail(email).getOrThrow()
+                    val existingFields = fieldRepository.getAllFields().first()
                     payloads
                         .sortedByDescending { it.creationAt }
                         .map { payload ->
-                            val previewNames = if (CloudInboxPolicy.ENABLE_FIELD_NAME_PREVIEW) {
-                                cloudService.decryptPayloadFromInbox(email, payload)
-                                    .getOrNull()
-                                    ?.let(::extractPreviewFieldNames)
-                                    .orEmpty()
-                            } else {
-                                emptyList()
+                            val decryptedJson = if (CloudInboxPolicy.ENABLE_FIELD_NAME_PREVIEW) {
+                                cloudService.decryptPayloadFromInbox(email, payload).getOrNull()
+                            } else null
+                            val plan = decryptedJson?.let {
+                                CloudFieldImportPlanner.plan(listOf(it), existingFields)
                             }
                             CloudInboxItem(
                                 payload = payload,
-                                previewFieldNames = previewNames
+                                previewFieldNames = decryptedJson
+                                    ?.let(CloudFieldImportPlanner::previewKeys)
+                                    .orEmpty(),
+                                importDiff = plan?.diff
                             )
                         }
                 }
@@ -588,72 +591,37 @@ class FieldViewModel @Inject constructor(
             )
         }
 
-        val downloadedKeys = mutableListOf<String>()
-        val loadedKeys = mutableListOf<String>()
-        val preDownloadedKeys = mutableListOf<String>()
+        val now = Instant.now()
 
-        writeMutex.withLock {
-            val existingKeys = fieldRepository
-                .getAllFields()
-                .first()
-                .map { it.key.trim().lowercase() }
-                .toMutableSet()
-
-            jsonStrings.forEachIndexed { idx, jsonString ->
+        return writeMutex.withLock {
+            jsonStrings.forEachIndexed { idx, _ ->
                 AppLogger.debug("FieldViewModel", "event=fetched_payload index=$idx")
-
-                val jsonObject = JSONObject(jsonString)
-                val keys = jsonObject.keys()
-
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val normalizedKey = key.trim()
-                    downloadedKeys += normalizedKey
-
-                    val rawValue = jsonObject.opt(key)
-                    val (value, alias) = when (rawValue) {
-                        is JSONObject -> {
-                            val nestedValue = rawValue.optString("value")
-                            val nestedAlias = rawValue.optString("alias")
-                            nestedValue to nestedAlias
-                        }
-                        is String -> rawValue to ""
-                        is JSONArray -> rawValue.toString() to ""
-                        null -> "" to ""
-                        else -> rawValue.toString() to ""
-                    }
-
-                    if (existingKeys.contains(normalizedKey.lowercase())) {
-                        preDownloadedKeys += normalizedKey
-                        continue
-                    }
-
-                    val field = FieldDomain(
-                        key = normalizedKey,
-                        value = value,
-                        keyAlias = alias,
-                        tag = Tag.Unknown,
-                        dateAdded = Instant.now()
-                    )
-
-                    val created = fieldRepository.saveFieldIfNotExists(normalize(field))
-                    if (created) {
-                        loadedKeys += normalizedKey
-                        existingKeys += normalizedKey.lowercase()
-                    } else {
-                        preDownloadedKeys += normalizedKey
-                    }
-
-                    AppLogger.debug("FieldViewModel", "event=fetched_key key=$key")
-                }
             }
-        }
 
-        return CloudFetchSummary(
-            downloadedKeys = downloadedKeys.distinctBy { it.lowercase() },
-            loadedKeys = loadedKeys.distinctBy { it.lowercase() },
-            preDownloadedKeys = preDownloadedKeys.distinctBy { it.lowercase() }
-        )
+            val existingFields = fieldRepository.getAllFields().first()
+            val plan = CloudFieldImportPlanner.plan(jsonStrings, existingFields)
+            val loadedKeys = mutableListOf<String>()
+            val preDownloadedKeys = plan.diff.duplicateKeys.toMutableList()
+
+            plan.fieldsToCreate.forEach { incoming ->
+                val created = fieldRepository.saveFieldIfNotExists(
+                    normalize(incoming.toFieldDomain(now))
+                )
+                    if (created) {
+                    loadedKeys += incoming.key
+                    } else {
+                    preDownloadedKeys += incoming.key
+                    }
+                AppLogger.debug("FieldViewModel", "event=fetched_key key=${incoming.key}")
+            }
+
+            CloudFetchSummary(
+                downloadedKeys = plan.incomingFields.map { it.key }.distinctBy { it.lowercase() },
+                loadedKeys = loadedKeys.distinctBy { it.lowercase() },
+                preDownloadedKeys = preDownloadedKeys.distinctBy { it.lowercase() },
+                diff = plan.diff
+            )
+        }
     }
 
     private fun emitCloudImportSummary(summary: CloudFetchSummary) {
@@ -688,16 +656,6 @@ class FieldViewModel @Inject constructor(
             }
         }
     }
-
-    private fun extractPreviewFieldNames(jsonString: String): List<String> = runCatching {
-        val jsonObject = JSONObject(jsonString)
-        val names = mutableListOf<String>()
-        val keys = jsonObject.keys()
-        while (keys.hasNext()) {
-            names += keys.next()
-        }
-        names.distinctBy { it.lowercase() }.sortedBy { it.lowercase() }.take(12)
-    }.getOrDefault(emptyList())
 
     fun changePasswordAndRewrapDataKey(
         context: Context,

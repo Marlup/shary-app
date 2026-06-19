@@ -63,6 +63,7 @@ import com.shary.app.core.domain.types.enums.SearchFieldBy
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import com.shary.app.infrastructure.security.helper.SecurityUtils.hashMessageB64
 import com.shary.app.ui.components.DockAction
+import com.shary.app.ui.components.CloudStatusStrip
 import com.shary.app.ui.components.EmptyState
 import com.shary.app.ui.components.FieldCard
 import com.shary.app.ui.components.SharyCommandDock
@@ -86,6 +87,7 @@ import com.shary.app.ui.screens.home.utils.Screen
 import com.shary.app.ui.screens.utils.cloudErrorMessage
 import com.shary.app.ui.theme.Violet50
 import com.shary.app.ui.utils.CopyFeedback
+import com.shary.app.ui.utils.cloudUiStatus
 import com.shary.app.ui.utils.isOnWifiNetwork
 import com.shary.app.utils.BiometricAuthManager
 import com.shary.app.utils.log.AppLogger
@@ -97,6 +99,18 @@ import com.shary.app.viewmodels.user.UserViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private fun typedListValueItems(field: FieldDomain): List<String> {
+    val parsed = FieldValueContract.parse(field.value)
+    val spec = parsed.envelope?.spec ?: return emptyList()
+    if (!spec.kind.equals("list", ignoreCase = true)) return emptyList()
+
+    val separator = spec.options["separator"].orEmpty().ifBlank { "," }
+    return parsed.plainData
+        .split(separator)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+}
 
 @Suppress("ASSIGNED_VALUE_IS_NEVER_READ", "UNUSED_VALUE")
 @Composable
@@ -122,7 +136,8 @@ fun FieldsScreen(navController: NavHostController) {
     val isCloudInboxLoading by fieldViewModel.isCloudInboxLoading.collectAsState()
     val cloudState by cloudViewModel.cloudState.collectAsState()
     val settings by settingsViewModel.settings.collectAsState()
-    val cloudReady = cloudState.isOnline && cloudState.isUserValidated
+    val cloudStatus = cloudUiStatus(cloudState)
+    val cloudReady = cloudStatus.ready
 
     var openAddDialog by remember { mutableStateOf(false) }
     var openChangePasswordDialog by remember { mutableStateOf(false) }
@@ -436,6 +451,9 @@ fun FieldsScreen(navController: NavHostController) {
                             icon = Icons.Default.CloudDownload,
                             contentDescription = "Sync from cloud",
                             enabled = cloudReady,
+                            onDisabledClick = {
+                                snackbarMessage = "Cloud disabled: ${cloudStatus.reason}"
+                            },
                             onClick = ::openCloudInbox
                         )
                         SharyIconButton(
@@ -564,12 +582,18 @@ fun FieldsScreen(navController: NavHostController) {
                 .fillMaxSize()
                 .background(Violet50)
         ) {
+            CloudStatusStrip(
+                status = cloudStatus,
+                syncActive = isCloudInboxLoading,
+                pendingCount = cloudInboxItems.size,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+            )
             if (isLoading && visibleFields.isNotEmpty()) {
                 Text(
-                    text = "Decrypting remaining fields...",
+                    text = "First fields are ready. Decrypting remaining fields in the background...",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)
                 )
             }
             when {
@@ -653,6 +677,7 @@ fun FieldsScreen(navController: NavHostController) {
         FieldDetailDialog(
             keyName = field.key,
             value = FieldValueContract.parse(field.value).plainData,
+            valueItems = typedListValueItems(field),
             alias = field.keyAlias,
             tag = field.tag,
             typedValueLabel = typedValueLabel(field),

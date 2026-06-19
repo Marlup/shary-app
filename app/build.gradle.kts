@@ -101,6 +101,8 @@ android {
             )
         }
         debug {
+            isDebuggable = true
+            isMinifyEnabled = false
             buildConfigField(
                 "String",
                 "FIREBASE_BASE_URL",

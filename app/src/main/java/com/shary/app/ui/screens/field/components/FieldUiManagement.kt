@@ -49,6 +49,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.testTag
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import com.shary.app.core.domain.types.valueobjects.FieldValueMeta
 import com.shary.app.core.domain.types.valueobjects.FieldValueSpec
@@ -365,6 +366,7 @@ private fun FieldValueInput(
     showError: Boolean,
     listItems: List<String>,
     onAddListItem: () -> Unit,
+    onUpdateListItem: (Int, String) -> Unit,
     onRemoveListItem: (Int) -> Unit,
     onBrowseFile: () -> Unit
 ) {
@@ -386,7 +388,9 @@ private fun FieldValueInput(
                             }
                         },
                         isError = showError && listItems.isEmpty() && value.isBlank(),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("field-list-pending-value")
                     )
                     Spacer(Modifier.width(8.dp))
                     FilledTonalButton(
@@ -416,10 +420,18 @@ private fun FieldValueInput(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(
-                                        text = item,
-                                        modifier = Modifier.weight(1f)
+                                    OutlinedTextField(
+                                        value = item,
+                                        onValueChange = { updatedItem ->
+                                            onUpdateListItem(index, updatedItem)
+                                        },
+                                        label = { Text("Element ${index + 1}") },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("field-list-element-$index")
                                     )
+                                    Spacer(Modifier.width(8.dp))
                                     IconButton(onClick = { onRemoveListItem(index) }) {
                                         Icon(
                                             imageVector = Icons.Filled.Close,
@@ -800,6 +812,11 @@ fun EditorAddFieldDialog(
                         editingField = editingField.copy(value = "")
                     }
                 },
+                onUpdateListItem = { index, updatedItem ->
+                    listItems = listItems.mapIndexed { currentIndex, currentItem ->
+                        if (currentIndex == index) updatedItem else currentItem
+                    }
+                },
                 onRemoveListItem = { index ->
                     listItems = listItems.filterIndexed { currentIndex, _ -> currentIndex != index }
                 },
@@ -1045,6 +1062,11 @@ fun EditorUpdateFieldDialog(
                     editingField.value.trim().takeIf { it.isNotEmpty() }?.let { newItem ->
                         listItems = listItems + newItem
                         editingField = editingField.copy(value = "")
+                    }
+                },
+                onUpdateListItem = { index, updatedItem ->
+                    listItems = listItems.mapIndexed { currentIndex, currentItem ->
+                        if (currentIndex == index) updatedItem else currentItem
                     }
                 },
                 onRemoveListItem = { index ->
