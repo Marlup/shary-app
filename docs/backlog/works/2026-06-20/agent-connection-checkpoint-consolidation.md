@@ -50,4 +50,12 @@ documentation, and executable test assets into a validated Git checkpoint.
 The policy gate passed. Debug and Android-test Kotlin compilation succeeded,
 and the focused regression suite completed with `BUILD SUCCESSFUL`. No Android
 target was connected, so the live protocol and real-agent acceptance suites
-were not rerun and remain explicitly pending.
+were not rerun during checkpoint creation.
+
+The live read-only protocol acceptance suite was subsequently rerun against
+`emulator-5554` with the committed debug build. ADB forwarding and MCP
+transport, initialization, ping, eight-tool discovery, origin protection,
+authenticated field and user reads, and read-only mutation denial all passed.
+The run observed seven fields and three users. Read-write and mutating
+scenarios were not requested and remained skipped. No bearer token was stored
+in repository files or test evidence.
