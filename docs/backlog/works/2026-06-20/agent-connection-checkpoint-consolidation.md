@@ -59,3 +59,15 @@ authenticated field and user reads, and read-only mutation denial all passed.
 The run observed seven fields and three users. Read-write and mutating
 scenarios were not requested and remained skipped. No bearer token was stored
 in repository files or test evidence.
+
+The live read-write acceptance battery was then run with a separately paired
+read-write connector. Transport and protocol checks passed again, invalid-token
+and mutation-control behavior passed, direct field/user create and update
+operations passed, and the CRUD suite re-read the exact updated field value,
+field alias, and username from Shary. Preview/commit applied a two-record batch
+with zero failures, and replaying the same commit confirmed idempotent results.
+An independent post-battery read returned nine fields and five users, compared
+with seven fields and three users before the battery, confirming that both the
+direct CRUD records and preview/commit records remained persisted and
+queryable. The generated `.test` records require manual cleanup because the MCP
+surface intentionally has no delete tools. No bearer token was stored.
