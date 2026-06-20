@@ -1,12 +1,12 @@
 {
     "manifest_version":  1,
     "policy_version":  "2026-06-19.1",
-    "generated_at_utc":  "2026-06-19T10:43:32.2421798Z",
+    "generated_at_utc":  "2026-06-20T12:09:19.1597684Z",
     "required_files":  [
                            {
                                "path":  "AGENT.md",
                                "role":  "canonical_policy",
-                               "sha256":  "22c0667dc68838fbcb0115245f942763691e8fa82eb31a6c266806736a02856e"
+                               "sha256":  "62485e61d2e8342126af9f8464df26b2b4cbf634d804fe2f56687dc45046d90b"
                            },
                            {
                                "path":  "CODEX.md",

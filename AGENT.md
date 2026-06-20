@@ -4,6 +4,17 @@
 Operational guide for agent work in this repository.  
 Default mode: implement pragmatically, validate changes, and keep durable docs aligned with code.
 
+## Repository Map
+
+- Shary Android application (this repository):
+  `C:\Users\marsu\AndroidStudioProjects\sharydemo`
+- Shary project workspace:
+  `C:\main_work\shary-project`
+- Shary Firebase backend:
+  `C:\main_work\shary-project\shary-backend`
+- When work changes Android/backend contracts, inspect and update both owning
+  repositories rather than copying backend implementation into this repo.
+
 ## Communication Language (Required)
 
 1. All agent-authored communication must be in English, regardless of the language used by the user.

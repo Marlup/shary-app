@@ -6,6 +6,8 @@
    Consolidated the MCP implementation, lifecycle UI, transport hardening, tests, and operator documentation; passed the policy gate and focused Android validation while retaining live device E2E as an explicit pending acceptance step.
 2. **Production desktop bridge design**
    Designed an installable loopback MCP bridge with Android-initiated encrypted LAN pairing, capability-scoped agent profiles, lifecycle controls, threat mitigations, implementation phases, and no ADB production dependency.
+3. **Repository routing and cloud MCP placement**
+   Recorded the Android/backend workspace paths and selected an isolated Firebase MCP codebase inside the existing backend repository, with incremental backend modularization and shared Android connector execution.
 
 ## 2026-06-19
 
