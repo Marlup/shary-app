@@ -10,12 +10,18 @@ This folder is organized by intent so current source-of-truth docs are easy to f
   - Frontend adaptation/handovers aligned to backend freeze decisions.
 - `architecture/`
   - Security/auth architecture and device-storage design notes.
+  - Local agent MCP design:
+    `docs/architecture/SHARY_LOCAL_AGENT_MCP_DESIGN.md`.
 - `design/`
   - UX/UI design briefs and proposal implementation plans.
 - `implementation/`
   - Consolidated implementation summaries (canonical merged reports).
 - `testing/`
   - Manual/operative test plans.
+  - Connector and MCP end-to-end quick start:
+    `docs/testing/connector-mcp-e2e-quickstart.md`.
+  - Real AI-agent MCP end-to-end guide:
+    `docs/testing/connector-mcp-real-agent-e2e.md`.
 - `widget/`
   - Shary widget V1 design and implementation briefs.
 - `roadmap/`

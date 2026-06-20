@@ -1,9 +1,28 @@
 # Orders Draft Index
 
+## 2026-06-20
+
+1. **Raw order backup - agent connection checkpoint consolidation**
+   Direct backup of the instruction to tackle the uncommitted agent-connection checkpoint, briefly show the approach first, and commit after required validation.
+
 ## 2026-06-19
 
-1. **Raw order backup - validate and commit MCP checkpoint**  
+1. **Raw order backup - connector and MCP E2E quick guide**
+   Direct backup of the initial guide request and follow-ups for command explanations, pairing visibility, connector limits, management actions, and bearer copy.
+2. **Raw order backup - English-only policy and warning cleanup**
+   Direct backup of the instruction to enforce English-only agent communication and resolve low-risk Gradle/Kotlin deprecation warnings.
+3. **Raw order backup - validate and commit MCP checkpoint**
    Direct backup of the instruction to compile, run MCP tests, consolidate the checkpoint, and commit when validation succeeds.
+4. **Raw order backup - MCP PowerShell test suite**
+   Direct backup of the request to generate runnable and assertion-based PowerShell scripts from the MCP E2E guide.
+5. **Raw order backup - real-agent MCP E2E guide**
+   Direct backup of the request for a real AI-tool and agentic-usage validation guide for the Shary MCP server.
+6. **Raw order backup - command-driven real-agent MCP suite**
+   Direct backup of the request to make the real-agent guide executable by commanding Codex and preserve the existing scripts in another `mcp-testing` folder.
+7. **Raw order backup - same-device AI connector design**
+   Direct backup of the request to design how local and agentic AI applications can connect to Shary when both are installed on the same Android device.
+8. **Raw order backup - local-agent MCP transport hardening**
+   Direct backup of the request to drop consumer AI-app architecture, focus on agent tools, readapt the design, and implement it.
 
 ## 2026-06-15
 

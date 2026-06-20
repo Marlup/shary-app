@@ -7,7 +7,8 @@ data class McpConnectionContext(
 data class McpTransportResponse(
     val statusCode: Int,
     val contentType: String? = null,
-    val body: String? = null
+    val body: String? = null,
+    val headers: Map<String, String> = emptyMap()
 )
 
 internal data class McpJsonRpcRequest(

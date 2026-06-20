@@ -66,7 +66,7 @@ class SharyMcpServer @Inject constructor(
         "initialize" -> jsonRpcResult(
             request.id,
             linkedMapOf(
-                "protocolVersion" to PROTOCOL_VERSION,
+                "protocolVersion" to SHARY_MCP_PROTOCOL_VERSION,
                 "capabilities" to mapOf(
                     "tools" to mapOf("listChanged" to false)
                 ),
@@ -407,7 +407,4 @@ class SharyMcpServer @Inject constructor(
             body = McpJsonCodec.stringify(payload)
         )
 
-    private companion object {
-        const val PROTOCOL_VERSION = "2025-06-18"
-    }
 }

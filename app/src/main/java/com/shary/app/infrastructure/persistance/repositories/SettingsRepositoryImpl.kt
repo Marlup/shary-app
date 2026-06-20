@@ -19,7 +19,7 @@ private val Context.settingsDataStore by preferencesDataStore("app_settings_pref
 
 @Singleton
 class SettingsRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : SettingsRepository {
     private companion object {
         const val MIN_COPY_LONG_PRESS_MS = 300

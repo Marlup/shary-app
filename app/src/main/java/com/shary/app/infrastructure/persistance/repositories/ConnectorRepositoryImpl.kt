@@ -30,7 +30,7 @@ private val Context.connectorDataStore by preferencesDataStore("connector_prefs"
 
 @Singleton
 class ConnectorRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ConnectorRepository {
     private val dataStore = context.connectorDataStore
 

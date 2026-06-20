@@ -4,6 +4,12 @@
 Operational guide for agent work in this repository.  
 Default mode: implement pragmatically, validate changes, and keep durable docs aligned with code.
 
+## Communication Language (Required)
+
+1. All agent-authored communication must be in English, regardless of the language used by the user.
+2. This includes responses, progress updates, plans, explanations, repository documentation, code comments, commit messages, and generated instructions.
+3. Preserve non-English text only when quoting user-provided content verbatim or storing a raw-order backup; keep all surrounding agent-authored metadata in English.
+
 ## Session-Init Checklist (Required)
 
 Load and enforce policy files in this exact order at every session start:

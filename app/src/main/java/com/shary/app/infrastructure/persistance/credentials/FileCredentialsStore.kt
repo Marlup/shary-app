@@ -18,7 +18,7 @@ import javax.inject.Singleton
 
 @Singleton
 class FileCredentialsStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : CredentialsStore {
     override fun hasSignature(context: Context) = signatureFile(context).exists() || hasCredentials(context)
     override fun hasCredentials(context: Context) =

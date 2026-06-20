@@ -47,7 +47,12 @@ fun TagPicker(
             readOnly = true,
             label = { Text("Tag") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            modifier = Modifier
+                .menuAnchor(
+                    type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                    enabled = true
+                )
+                .fillMaxWidth(),
             leadingIcon = {
                 Box(
                     modifier = Modifier

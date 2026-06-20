@@ -1,9 +1,28 @@
 # Works Index
 
+## 2026-06-20
+
+1. **Agent connection checkpoint consolidation**
+   Consolidated the MCP implementation, lifecycle UI, transport hardening, tests, and operator documentation; passed the policy gate and focused Android validation while retaining live device E2E as an explicit pending acceptance step.
+
 ## 2026-06-19
 
-1. **MCP checkpoint consolidation and fresh validation**  
+1. **Connector and MCP E2E quick-start guide**
+   Added a detailed Windows-to-Android validation guide and completed the Settings workflow with command explanations, scrollable controls, a five-active-connector limit, bearer copy, individual revoke, revoke-all, audit-preserving lifecycle behavior, and focused tests.
+2. **English-only agent policy and low-risk build warning cleanup**
+   Made English mandatory for all agent-authored communication and removed low-risk AGP, Kotlin annotation-target, lifecycle, dropdown-anchor, and tooltip deprecations while preserving higher-risk migration flags.
+3. **MCP checkpoint consolidation and fresh validation**
    Recovered the agent-access checkpoint on `connector-details`, passed the mandatory policy gate, rebuilt the Android Kotlin sources, and reran the focused MCP unit suite from scratch before commit.
+4. **MCP PowerShell test suite**
+   Converted the manual MCP E2E guide into standalone PowerShell scenarios plus an assertion runner, preparation/cleanup scripts, secure token inputs, mutation opt-in, and live public-suite validation.
+5. **Real-agent MCP E2E guide**
+   Added a local Codex/Claude-focused guide for testing natural-language tool selection, least-privilege reads, truthful denial handling, approval-gated writes, preview/commit, prompt-injection resistance, revocation, expiration, audit correlation, and cross-client consistency.
+6. **Command-driven real-agent MCP suite**
+   Added an executable Codex agent contract, structured scenarios, evidence recording and validation under `mcp-testing/real`, while preserving the direct PowerShell suite under `mcp-testing/protocol`.
+7. **Same-device AI connector design**
+   Designed local MCP, Android IPC, Shary-owned assistant, and optional remote-relay paths for connecting AI clients on Android without bypassing connector policy, audit, confirmation, or revocation.
+8. **Local-agent MCP transport hardening**
+   Narrowed the active architecture to MCP-capable agent tools and implemented case-insensitive headers, negotiation checks, request limits, explicit stateless methods, response security headers, and focused transport tests.
 
 ## 2026-06-15
 

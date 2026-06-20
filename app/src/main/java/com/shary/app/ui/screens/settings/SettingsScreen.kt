@@ -1,7 +1,10 @@
 package com.shary.app.ui.screens.settings
 
+import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,13 +26,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.shary.app.core.constants.ConnectorPolicyConfig
+import com.shary.app.core.domain.types.enums.ConnectorClientStatus
 import com.shary.app.ui.components.SharyTopBar
 import com.shary.app.ui.theme.SurfaceMid
 import com.shary.app.ui.theme.Violet50
@@ -38,6 +49,9 @@ import com.shary.app.ui.theme.Violet600
 import com.shary.app.viewmodels.configuration.ConnectorSettingsViewModel
 import com.shary.app.viewmodels.configuration.SettingsViewModel
 import com.shary.app.viewmodels.user.UserViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(navController: NavHostController) {
@@ -49,6 +63,16 @@ fun SettingsScreen(navController: NavHostController) {
     val connectorAuditEvents by connectorSettingsViewModel.connectorAuditEvents.collectAsState()
     val mcpServerState by connectorSettingsViewModel.mcpServerState.collectAsState()
     val lastPairing by connectorSettingsViewModel.lastPairing.collectAsState()
+    val connectorMessage by connectorSettingsViewModel.connectorMessage.collectAsState()
+    val pairingInProgress by connectorSettingsViewModel.pairingInProgress.collectAsState()
+    val activeConnectorClients = connectorClients
+        .filter { it.status != ConnectorClientStatus.REVOKED }
+        .sortedByDescending { it.createdAt }
+    val connectorLimitReached =
+        activeConnectorClients.size >= ConnectorPolicyConfig.MAX_ACTIVE_CONNECTORS
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    var connectorClipboardClearJob by remember { mutableStateOf<Job?>(null) }
 
     val ownerEmail = userViewModel.getOwner().email.trim()
     val emailLabel = when {
@@ -87,6 +111,8 @@ fun SettingsScreen(navController: NavHostController) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -254,17 +280,33 @@ fun SettingsScreen(navController: NavHostController) {
                     ) {
                         Button(
                             modifier = Modifier.weight(1f),
+                            enabled = mcpServerState.running &&
+                                !pairingInProgress &&
+                                !connectorLimitReached,
                             onClick = { connectorSettingsViewModel.pairReadOnlyConnector() }
                         ) {
                             Text("Pair read-only")
                         }
                         Button(
                             modifier = Modifier.weight(1f),
+                            enabled = mcpServerState.running &&
+                                !pairingInProgress &&
+                                !connectorLimitReached,
                             onClick = { connectorSettingsViewModel.pairReadWriteConnector() }
                         ) {
                             Text("Pair read-write")
                         }
                     }
+                    Text(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+                        text = when {
+                            !mcpServerState.running -> "Start MCP before pairing. Stopping MCP pauses access but does not revoke existing connectors."
+                            connectorLimitReached -> "Connector limit reached. Revoke one before pairing another."
+                            else -> "Pairing creates a persistent connector credential. Use Revoke when it is no longer needed."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     lastPairing?.let { pairing ->
                         HorizontalDivider()
                         Column(
@@ -284,6 +326,39 @@ fun SettingsScreen(navController: NavHostController) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            Button(
+                                onClick = {
+                                    val bearerValue = "Bearer ${pairing.accessToken}"
+                                    scope.launch {
+                                        clipboard.setClipEntry(
+                                            ClipEntry(
+                                                ClipData.newPlainText(
+                                                    "shary_mcp_bearer",
+                                                    bearerValue
+                                                )
+                                            )
+                                        )
+                                    }
+                                    connectorClipboardClearJob?.cancel()
+                                    if (settings.clipboardAutoClearSeconds > 0) {
+                                        connectorClipboardClearJob = scope.launch {
+                                            delay(settings.clipboardAutoClearSeconds * 1000L)
+                                            clipboard.setClipEntry(
+                                                ClipEntry(ClipData.newPlainText("", ""))
+                                            )
+                                        }
+                                    }
+                                    connectorSettingsViewModel.showConnectorMessage(
+                                        if (settings.clipboardAutoClearSeconds > 0) {
+                                            "Bearer copied; clipboard clears in ${settings.clipboardAutoClearSeconds}s"
+                                        } else {
+                                            "Bearer copied to clipboard"
+                                        }
+                                    )
+                                }
+                            ) {
+                                Text("Copy bearer")
+                            }
                             Text(
                                 text = "Expires at epoch ${pairing.expiresAtEpochSeconds}. Re-pair when expired.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -299,21 +374,53 @@ fun SettingsScreen(navController: NavHostController) {
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Paired connectors: ${connectorClients.size}",
+                            text = "Active connectors: ${activeConnectorClients.size}/${ConnectorPolicyConfig.MAX_ACTIVE_CONNECTORS}",
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        connectorClients.take(3).forEach { client ->
+                        activeConnectorClients.forEach { client ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = client.displayName,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = client.status.name.lowercase().replace('_', ' '),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        connectorSettingsViewModel.revokeConnector(client.clientId)
+                                    }
+                                ) {
+                                    Text("Revoke")
+                                }
+                            }
+                        }
+                        if (activeConnectorClients.isEmpty()) {
                             Text(
-                                text = "- ${client.displayName} (${client.status.name.lowercase()})",
+                                text = "No active connector. Start MCP, then pair one.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        } else {
+                            Button(
+                                onClick = connectorSettingsViewModel::revokeAllConnectors
+                            ) {
+                                Text("Revoke all")
+                            }
                         }
-                        if (connectorClients.isEmpty()) {
+                        connectorMessage?.let { message ->
                             Text(
-                                text = "No connector paired yet.",
+                                text = message,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Violet600
                             )
                         }
                     }

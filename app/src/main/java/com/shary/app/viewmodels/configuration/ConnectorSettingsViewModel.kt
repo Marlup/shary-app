@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.shary.app.application.connector.PairConnectorRequest
 import com.shary.app.application.connector.PairConnectorResult
 import com.shary.app.application.connector.PairConnectorUseCase
+import com.shary.app.application.connector.ManageConnectorsUseCase
 import com.shary.app.core.domain.interfaces.repositories.ConnectorRepository
 import com.shary.app.core.domain.types.enums.ConnectorCapability
 import com.shary.app.core.domain.types.valueobjects.ConnectorAuditEvent
@@ -33,6 +34,7 @@ data class ConnectorPairingUiState(
 class ConnectorSettingsViewModel @Inject constructor(
     private val connectorRepository: ConnectorRepository,
     private val pairConnectorUseCase: PairConnectorUseCase,
+    private val manageConnectorsUseCase: ManageConnectorsUseCase,
     private val mcpHttpServer: SharyMcpHttpServer
 ) : ViewModel() {
 
@@ -52,39 +54,63 @@ class ConnectorSettingsViewModel @Inject constructor(
     private val _lastPairing = MutableStateFlow<ConnectorPairingUiState?>(null)
     val lastPairing: StateFlow<ConnectorPairingUiState?> = _lastPairing.asStateFlow()
 
+    private val _connectorMessage = MutableStateFlow<String?>(null)
+    val connectorMessage: StateFlow<String?> = _connectorMessage.asStateFlow()
+
+    private val _pairingInProgress = MutableStateFlow(false)
+    val pairingInProgress: StateFlow<Boolean> = _pairingInProgress.asStateFlow()
+
     fun pairReadOnlyConnector(displayName: String = "Local Assistant (Read-only)") {
-        viewModelScope.launch {
-            val result = pairConnectorUseCase(
-                PairConnectorRequest(
-                    displayName = displayName,
-                    allowedCapabilities = setOf(
-                        ConnectorCapability.FIELDS_READ,
-                        ConnectorCapability.USERS_READ,
-                        ConnectorCapability.ACTIONS_PREVIEW
-                    )
+        pairConnector(
+            request = PairConnectorRequest(
+                displayName = displayName,
+                allowedCapabilities = setOf(
+                    ConnectorCapability.FIELDS_READ,
+                    ConnectorCapability.USERS_READ,
+                    ConnectorCapability.ACTIONS_PREVIEW
                 )
             )
-            _lastPairing.value = result.toUiState(modeLabel = "Read-only")
-        }
+        ) { it.toUiState(modeLabel = "Read-only") }
     }
 
     fun pairReadWriteConnector(displayName: String = "Local Assistant (Read-Write)") {
-        viewModelScope.launch {
-            val result = pairConnectorUseCase(
-                PairConnectorRequest(
-                    displayName = displayName,
-                    allowedCapabilities = setOf(
-                        ConnectorCapability.FIELDS_READ,
-                        ConnectorCapability.USERS_READ,
-                        ConnectorCapability.FIELDS_WRITE,
-                        ConnectorCapability.USERS_WRITE,
-                        ConnectorCapability.ACTIONS_PREVIEW,
-                        ConnectorCapability.ACTIONS_COMMIT
-                    )
+        pairConnector(
+            request = PairConnectorRequest(
+                displayName = displayName,
+                allowedCapabilities = setOf(
+                    ConnectorCapability.FIELDS_READ,
+                    ConnectorCapability.USERS_READ,
+                    ConnectorCapability.FIELDS_WRITE,
+                    ConnectorCapability.USERS_WRITE,
+                    ConnectorCapability.ACTIONS_PREVIEW,
+                    ConnectorCapability.ACTIONS_COMMIT
                 )
             )
-            _lastPairing.value = result.toUiState(modeLabel = "Read-write")
+        ) { it.toUiState(modeLabel = "Read-write") }
+    }
+
+    fun revokeConnector(clientId: String) {
+        viewModelScope.launch {
+            val revoked = manageConnectorsUseCase.revoke(clientId)
+            if (_lastPairing.value?.clientId == clientId) _lastPairing.value = null
+            _connectorMessage.value = if (revoked) "Connector revoked" else "Connector was already revoked"
         }
+    }
+
+    fun revokeAllConnectors() {
+        viewModelScope.launch {
+            val revokedCount = manageConnectorsUseCase.revokeAll()
+            _lastPairing.value = null
+            _connectorMessage.value = if (revokedCount == 0) {
+                "No active connectors to revoke"
+            } else {
+                "Revoked $revokedCount connector(s)"
+            }
+        }
+    }
+
+    fun showConnectorMessage(message: String) {
+        _connectorMessage.value = message
     }
 
     fun startMcpServer(port: Int = 8765) {
@@ -93,6 +119,29 @@ class ConnectorSettingsViewModel @Inject constructor(
 
     fun stopMcpServer() {
         mcpHttpServer.stop()
+    }
+
+    private fun pairConnector(
+        request: PairConnectorRequest,
+        toUiState: (PairConnectorResult) -> ConnectorPairingUiState
+    ) {
+        if (_pairingInProgress.value) return
+        if (!mcpHttpServer.state.value.running) {
+            _connectorMessage.value = "Start MCP before pairing a connector"
+            return
+        }
+        viewModelScope.launch {
+            _pairingInProgress.value = true
+            runCatching { pairConnectorUseCase(request) }
+                .onSuccess { result ->
+                    _lastPairing.value = toUiState(result)
+                    _connectorMessage.value = "Connector paired. Copy the bearer token now."
+                }
+                .onFailure { error ->
+                    _connectorMessage.value = error.message ?: "Connector pairing failed"
+                }
+            _pairingInProgress.value = false
+        }
     }
 
     private fun PairConnectorResult.toUiState(modeLabel: String): ConnectorPairingUiState =
