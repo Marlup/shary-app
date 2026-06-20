@@ -106,11 +106,111 @@ class SharyMcpServerTest {
         assertTrue(response.body.orEmpty().contains("unauthorized_scope"))
         assertEquals(1, fixture.connectorRepository.auditEvents.first().size)
     }
+
+    @Test
+    fun locked_vault_denies_tool_calls_without_reaching_connector_core() = runBlocking {
+        val fixture = testFixture(vaultAvailable = false)
+
+        val response = fixture.server.handleRawJson(
+            rawBody = """
+                {
+                  "jsonrpc":"2.0",
+                  "id":"locked-read",
+                  "method":"tools/call",
+                  "params":{
+                    "name":"shary.fields.list",
+                    "arguments":{}
+                  }
+                }
+            """.trimIndent(),
+            headers = mapOf("Authorization" to "Bearer unavailable")
+        )
+
+        assertEquals(200, response.statusCode)
+        assertTrue(response.body.orEmpty().contains("\"isError\":true"))
+        assertTrue(response.body.orEmpty().contains("policy_denied"))
+        assertTrue(response.body.orEmpty().contains("locked or signed out"))
+        assertEquals(0, fixture.connectorRepository.auditEvents.first().size)
+    }
+
+    @Test
+    fun rate_limit_is_scoped_by_bearer_credential() = runBlocking {
+        var now = 1_000L
+        val limiter = McpConnectorRateLimiter(
+            maxRequests = 1,
+            windowSeconds = 60,
+            maxTrackedCredentials = MCP_RATE_LIMIT_TRACKED_CREDENTIALS,
+            nowEpochSeconds = { now }
+        )
+        val fixture = testFixture(rateLimiter = limiter)
+        val firstToken = fixture.pair(setOf(ConnectorCapability.FIELDS_READ))
+        val secondToken = fixture.pair(setOf(ConnectorCapability.FIELDS_READ))
+        val request = """
+            {
+              "jsonrpc":"2.0",
+              "id":"rate-read",
+              "method":"tools/call",
+              "params":{
+                "name":"shary.fields.list",
+                "arguments":{}
+              }
+            }
+        """.trimIndent()
+
+        val first = fixture.server.handleRawJson(
+            rawBody = request,
+            headers = mapOf("Authorization" to "Bearer $firstToken")
+        )
+        val limited = fixture.server.handleRawJson(
+            rawBody = request,
+            headers = mapOf("Authorization" to "Bearer $firstToken")
+        )
+        val independent = fixture.server.handleRawJson(
+            rawBody = request,
+            headers = mapOf("Authorization" to "Bearer $secondToken")
+        )
+        now += 60
+        val afterWindow = fixture.server.handleRawJson(
+            rawBody = request,
+            headers = mapOf("Authorization" to "Bearer $firstToken")
+        )
+
+        assertTrue(first.body.orEmpty().contains("\"isError\":false"))
+        assertTrue(limited.body.orEmpty().contains("rate_limited"))
+        assertTrue(limited.body.orEmpty().contains("\"retry_after_seconds\":60"))
+        assertTrue(independent.body.orEmpty().contains("\"isError\":false"))
+        assertTrue(afterWindow.body.orEmpty().contains("\"isError\":false"))
+    }
+
+    @Test
+    fun rate_limiter_bounds_unknown_credential_tracking() {
+        var now = 2_000L
+        val limiter = McpConnectorRateLimiter(
+            maxRequests = 1,
+            windowSeconds = 60,
+            maxTrackedCredentials = 1,
+            nowEpochSeconds = { now }
+        )
+
+        assertTrue(limiter.acquire("known").allowed)
+        assertTrue(limiter.acquire("unknown-a").allowed)
+        assertTrue(!limiter.acquire("unknown-b").allowed)
+        now += 60
+        assertTrue(limiter.acquire("unknown-b").allowed)
+    }
 }
 
 private fun testMcpServer(): SharyMcpServer = testFixture().server
 
-private fun testFixture(): McpFixture {
+private fun testFixture(
+    vaultAvailable: Boolean = true,
+    rateLimiter: McpConnectorRateLimiter = McpConnectorRateLimiter(
+        maxRequests = MCP_RATE_LIMIT_REQUESTS,
+        windowSeconds = MCP_RATE_LIMIT_WINDOW_SECONDS,
+        maxTrackedCredentials = MCP_RATE_LIMIT_TRACKED_CREDENTIALS,
+        nowEpochSeconds = { System.currentTimeMillis() / 1000 }
+    )
+): McpFixture {
     val connectorRepository = McpConnectorRepositoryFake()
     val fieldRepository = McpFieldRepositoryFake()
     val userRepository = McpUserRepositoryFake()
@@ -130,7 +230,15 @@ private fun testFixture(): McpFixture {
     return McpFixture(
         connectorRepository = connectorRepository,
         fieldRepository = fieldRepository,
-        server = SharyMcpServer(LoopbackServer(router))
+        server = SharyMcpServer(
+            SharyMcpDispatcher(
+                loopbackServer = LoopbackServer(router),
+                accessController = McpAccessController(
+                    vaultAvailable = { vaultAvailable },
+                    rateLimiter = rateLimiter
+                )
+            )
+        )
     )
 }
 

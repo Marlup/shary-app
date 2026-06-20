@@ -2,11 +2,14 @@
 
 ## 2026-06-20
 
-1. **Raw order backup - agent connection checkpoint consolidation**
+1. **Raw order backup - proceed with next implementations**
+   Direct backup of the instruction to continue from the checkpoint into the
+   approved production desktop bridge implementation phases.
+2. **Raw order backup - agent connection checkpoint consolidation**
    Direct backup of the instruction to tackle the uncommitted agent-connection checkpoint, briefly show the approach first, and commit after required validation.
-2. **Raw order backup - production desktop bridge design**
+3. **Raw order backup - production desktop bridge design**
    Direct backup of the instruction to proceed with the production connection design after classifying ADB forwarding as development-only.
-3. **Raw order backup - repository routing and cloud MCP placement**
+4. **Raw order backup - repository routing and cloud MCP placement**
    Direct backup of the instruction to record important repository paths and evaluate MCP backend placement and refactoring.
 
 ## 2026-06-19

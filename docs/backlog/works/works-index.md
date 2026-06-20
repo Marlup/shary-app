@@ -2,11 +2,15 @@
 
 ## 2026-06-20
 
-1. **Agent connection checkpoint consolidation**
+1. **Desktop bridge Phase 0 connector boundary**
+   Extracted transport-neutral MCP dispatch, added locked/signed-out
+   enforcement and bounded bearer-scoped rate limits, and preserved localhost
+   MCP compatibility with focused tests.
+2. **Agent connection checkpoint consolidation**
    Consolidated the MCP implementation, lifecycle UI, transport hardening, tests, and operator documentation; passed the policy gate and focused Android validation while retaining live device E2E as an explicit pending acceptance step.
-2. **Production desktop bridge design**
+3. **Production desktop bridge design**
    Designed an installable loopback MCP bridge with Android-initiated encrypted LAN pairing, capability-scoped agent profiles, lifecycle controls, threat mitigations, implementation phases, and no ADB production dependency.
-3. **Repository routing and cloud MCP placement**
+4. **Repository routing and cloud MCP placement**
    Recorded the Android/backend workspace paths and selected an isolated Firebase MCP codebase inside the existing backend repository, with incremental backend modularization and shared Android connector execution.
 
 ## 2026-06-19

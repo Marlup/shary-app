@@ -416,12 +416,17 @@ Claude Code, or other workstation-agent workflows.
 
 ### Phase 0: connector boundary preparation
 
-1. Extract a transport-neutral MCP request dispatcher from the current socket
-   server.
-2. Add vault-state enforcement and per-connector rate limits.
-3. Keep all current localhost tests passing.
+Status: implemented on 2026-06-20.
+
+1. Extracted `SharyMcpDispatcher` from the current socket server while keeping
+   `SharyMcpServer` as a compatibility facade.
+2. Added fail-closed vault/authentication state enforcement for tool calls.
+3. Added bounded per-bearer request rate limits with stable MCP tool errors.
+4. Kept the current localhost transport behavior and focused tests passing.
 
 ### Phase 1: desktop bridge skeleton
+
+Status: next implementation phase.
 
 1. Add `:connector-link-protocol`.
 2. Add `:desktop-bridge`.
