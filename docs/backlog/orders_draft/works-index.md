@@ -4,6 +4,8 @@
 
 1. **Raw order backup - agent connection checkpoint consolidation**
    Direct backup of the instruction to tackle the uncommitted agent-connection checkpoint, briefly show the approach first, and commit after required validation.
+2. **Raw order backup - production desktop bridge design**
+   Direct backup of the instruction to proceed with the production connection design after classifying ADB forwarding as development-only.
 
 ## 2026-06-19
 

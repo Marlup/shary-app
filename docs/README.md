@@ -12,6 +12,8 @@ This folder is organized by intent so current source-of-truth docs are easy to f
   - Security/auth architecture and device-storage design notes.
   - Local agent MCP design:
     `docs/architecture/SHARY_LOCAL_AGENT_MCP_DESIGN.md`.
+  - Production desktop bridge design:
+    `docs/architecture/SHARY_DESKTOP_BRIDGE_DESIGN.md`.
 - `design/`
   - UX/UI design briefs and proposal implementation plans.
 - `implementation/`

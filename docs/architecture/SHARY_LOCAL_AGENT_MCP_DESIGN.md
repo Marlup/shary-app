@@ -13,6 +13,10 @@ MCP servers:
 Consumer AI applications, cloud relays, Shary-owned chat interfaces, and
 Android partner IPC are out of scope.
 
+This document describes the implemented Android-local endpoint and its
+development/test usage. Desktop production transport without ADB is defined in
+`docs/architecture/SHARY_DESKTOP_BRIDGE_DESIGN.md`.
+
 ## 2. Objective
 
 Expose Shary through a private local MCP endpoint while retaining Shary's
@@ -48,7 +52,7 @@ http://127.0.0.1:8765/mcp
 
 When the agent runs on the same Android device, no ADB forwarding is required.
 When it runs on a desktop and Shary runs on Android, ADB forwarding remains the
-development transport.
+development transport. It is not the production desktop connection.
 
 ## 4. Transport profile
 
@@ -142,9 +146,10 @@ The first transport-hardening slice provides:
 
 ## 9. Next implementation order
 
-1. Add vault-lock and foreground-service lifecycle enforcement.
-2. Add per-connector request rate limits.
-3. Add one-time local pairing codes.
+1. Implement the production desktop bridge phases in
+   `SHARY_DESKTOP_BRIDGE_DESIGN.md`.
+2. Add vault-lock and foreground-service lifecycle enforcement.
+3. Add per-connector request rate limits.
 4. Split field metadata and value-read capabilities.
 5. Add a same-device Android MCP conformance client.
 6. Add SSE only if a target agent client requires it.
