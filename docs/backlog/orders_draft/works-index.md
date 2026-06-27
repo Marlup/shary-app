@@ -1,15 +1,41 @@
 # Orders Draft Index
 
+## 2026-06-27
+
+1. **Raw order backup - implement cloud-only MCP readaptation**
+   Direct backup of the instruction to implement the approved cloud-only MCP
+   readaptation plan and update/archive the superseded local design baseline.
+## 2026-06-26
+
+1. **Raw order backup - continue OAuth MCP next step**
+   Direct backup of the instruction to return to the recovered OAuth / remote
+   MCP continuation and proceed with the next clear step. Plan source:
+   `[[docs/backlog/works/2026-06-21/public-oauth-multi-vault-mcp-implementation.md#Deployment prerequisites]]`.
+2. **Raw order backup - debug certificate workaround**
+   Direct backup of the instruction to use the recommended interim alternative
+   while waiting for Play release and to proceed with that path. Plan source:
+   `[[docs/backlog/works/2026-06-21/public-oauth-multi-vault-mcp-implementation.md#Deployment prerequisites]]`.
+
+## 2026-06-21
+
+1. **Raw order backup - public OAuth multi-vault MCP implementation**
+   Direct backup of the instruction to implement the reviewed no-ADB,
+   owner-authorized, multi-vault MCP production plan for Codex, Claude, and
+   similar agents.
+
 ## 2026-06-20
 
-1. **Raw order backup - proceed with next implementations**
+1. **Raw order backup - Codex-operated Phase 0 live test guide**
+   Direct backup of the request and clarification that Codex should execute
+   the live Phase 0 checks instead of presenting user-operated commands.
+2. **Raw order backup - proceed with next implementations**
    Direct backup of the instruction to continue from the checkpoint into the
    approved production desktop bridge implementation phases.
-2. **Raw order backup - agent connection checkpoint consolidation**
+3. **Raw order backup - agent connection checkpoint consolidation**
    Direct backup of the instruction to tackle the uncommitted agent-connection checkpoint, briefly show the approach first, and commit after required validation.
-3. **Raw order backup - production desktop bridge design**
+4. **Raw order backup - production desktop bridge design**
    Direct backup of the instruction to proceed with the production connection design after classifying ADB forwarding as development-only.
-4. **Raw order backup - repository routing and cloud MCP placement**
+5. **Raw order backup - repository routing and cloud MCP placement**
    Direct backup of the instruction to record important repository paths and evaluate MCP backend placement and refactoring.
 
 ## 2026-06-19
@@ -81,3 +107,4 @@
 
 1. **Raw order backup - typed values, card behavior, and list UX updates**  
    Direct backup of user-provided instruction set before implementation.
+

@@ -52,7 +52,17 @@ For each non-trivial task:
 5. Add one short index entry per change:
    - brief title
    - 1-2 sentence description
-6. Persist planning artifacts in `docs/backlog/works`:
+6. When a completed task implements or advances a defined plan step, add an
+   explicit plan-source pointer in the polished work log and in the relevant
+   index entry when concise:
+   - use an Obsidian-style wikilink to the plan file:
+     `[[docs/backlog/works/<YYYY-MM-DD>/<plan-file-name>.md]]`
+   - if the work maps to a specific section or numbered step, append the exact
+     path in plain text, for example:
+     `Plan source: [[docs/backlog/works/2026-06-20/production-desktop-bridge-design.md#Implementation plan]] -> step 3`
+   - prefer the most specific stable pointer available: heading first, then
+     step number if the file uses numbered lists rather than step subheadings
+7. Persist planning artifacts in `docs/backlog/works`:
    - analysis
    - design options/drafts
    - evaluation and decision notes
@@ -101,8 +111,9 @@ Use this structure in each `docs/backlog/works/<date>/...md`:
 
 1. Scope
 2. Change list
-3. Viability/complexity per change
-4. Design decisions
-5. Implementation plan
-6. Validation plan
-7. Result summary
+3. Plan source (when applicable)
+4. Viability/complexity per change
+5. Design decisions
+6. Implementation plan
+7. Validation plan
+8. Result summary

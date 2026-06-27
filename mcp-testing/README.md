@@ -2,10 +2,11 @@
 
 The test assets are split by responsibility:
 
-- `protocol/` preserves the direct PowerShell transport, JSON-RPC, policy,
-  CRUD, preview/commit, and idempotency tests.
-- `real/` drives the MCP server through a real local AI agent such as Codex
-  and validates the evidence produced by that run.
+- `legacy-protocol/` preserves the deprecated direct PowerShell transport,
+  JSON-RPC, policy, CRUD, preview/commit, and idempotency checks for
+  development-only local conformance.
+- `real/` drives the supported public OAuth MCP server through a real AI agent
+  such as Codex and validates the evidence produced by that run.
 
 For the operator-command workflow, open this repository in a Codex session
 with the `shary` MCP server connected and say:

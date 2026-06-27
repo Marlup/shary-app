@@ -17,6 +17,9 @@ $response = Invoke-SharyTool `
 
 Assert-SharyToolSuccess $response "List fields"
 $items = @($response.result.structuredContent.data.items)
+Assert-SharyTrue `
+    -Condition (@($items | Where-Object { $_.PSObject.Properties.Name -contains "value" }).Count -eq 0) `
+    -Message "Field metadata list must not expose values"
 if (-not [string]::IsNullOrWhiteSpace($ExpectedKey)) {
     Assert-SharyTrue `
         -Condition ($null -ne ($items | Where-Object { $_.key -eq $ExpectedKey })) `

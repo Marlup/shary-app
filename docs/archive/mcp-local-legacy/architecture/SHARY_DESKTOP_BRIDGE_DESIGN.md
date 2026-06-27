@@ -1,8 +1,13 @@
 # Shary desktop bridge design
 
+> Status: deferred alternative. The implemented production path uses the
+> Firebase-hosted OAuth MCP gateway plus Android FCM/WorkManager execution,
+> documented in `SHARY_REMOTE_MCP_OAUTH_DESIGN.md`. This bridge remains a
+> possible LAN/offline transport, not the current rollout target.
+
 ## 1. Status and decision
 
-Status: proposed production architecture.
+Status: deferred alternative architecture.
 
 The existing Android loopback MCP server plus `adb forward` is retained as a
 development and conformance-test path. It is not the production desktop-agent

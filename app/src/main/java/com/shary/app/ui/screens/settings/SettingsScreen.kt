@@ -1,10 +1,7 @@
 package com.shary.app.ui.screens.settings
 
-import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -26,15 +25,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -49,9 +42,10 @@ import com.shary.app.ui.theme.Violet600
 import com.shary.app.viewmodels.configuration.ConnectorSettingsViewModel
 import com.shary.app.viewmodels.configuration.SettingsViewModel
 import com.shary.app.viewmodels.user.UserViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(navController: NavHostController) {
@@ -61,18 +55,14 @@ fun SettingsScreen(navController: NavHostController) {
     val settings by settingsViewModel.settings.collectAsState()
     val connectorClients by connectorSettingsViewModel.connectorClients.collectAsState()
     val connectorAuditEvents by connectorSettingsViewModel.connectorAuditEvents.collectAsState()
-    val mcpServerState by connectorSettingsViewModel.mcpServerState.collectAsState()
-    val lastPairing by connectorSettingsViewModel.lastPairing.collectAsState()
+    val pendingOperations by connectorSettingsViewModel.pendingOperations.collectAsState()
+    val renewalRequired by connectorSettingsViewModel.renewalRequired.collectAsState()
     val connectorMessage by connectorSettingsViewModel.connectorMessage.collectAsState()
-    val pairingInProgress by connectorSettingsViewModel.pairingInProgress.collectAsState()
-    val activeConnectorClients = connectorClients
-        .filter { it.status != ConnectorClientStatus.REVOKED }
+    val activeRemoteConnectorClients = connectorClients
+        .filter { it.status != ConnectorClientStatus.REVOKED && it.grantId.startsWith("grant_") }
         .sortedByDescending { it.createdAt }
     val connectorLimitReached =
-        activeConnectorClients.size >= ConnectorPolicyConfig.MAX_ACTIVE_CONNECTORS
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
-    var connectorClipboardClearJob by remember { mutableStateOf<Job?>(null) }
+        activeRemoteConnectorClients.size >= ConnectorPolicyConfig.MAX_ACTIVE_CONNECTORS
 
     val ownerEmail = userViewModel.getOwner().email.trim()
     val emailLabel = when {
@@ -218,7 +208,7 @@ fun SettingsScreen(navController: NavHostController) {
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                text = "Pair and supervise local assistant access",
+                                text = "Authorize cloud MCP agents and supervise active vault grants",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -232,189 +222,37 @@ fun SettingsScreen(navController: NavHostController) {
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "MCP server",
+                            text = "Public MCP endpoint",
                             style = MaterialTheme.typography.bodyMedium
                         )
+                        SelectionContainer {
+                            Text(
+                                text = "https://shary-21b61.web.app/mcp",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
-                            text = if (mcpServerState.running) {
-                                "Running at ${mcpServerState.endpoint}"
-                            } else {
-                                "Stopped. Start it before connecting Codex or another MCP client."
-                            },
+                            text = "Connect from Codex, Claude, or another OAuth-capable MCP client. Complete OAuth there, then approve the requested scopes in Shary. Local loopback MCP is deprecated and no longer supported in the product flow.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        mcpServerState.lastError?.let { error ->
+                        Text(
+                            text = "Writes stay approval-gated on this device. Renewal prompts appear in Shary during the final 7 days of a grant.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Pending owner approvals: ${pendingOperations.size} | Grants near renewal: ${renewalRequired.size}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (connectorLimitReached) {
                             Text(
-                                text = error,
+                                text = "Grant limit reached. Revoke an existing vault grant before authorizing another one.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                modifier = Modifier.weight(1f),
-                                enabled = !mcpServerState.running,
-                                onClick = { connectorSettingsViewModel.startMcpServer() }
-                            ) {
-                                Text("Start MCP")
-                            }
-                            Button(
-                                modifier = Modifier.weight(1f),
-                                enabled = mcpServerState.running,
-                                onClick = { connectorSettingsViewModel.stopMcpServer() }
-                            ) {
-                                Text("Stop MCP")
-                            }
-                        }
-                    }
-                    HorizontalDivider()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            modifier = Modifier.weight(1f),
-                            enabled = mcpServerState.running &&
-                                !pairingInProgress &&
-                                !connectorLimitReached,
-                            onClick = { connectorSettingsViewModel.pairReadOnlyConnector() }
-                        ) {
-                            Text("Pair read-only")
-                        }
-                        Button(
-                            modifier = Modifier.weight(1f),
-                            enabled = mcpServerState.running &&
-                                !pairingInProgress &&
-                                !connectorLimitReached,
-                            onClick = { connectorSettingsViewModel.pairReadWriteConnector() }
-                        ) {
-                            Text("Pair read-write")
-                        }
-                    }
-                    Text(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
-                        text = when {
-                            !mcpServerState.running -> "Start MCP before pairing. Stopping MCP pauses access but does not revoke existing connectors."
-                            connectorLimitReached -> "Connector limit reached. Revoke one before pairing another."
-                            else -> "Pairing creates a persistent connector credential. Use Revoke when it is no longer needed."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    lastPairing?.let { pairing ->
-                        HorizontalDivider()
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "Latest ${pairing.modeLabel} MCP credentials",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            SelectionContainer {
-                                Text(
-                                    text = "Endpoint: ${mcpServerState.endpoint}\nAuthorization: Bearer ${pairing.accessToken}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Button(
-                                onClick = {
-                                    val bearerValue = "Bearer ${pairing.accessToken}"
-                                    scope.launch {
-                                        clipboard.setClipEntry(
-                                            ClipEntry(
-                                                ClipData.newPlainText(
-                                                    "shary_mcp_bearer",
-                                                    bearerValue
-                                                )
-                                            )
-                                        )
-                                    }
-                                    connectorClipboardClearJob?.cancel()
-                                    if (settings.clipboardAutoClearSeconds > 0) {
-                                        connectorClipboardClearJob = scope.launch {
-                                            delay(settings.clipboardAutoClearSeconds * 1000L)
-                                            clipboard.setClipEntry(
-                                                ClipEntry(ClipData.newPlainText("", ""))
-                                            )
-                                        }
-                                    }
-                                    connectorSettingsViewModel.showConnectorMessage(
-                                        if (settings.clipboardAutoClearSeconds > 0) {
-                                            "Bearer copied; clipboard clears in ${settings.clipboardAutoClearSeconds}s"
-                                        } else {
-                                            "Bearer copied to clipboard"
-                                        }
-                                    )
-                                }
-                            ) {
-                                Text("Copy bearer")
-                            }
-                            Text(
-                                text = "Expires at epoch ${pairing.expiresAtEpochSeconds}. Re-pair when expired.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Active connectors: ${activeConnectorClients.size}/${ConnectorPolicyConfig.MAX_ACTIVE_CONNECTORS}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        activeConnectorClients.forEach { client ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = client.displayName,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        text = client.status.name.lowercase().replace('_', ' '),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        connectorSettingsViewModel.revokeConnector(client.clientId)
-                                    }
-                                ) {
-                                    Text("Revoke")
-                                }
-                            }
-                        }
-                        if (activeConnectorClients.isEmpty()) {
-                            Text(
-                                text = "No active connector. Start MCP, then pair one.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            Button(
-                                onClick = connectorSettingsViewModel::revokeAllConnectors
-                            ) {
-                                Text("Revoke all")
-                            }
                         }
                         connectorMessage?.let { message ->
                             Text(
@@ -429,10 +267,61 @@ fun SettingsScreen(navController: NavHostController) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Active vault grants: ${activeRemoteConnectorClients.size}/${ConnectorPolicyConfig.MAX_ACTIVE_CONNECTORS}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        activeRemoteConnectorClients.forEach { client ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = client.displayName,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = buildGrantSummary(client),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        connectorSettingsViewModel.revokeConnector(client.clientId)
+                                    }
+                                ) {
+                                    Text("Revoke")
+                                }
+                            }
+                        }
+                        if (activeRemoteConnectorClients.isEmpty()) {
+                            Text(
+                                text = "No active vault grants. Start the OAuth connection from your MCP client and approve the request in Shary.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Button(
+                                onClick = connectorSettingsViewModel::revokeAllConnectors
+                            ) {
+                                Text("Revoke all")
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Recent activity: ${connectorAuditEvents.size}",
+                            text = "Recent MCP activity: ${connectorAuditEvents.size}",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         connectorAuditEvents.takeLast(3).reversed().forEach { event ->
@@ -444,7 +333,7 @@ fun SettingsScreen(navController: NavHostController) {
                         }
                         if (connectorAuditEvents.isEmpty()) {
                             Text(
-                                text = "No connector activity yet.",
+                                text = "No MCP activity yet.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -461,6 +350,21 @@ fun SettingsScreen(navController: NavHostController) {
         }
     }
 }
+
+private fun buildGrantSummary(client: com.shary.app.core.domain.types.valueobjects.ConnectorClient): String {
+    val statusLabel = client.status.name.lowercase().replace('_', ' ')
+    val grantSuffix = if (client.grantId.isBlank()) "" else "Grant ...${client.grantId.takeLast(8)}"
+    val lastActivity = client.lastActivityAt?.let { "Last activity ${formatEpochSeconds(it)}" }.orEmpty()
+    return listOf(statusLabel, grantSuffix, lastActivity)
+        .filter { it.isNotBlank() }
+        .joinToString(" • ")
+}
+
+private fun formatEpochSeconds(epochSeconds: Long): String = runCatching {
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.getDefault())
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochSecond(epochSeconds))
+}.getOrDefault(epochSeconds.toString())
 
 @Composable
 private fun SettingsCopyLongPressRow(

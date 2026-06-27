@@ -1,5 +1,9 @@
 # Shary local-agent MCP design
 
+> Status: retained for local development and same-host use. It is not the
+> production Codex/Claude connection architecture. The public multi-vault
+> OAuth design is documented in `SHARY_REMOTE_MCP_OAUTH_DESIGN.md`.
+
 ## 1. Scope
 
 This architecture targets developer and agent tools that support configurable

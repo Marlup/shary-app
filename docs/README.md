@@ -1,6 +1,6 @@
 # Shary Docs Index
 
-This folder is organized by intent so current source-of-truth docs are easy to find and historical notes do not clutter the root.
+This folder is organized by intent so current source-of-truth docs stay focused on the supported product flow and historical local MCP material stays archived.
 
 ## Folder Map
 
@@ -10,26 +10,22 @@ This folder is organized by intent so current source-of-truth docs are easy to f
   - Frontend adaptation/handovers aligned to backend freeze decisions.
 - `architecture/`
   - Security/auth architecture and device-storage design notes.
-  - Local agent MCP design:
-    `docs/architecture/SHARY_LOCAL_AGENT_MCP_DESIGN.md`.
-  - Production desktop bridge design:
-    `docs/architecture/SHARY_DESKTOP_BRIDGE_DESIGN.md`.
+  - Supported MCP baseline:
+    `docs/architecture/SHARY_REMOTE_MCP_OAUTH_DESIGN.md`.
 - `design/`
   - UX/UI design briefs and proposal implementation plans.
 - `implementation/`
   - Consolidated implementation summaries (canonical merged reports).
 - `testing/`
   - Manual/operative test plans.
-  - Connector and MCP end-to-end quick start:
-    `docs/testing/connector-mcp-e2e-quickstart.md`.
-  - Real AI-agent MCP end-to-end guide:
+  - Supported MCP operator guide:
     `docs/testing/connector-mcp-real-agent-e2e.md`.
 - `widget/`
   - Shary widget V1 design and implementation briefs.
 - `roadmap/`
   - Deferred and next-phase ideas.
 - `archive/`
-  - Historical detailed reports preserved for traceability.
+  - Historical detailed reports plus deprecated local MCP materials preserved for traceability.
 
 ## Canonical Entry Points
 
@@ -40,12 +36,18 @@ This folder is organized by intent so current source-of-truth docs are easy to f
   - `docs/frontend-freeze/FRONTEND_ADAPTATION_FROM_BACKEND_V1.md`
 - Unified implementation summary:
   - `docs/implementation/IMPLEMENTATION_CONSOLIDATED_2026-04.md`
+- Supported MCP architecture:
+  - `docs/architecture/SHARY_REMOTE_MCP_OAUTH_DESIGN.md`
+- Supported MCP validation guide:
+  - `docs/testing/connector-mcp-real-agent-e2e.md`
 
 ## What Was Tidied
 
 - Root-level doc clutter was grouped into purpose-based folders.
 - Similar implementation notes were unified into one canonical file.
 - Older granular summaries were moved to `docs/archive/implementation-reports/`.
+- Deprecated local MCP and desktop-bridge design/testing assets were moved to
+  `docs/archive/mcp-local-legacy/`.
 - Unnamed loose report was normalized to:
   - `docs/archive/alignment-reports/BACKEND_ALIGNMENT_REPORT_2026-04-25.md`
 

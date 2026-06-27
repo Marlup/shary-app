@@ -13,6 +13,7 @@ $response = Invoke-SharyMcp `
 
 $expectedTools = @(
     "shary.fields.list",
+    "shary.fields.get",
     "shary.fields.create",
     "shary.fields.update",
     "shary.users.list",

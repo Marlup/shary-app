@@ -1,8 +1,10 @@
 param(
     [ValidateSet("ReadOnly", "ReadWrite")]
     [string]$Mode = "ReadOnly",
+    [ValidateSet("RemoteOAuth", "LocalAdb")]
+    [string]$Transport = "RemoteOAuth",
     [string]$DeviceSerial = "",
-    [string]$McpUrl = "http://127.0.0.1:8765/mcp",
+    [string]$McpUrl = "",
     [switch]$SkipProtocolPreflight
 )
 
@@ -11,11 +13,19 @@ $ErrorActionPreference = "Stop"
 
 $realRoot = $PSScriptRoot
 $testingRoot = (Resolve-Path (Join-Path $realRoot "..")).Path
-$protocolRoot = Join-Path $testingRoot "protocol"
+$protocolRoot = Join-Path $testingRoot "legacy-protocol"
 $scenarioPath = Join-Path $realRoot "scenarios.json"
 $resultsRoot = Join-Path $realRoot "results"
 
-if (-not $SkipProtocolPreflight) {
+if ([string]::IsNullOrWhiteSpace($McpUrl)) {
+    $McpUrl = if ($Transport -eq "RemoteOAuth") {
+        "https://shary-21b61.web.app/mcp"
+    } else {
+        "http://127.0.0.1:8765/mcp"
+    }
+}
+
+if (-not $SkipProtocolPreflight -and $Transport -eq "LocalAdb") {
     $runner = Join-Path $protocolRoot "run-mcp-tests.ps1"
     $arguments = @{
         McpUrl = $McpUrl
@@ -26,6 +36,27 @@ if (-not $SkipProtocolPreflight) {
     & $runner @arguments
     if ($LASTEXITCODE -ne 0) {
         throw "Protocol preflight failed with exit code $LASTEXITCODE."
+    }
+}
+
+if (-not $SkipProtocolPreflight -and $Transport -eq "RemoteOAuth") {
+    $body = @{
+        jsonrpc = "2.0"
+        id = "oauth-preflight"
+        method = "initialize"
+    } | ConvertTo-Json -Depth 8
+    try {
+        Invoke-WebRequest -Method Post -Uri $McpUrl -ContentType "application/json" -Body $body | Out-Null
+        throw "Remote OAuth preflight unexpectedly succeeded without authentication."
+    } catch {
+        $response = $_.Exception.Response
+        if ($null -eq $response -or [int]$response.StatusCode -ne 401) {
+            throw
+        }
+        $challenge = $response.Headers["WWW-Authenticate"]
+        if ([string]::IsNullOrWhiteSpace($challenge) -or $challenge -notmatch "resource_metadata") {
+            throw "Remote MCP did not advertise OAuth protected-resource metadata."
+        }
     }
 }
 
@@ -58,6 +89,7 @@ $run = [ordered]@{
     schemaVersion = 1
     runId = $runId
     mode = $Mode
+    transport = $Transport
     startedAtUtc = [DateTime]::UtcNow.ToString("o")
     completedAtUtc = $null
     mcpUrl = $McpUrl
@@ -78,3 +110,4 @@ Write-Host "Execute each pending scenario through the connected Shary MCP tools.
 Write-Host "Record each result with record-real-agent-result.ps1, then run test-real-agent-evidence.ps1."
 
 return $runPath
+

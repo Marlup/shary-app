@@ -1,5 +1,10 @@
 # Connector and MCP Server E2E Quick Start
 
+> Development-only local conformance path. This guide intentionally uses ADB,
+> localhost, and a copied short-lived connector bearer. Production Codex and
+> Claude connections use the public OAuth flow in
+> `docs/testing/connector-mcp-real-agent-e2e.md`.
+
 Use this guide to validate the complete local path:
 
 ```text
@@ -173,7 +178,8 @@ In the app:
    - Username: `E2E Existing User`
    - Email: `e2e-existing@example.test`
 
-Use non-sensitive data. Connector reads return field values.
+Use non-sensitive data. Field listing returns metadata only; the separate
+`shary.fields.get` tool returns one value when `fields.value.read` is granted.
 
 ## 4. Start the MCP server
 
@@ -259,7 +265,8 @@ count without deleting historical audit records.
 
 Read-only capabilities are:
 
-- `fields.read`
+- `fields.metadata.read`
+- `fields.value.read`
 - `users.read`
 - `actions.preview`
 
@@ -491,7 +498,8 @@ $Token = "PASTE_NEW_READ_WRITE_ACCESS_TOKEN_HERE"
 
 Read-write capabilities include:
 
-- `fields.read`
+- `fields.metadata.read`
+- `fields.value.read`
 - `fields.write`
 - `users.read`
 - `users.write`
@@ -557,23 +565,21 @@ $UpdateField = Invoke-SharyMcp `
 $UpdateField.result | ConvertTo-Json -Depth 12
 ```
 
-List fields again and verify the new value and alias:
+Read the exact field with `shary.fields.get` and verify the new value and alias:
 
 ```powershell
 # Read the current field collection again after the update.
-$FieldsAfterUpdate = Invoke-SharyMcp `
+$FieldAfterUpdate = Invoke-SharyMcp `
     -Method "tools/call" `
     -Id "fields-list-2" `
     -Params @{
-        name = "shary.fields.list"
-        arguments = @{}
+        name = "shary.fields.get"
+        arguments = @{ key = "e2e-mcp-field" }
 }
 
 # Select the returned items, keep only the target key, and show all its fields.
 # Here, this confirms the persisted value and alias rather than only the write response.
-$FieldsAfterUpdate.result.structuredContent.data.items |
-    Where-Object key -eq "e2e-mcp-field" |
-    Format-List
+$FieldAfterUpdate.result.structuredContent.data | Format-List
 ```
 
 Also verify the field in the Android UI.

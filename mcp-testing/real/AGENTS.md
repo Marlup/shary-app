@@ -25,7 +25,12 @@ For an explicitly authorized mutating run:
 .\mcp-testing\real\start-real-agent-run.ps1 -Mode ReadWrite
 ```
 
-Use `-DeviceSerial "emulator-5554"` when a specific ADB target is required.
+The default transport is the public OAuth server and must not use ADB. Before
+starting, confirm the current Codex or Claude session has already completed
+OAuth for the `shary` MCP server.
+
+Use `-Transport LocalAdb -DeviceSerial "emulator-5554"` only for the explicit
+development-only loopback conformance path.
 The script prints the generated evidence file. Retain that path as
 `<run-file>` for every recording command.
 
@@ -44,7 +49,10 @@ For every scenario:
 3. Never call tools listed in `forbiddenTools`.
 4. Inspect `result.isError`; HTTP or JSON-RPC success alone is not tool
    success.
-5. Record the actual tool names, Shary result, audit observation, and concise
+5. For a queued remote operation, call `shary.operations.get` until it reaches
+   `completed` or `failed`. Never treat `queued`, `claimed`, or
+   `awaiting_confirmation` as success.
+6. Record the actual tool names, Shary result, audit observation, and concise
    notes:
 
    ```powershell
@@ -58,9 +66,9 @@ For every scenario:
        -Notes "No mutation was called."
    ```
 
-6. Mark a scenario `Fail` when Shary, the client, or model behavior differs
+7. Mark a scenario `Fail` when Shary, the client, or model behavior differs
    from the expectation. Do not turn a failure into `Skip`.
-7. Use `Skip` only when the scenario's declared prerequisite is unavailable,
+8. Use `Skip` only when the scenario's declared prerequisite is unavailable,
    and state that prerequisite in `Notes`.
 
 For mutation scenarios:
@@ -68,8 +76,8 @@ For mutation scenarios:
 1. Generate the key suffix from the evidence file's `runId`.
 2. Use non-sensitive `.test` users and `agent-e2e-*` field keys.
 3. Use a new `idempotency_key` for each new mutation.
-4. Set `confirm=true` only because the user explicitly requested
-   `including mutations`.
+4. Wait for the Shary owner to approve every write in the Android app. The
+   remote tool schema does not accept `confirm=true`.
 5. Prefer preview then commit for multi-item writes.
 6. Add every created key and email to `generatedRecords` in the run file by
    passing `-GeneratedRecords` to the recording script.
@@ -92,3 +100,4 @@ Then report:
 - the clickable evidence and report paths.
 
 Do not claim the suite passed if the validator exits nonzero.
+

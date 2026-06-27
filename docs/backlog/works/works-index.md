@@ -1,16 +1,47 @@
 # Works Index
 
+## 2026-06-27
+
+1. **Cloud-only MCP readaptation and legacy local-flow archive**
+   Reworked the Android Settings MCP flow around cloud OAuth vault grants,
+   auto-revoked deprecated local connectors, archived superseded local/desktop
+   MCP docs and protocol assets, and aligned backend public docs to the same
+   supported path.
+## 2026-06-26
+
+1. **OAuth MCP continuation readiness review**
+   Resumed the June 21 public OAuth / multi-vault MCP checkpoint, validated the
+   Android and isolated backend MCP worktrees, and reduced the remaining path
+   to a single external Play App Signing certificate blocker. Plan source:
+   `[[docs/backlog/works/2026-06-21/public-oauth-multi-vault-mcp-implementation.md#Deployment prerequisites]]`.
+2. **Debug certificate remote OAuth test path**
+   Confirmed the test-only workaround for the public OAuth / MCP flow by
+   passing the read-only backend preflight with the explicit debug-certificate
+   allowance, avoiding any cloud mutation or deployment. Plan source:
+   `[[docs/backlog/works/2026-06-21/public-oauth-multi-vault-mcp-implementation.md#Deployment prerequisites]]`.
+
+## 2026-06-21
+
+1. **Public OAuth multi-vault MCP implementation**
+   Implemented the no-ADB production path for Codex and Claude with OAuth
+   PKCE, owner-selected vault grants, encrypted cloud operations, Android
+   app-link/QR approval, FCM/WorkManager execution, per-write device
+   confirmation, renewal/revocation, and multi-owner vault attachment.
+
 ## 2026-06-20
 
-1. **Desktop bridge Phase 0 connector boundary**
+1. **Codex-operated MCP Phase 0 live test guide**
+   Added a Codex execution contract for real-device dispatcher success,
+   signed-out denial, bearer rate limiting, evidence reporting, and cleanup.
+2. **Desktop bridge Phase 0 connector boundary**
    Extracted transport-neutral MCP dispatch, added locked/signed-out
    enforcement and bounded bearer-scoped rate limits, and preserved localhost
    MCP compatibility with focused tests.
-2. **Agent connection checkpoint consolidation**
+3. **Agent connection checkpoint consolidation**
    Consolidated the MCP implementation, lifecycle UI, transport hardening, tests, and operator documentation; passed the policy gate and focused Android validation while retaining live device E2E as an explicit pending acceptance step.
-3. **Production desktop bridge design**
+4. **Production desktop bridge design**
    Designed an installable loopback MCP bridge with Android-initiated encrypted LAN pairing, capability-scoped agent profiles, lifecycle controls, threat mitigations, implementation phases, and no ADB production dependency.
-4. **Repository routing and cloud MCP placement**
+5. **Repository routing and cloud MCP placement**
    Recorded the Android/backend workspace paths and selected an isolated Firebase MCP codebase inside the existing backend repository, with incremental backend modularization and shared Android connector execution.
 
 ## 2026-06-19
@@ -94,3 +125,4 @@
    Relocated field actions into the detail dialog beside their target sections (value/tag/alias) with labeled controls, moved field-level actions to bottom, hardened edit callback state handling, and updated AGENT instructions with mandatory unit-test verification guidance.
 6. **Tag-edit crash fix and dialog callback test coverage**  
    Fixed `rememberSaveable` misuse with non-saveable `Tag` state in tag editor flow, renamed dialog action labels for unambiguous UX, and added Android Compose test coverage for detail-dialog action callback wiring.
+

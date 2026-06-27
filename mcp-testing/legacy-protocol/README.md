@@ -1,7 +1,7 @@
 # Shary MCP protocol PowerShell tests
 
 These scripts are executable versions of
-`docs/testing/connector-mcp-e2e-quickstart.md`. Each script sends real requests
+`docs/archive/mcp-local-legacy/testing/connector-mcp-e2e-quickstart.md`. Each script sends real requests
 and throws when an expected result is missing. `run-mcp-tests.ps1` exits with
 code `1` on the first failed assertion.
 
@@ -98,3 +98,4 @@ Run cleanup afterward:
 .\mcp-testing\protocol\mcp-list-fields.ps1 -Token "Bearer PASTE_TOKEN_HERE"
 .\mcp-testing\protocol\mcp-client.ps1 -Method "tools/list" -WithoutAuth
 ```
+

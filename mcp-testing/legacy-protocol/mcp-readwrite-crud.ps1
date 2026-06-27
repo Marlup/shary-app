@@ -46,16 +46,15 @@ $updateField = Invoke-SharyTool `
 Assert-SharyToolSuccess $updateField "Update field"
 Assert-SharyEqual $updateField.result.structuredContent.data.updated $true "Field updated flag"
 
-$fields = Invoke-SharyTool `
-    -Name "shary.fields.list" `
+$field = Invoke-SharyTool `
+    -Name "shary.fields.get" `
     -Token $Token `
     -McpUrl $McpUrl `
-    -Id "fields-after-update-$TestSuffix"
-Assert-SharyToolSuccess $fields "List fields after update"
-$storedField = @($fields.result.structuredContent.data.items) |
-    Where-Object { $_.key -eq $fieldKey } |
-    Select-Object -First 1
-Assert-SharyTrue ($null -ne $storedField) "Created field must be returned by list"
+    -Id "field-after-update-$TestSuffix" `
+    -Arguments @{ key = $fieldKey }
+Assert-SharyToolSuccess $field "Get field after update"
+$storedField = $field.result.structuredContent.data
+Assert-SharyEqual $storedField.key $fieldKey "Returned field key"
 Assert-SharyEqual $storedField.value "updated-through-mcp" "Updated field value"
 Assert-SharyEqual $storedField.key_alias "Updated E2E MCP Field" "Updated field alias"
 
