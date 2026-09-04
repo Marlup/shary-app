@@ -53,7 +53,7 @@ fun UserEditorDialog(
     var email by rememberSaveable(initial.email) {
         mutableStateOf(initial.email)
     }
-    var selectedTag by rememberSaveable(initial.email) {
+    var selectedTag by remember(initial.email) {
         mutableStateOf(initial.tag)
     }
     var showErrors by rememberSaveable(initial.email) { mutableStateOf(false) }
