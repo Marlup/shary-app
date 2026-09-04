@@ -7,6 +7,7 @@ message User {
   string username = 1;
   string email = 2;
   int64 dateAdded = 3;
+  string tag = 4;
 }
 
 message UserList {

@@ -127,17 +127,22 @@ class JsonFileServiceImpl(
         mode: DataFileMode
     ): File = withContext(Dispatchers.IO) {
         val file = File.createTempFile("shary_", ".json", context.cacheDir)
-        val json = JSONObject().apply {
-            put("metadata", JSONObject().apply {
-                metadata.forEach { (k, v) -> put(k, v) }
-                put("mode", DataFileMode.toString(mode))
-            })
-            put("fields", JSONObject().apply {
-                fields.forEach { put(it.key, it.value) }
-            })
+        try {
+            val json = JSONObject().apply {
+                put("metadata", JSONObject().apply {
+                    metadata.forEach { (k, v) -> put(k, v) }
+                    put("mode", DataFileMode.toString(mode))
+                })
+                put("fields", JSONObject().apply {
+                    fields.forEach { put(it.key, it.value) }
+                })
+            }
+            file.writeText(json.toString())
+            file
+        } catch (error: Exception) {
+            file.delete()
+            throw error
         }
-        file.writeText(json.toString())
-        file
     }
 
     // -------------------------------------------------------------------------

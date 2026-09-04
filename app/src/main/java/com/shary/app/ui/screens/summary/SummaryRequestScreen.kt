@@ -44,18 +44,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import com.shary.app.ui.components.RecipientBlob
+import com.shary.app.application.email.EmailShareState
 import com.shary.app.ui.components.ReviewKeyValueRow
 import com.shary.app.ui.components.ReviewSectionCard
 import com.shary.app.ui.components.SendMethodCard
 import com.shary.app.ui.components.SharyPrimaryButton
+import com.shary.app.application.cloud.CloudDeliveryState
+import com.shary.app.application.cloud.CloudDeliverySummary
+import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.ui.screens.home.utils.SendOption
 import com.shary.app.ui.theme.Violet50
 import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet600
 import com.shary.app.ui.utils.cloudUiStatus
 import com.shary.app.utils.log.AppLogger
-import com.shary.app.core.domain.types.enums.StatusDataSentDb
 import com.shary.app.viewmodels.communication.CloudViewModel
 import com.shary.app.viewmodels.communication.EmailViewModel
 import com.shary.app.viewmodels.configuration.SettingsViewModel
@@ -66,7 +68,10 @@ import com.shary.app.viewmodels.user.UserViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun SummaryRequestScreen(navController: NavHostController) {
+fun SummaryRequestScreen(
+    navController: NavHostController,
+    draftRequestId: String? = null
+) {
     val context = LocalContext.current
     val emailViewModel: EmailViewModel = hiltViewModel()
     val cloudViewModel: CloudViewModel = hiltViewModel()
@@ -74,29 +79,68 @@ fun SummaryRequestScreen(navController: NavHostController) {
     val requestViewModel: RequestViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
 
-    val fields = remember { requestViewModel.getDraftFields() }
-    val recipients = remember { userViewModel.getCachedUsers() }
-    val recipient = recipients.firstOrNull()
+    val requestWorkflow by requestViewModel.requestWorkflow.collectAsState()
+    val outgoingDraft = requestWorkflow.outgoingRequestDraft
+    val requestId = draftRequestId?.trim()?.takeIf(String::isNotBlank)
+        ?: outgoingDraft.requestId
+    val draftMatchesRoute = requestId.isNotBlank() && outgoingDraft.requestId == requestId
+    val fields = remember(outgoingDraft, requestId) {
+        if (draftMatchesRoute) requestViewModel.getDraftFields() else emptyList()
+    }
+    val availableUsers by userViewModel.users.collectAsState()
+    val recipients = remember(outgoingDraft, availableUsers, requestId) {
+        if (!draftMatchesRoute) {
+            emptyList()
+        } else {
+            outgoingDraft.recipientAddresses.map { address ->
+                availableUsers.firstOrNull {
+                    it.email.trim().equals(address, ignoreCase = true)
+                } ?: UserDomain(email = address)
+            }
+        }
+    }
     var selectedMethod: SendOption by remember { mutableStateOf(SendOption.Cloud) }
+    val emailShareState by emailViewModel.shareState.collectAsState()
+    val emailBusy = emailShareState is EmailShareState.Preparing ||
+        emailShareState is EmailShareState.Prepared ||
+        emailShareState is EmailShareState.Launching
+    val cloudDeliveryState by cloudViewModel.deliveryState.collectAsState()
     val cloudLoading by cloudViewModel.isLoading.collectAsState()
+    val cloudSending = cloudDeliveryState is CloudDeliveryState.Sending
+    val cloudBusy = cloudSending || cloudLoading
+    val cloudReceipt = (cloudDeliveryState as? CloudDeliveryState.Receipt)?.receipt
     val cloudState by cloudViewModel.cloudState.collectAsState()
     val settings by settingsViewModel.settings.collectAsState()
     val cloudStatus = cloudUiStatus(cloudState)
+    val privacyCopy = reviewPrivacyCopy(
+        method = selectedMethod,
+        payloadKind = ReviewPayloadKind.REQUESTED_KEYS,
+        recipientCount = recipients.size,
+        sensitiveFieldCount = 0,
+        cloudExpiryDays = settings.defaultCloudExpiryDays
+    )
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        emailViewModel.intent.collect { intent ->
-            context.startActivity(Intent.createChooser(intent, "Choose Email App"))
+    LaunchedEffect(emailShareState) {
+        val preparedState = emailShareState as? EmailShareState.Prepared ?: return@LaunchedEffect
+        val attachmentId = preparedState.lease.attachmentId
+        val prepared = emailViewModel.claimPreparedShare(attachmentId) ?: return@LaunchedEffect
+        try {
+            context.startActivity(Intent.createChooser(prepared.intent, "Choose sharing app"))
+            emailViewModel.onShareSheetOpened(attachmentId)
+        } catch (error: Throwable) {
+            emailViewModel.onChooserLaunchFailed(attachmentId, error)
         }
+    }
+
+    LaunchedEffect(requestId) {
+        if (requestId.isNotBlank()) cloudViewModel.restoreRequestDelivery(requestId)
     }
 
     LaunchedEffect(Unit) {
         cloudViewModel.events.collect { event ->
             when (event) {
-                is CloudEvent.RequestUploaded -> {
-                    snackbarHostState.showSnackbar(formatCloudAck(event.result))
-                }
                 is CloudEvent.Error -> {
                     snackbarHostState.showSnackbar(cloudErrorMessage(event.throwable))
                 }
@@ -119,7 +163,7 @@ fun SummaryRequestScreen(navController: NavHostController) {
         Column {
             SummaryRequestHero(
                 title = "Review & Send",
-                subtitle = "${fields.size} requested keys · ${recipients.size} recipient(s) · encrypted",
+                subtitle = "${fields.size} requested keys · ${recipients.size} recipients",
                 onBack = { navController.popBackStack() }
             )
 
@@ -130,13 +174,7 @@ fun SummaryRequestScreen(navController: NavHostController) {
                     .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                ReviewSectionCard(sectionLabel = "Recipient") {
-                    if (recipient != null) {
-                        RecipientBlob(name = recipient.username, email = recipient.email)
-                    } else {
-                        Text("No recipient selected", color = Violet500)
-                    }
-                }
+                SelectedRecipientsSection(recipients)
 
                 ReviewSectionCard(sectionLabel = "Fields") {
                     if (fields.isEmpty()) {
@@ -156,18 +194,19 @@ fun SummaryRequestScreen(navController: NavHostController) {
                     SendMethodCard(
                         icon = Icons.Default.Email,
                         title = "Email",
-                        description = recipient?.email?.let { "to $it" } ?: "No recipient",
+                        description = "Readable JSON attachment",
                         isSelected = selectedMethod == SendOption.Email,
-                        onClick = { selectedMethod = SendOption.Email }
+                        onClick = { selectedMethod = SendOption.Email },
+                        enabled = !cloudBusy && cloudReceipt == null && !emailBusy
                     )
                     Spacer(Modifier.height(8.dp))
                     SendMethodCard(
                         icon = Icons.Default.Cloud,
                         title = "Cloud",
-                        description = "Secure upload to cloud relay",
+                        description = "Encrypted on device · expires in ${settings.defaultCloudExpiryDays} days",
                         isSelected = selectedMethod == SendOption.Cloud,
                         onClick = { selectedMethod = SendOption.Cloud },
-                        enabled = cloudStatus.ready,
+                        enabled = cloudStatus.ready && !cloudBusy && cloudReceipt == null && !emailBusy,
                         onDisabledClick = {
                             scope.launch {
                                 snackbarHostState.showSnackbar("Cloud disabled: ${cloudStatus.reason}")
@@ -182,23 +221,50 @@ fun SummaryRequestScreen(navController: NavHostController) {
                             color = Violet500
                         )
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = privacyCopy.disclosure,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Violet500
+                    )
+                }
+
+                cloudReceipt?.let { CloudDeliveryReceiptSection(it) }
+                if (selectedMethod == SendOption.Email) {
+                    EmailShareReceiptSection(emailShareState)
                 }
 
                 SharyPrimaryButton(
-                    text = if (cloudLoading && selectedMethod == SendOption.Cloud) {
-                        "Sending..."
-                    } else {
-                        "Send securely"
+                    text = when {
+                        selectedMethod == SendOption.Email -> when (emailShareState) {
+                            is EmailShareState.Preparing -> "Preparing attachment..."
+                            is EmailShareState.Prepared,
+                            is EmailShareState.Launching -> "Opening share sheet..."
+                            is EmailShareState.ShareSheetOpened -> "Open another sharing app"
+                            is EmailShareState.PreparationFailed,
+                            is EmailShareState.LaunchFailed -> "Try sharing again"
+                            EmailShareState.Idle -> privacyCopy.primaryAction
+                        }
+                        cloudSending -> "Sending..."
+                        cloudLoading && cloudReceipt?.summary == CloudDeliverySummary.SENT ->
+                            "Saving receipt..."
+                        cloudReceipt?.summary == CloudDeliverySummary.SENT -> "Done"
+                        cloudReceipt != null -> "Retry failed (${cloudReceipt.failedRecipients.size})"
+                        else -> privacyCopy.primaryAction
                     },
                     onClick = {
                         when (selectedMethod) {
                             SendOption.Email -> {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Preparing email composer...")
-                                }
                                 emailViewModel.sendRequest(fields, recipients)
                             }
                             SendOption.Cloud -> {
+                                if (cloudReceipt?.summary == CloudDeliverySummary.SENT) {
+                                    requestViewModel.removeDraftFields()
+                                    userViewModel.clearSelectedUsers()
+                                    cloudViewModel.resetDeliveryState()
+                                    navController.popBackStack()
+                                    return@SharyPrimaryButton
+                                }
                                 if (settings.wifiOnlyCloudSync && !isOnWifiNetwork(context)) {
                                     scope.launch {
                                         snackbarHostState.showSnackbar("Wi-Fi only sync is enabled. Connect to Wi-Fi to continue.")
@@ -212,20 +278,29 @@ fun SummaryRequestScreen(navController: NavHostController) {
                                     }
                                     return@SharyPrimaryButton
                                 }
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Sending request securely, please wait...")
-                                }
                                 AppLogger.info("SummaryRequestScreen", "event=send_request_to_cloud")
-                                cloudViewModel.uploadRequest(
-                                    fields = fields,
-                                    owner = owner,
-                                    recipients = recipients,
-                                    expiryDays = settings.defaultCloudExpiryDays
-                                )
+                                if (cloudReceipt == null) {
+                                    cloudViewModel.uploadRequest(
+                                        fields = fields,
+                                        owner = owner,
+                                        recipients = recipients,
+                                        requestId = requestId,
+                                        expiryDays = settings.defaultCloudExpiryDays
+                                    )
+                                } else {
+                                    cloudViewModel.retryFailedRequest(
+                                        fields = fields,
+                                        owner = owner,
+                                        recipients = recipients,
+                                        requestId = requestId,
+                                        expiryDays = settings.defaultCloudExpiryDays
+                                    )
+                                }
                             }
                         }
                     },
-                    enabled = fields.isNotEmpty() && recipients.isNotEmpty() && !cloudLoading &&
+                    enabled = fields.isNotEmpty() && requestId.isNotBlank() &&
+                        recipients.isNotEmpty() && !cloudBusy && !emailBusy &&
                         (selectedMethod != SendOption.Cloud || cloudStatus.ready),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -233,7 +308,7 @@ fun SummaryRequestScreen(navController: NavHostController) {
                 )
 
                 Text(
-                    text = "End-to-end encrypted · data never stored",
+                    text = privacyCopy.methodDescription,
                     style = MaterialTheme.typography.bodySmall,
                     color = Violet500,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -247,21 +322,6 @@ fun SummaryRequestScreen(navController: NavHostController) {
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
         )
-    }
-}
-
-private fun formatCloudAck(result: Map<String, StatusDataSentDb>): String {
-    if (result.isEmpty()) return "No backend acknowledgement received."
-
-    val successCount = result.count { (_, status) ->
-        status == StatusDataSentDb.SUCCESS || status == StatusDataSentDb.STORED
-    }
-    val failedCount = result.size - successCount
-
-    return when {
-        successCount == result.size -> "Sent successfully to $successCount recipient(s)."
-        successCount == 0 -> "Send failed for all recipients."
-        else -> "Sent to $successCount recipient(s), $failedCount failed."
     }
 }
 

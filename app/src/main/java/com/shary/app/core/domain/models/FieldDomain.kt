@@ -13,7 +13,8 @@ data class FieldDomain(
     val value: String,
     val keyAlias: String = "",
     val tag: Tag = Tag.Unknown,
-    val dateAdded: Instant
+    val dateAdded: Instant,
+    val isMcpShareable: Boolean = false
 ) {
 
     companion object {
@@ -31,7 +32,8 @@ data class FieldDomain(
                 value = value.trim(),
                 keyAlias = keyAlias.trim(),
                 tag = tag,
-                dateAdded = Instant.now()
+                dateAdded = Instant.now(),
+                isMcpShareable = false
             )
         }
 
@@ -41,7 +43,8 @@ data class FieldDomain(
             keyAlias = "",
             tag = Tag.Unknown,
             //dateAdded = Instant.EPOCH
-            dateAdded = Instant.now()
+            dateAdded = Instant.now(),
+            isMcpShareable = false
         )
     }
 
@@ -63,5 +66,6 @@ fun FieldDomain.reset(): FieldDomain = this.copy(
     value = "",
     keyAlias = "",
     tag = Tag.Unknown,
-    dateAdded = Instant.EPOCH
+    dateAdded = Instant.EPOCH,
+    isMcpShareable = false
 )

@@ -3,12 +3,21 @@ package com.shary.app.viewmodels.communication
 import CloudEvent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.application.cloud.CloudDeliveryAttempt
+import com.shary.app.application.cloud.CloudDeliveryController
+import com.shary.app.application.cloud.CloudDeliveryKind
+import com.shary.app.application.cloud.CloudDeliveryState
+import com.shary.app.application.cloud.CloudDeliverySummary
+import com.shary.app.application.cloud.toCloudDeliveryReceipt
+import com.shary.app.application.cloud.toPersistedRequest
+import com.shary.app.application.cloud.toRequestDeliveryOutcomes
 import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
-import com.shary.app.core.domain.models.RequestDomain
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.domain.models.RequestDeliveryChannel
+import com.shary.app.core.domain.models.canonicalCloudRequestId
 import com.shary.app.utils.log.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -17,6 +26,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.util.Locale
 
 @HiltViewModel
 class CloudViewModel @Inject constructor(
@@ -25,6 +35,9 @@ class CloudViewModel @Inject constructor(
 ) : ViewModel() {
 
     val cloudState = cloudService.cloudState
+
+    private val deliveryController = CloudDeliveryController()
+    val deliveryState: StateFlow<CloudDeliveryState> = deliveryController.state
 
     fun refreshOnlineStatus() {
         viewModelScope.launch {
@@ -68,23 +81,72 @@ class CloudViewModel @Inject constructor(
         owner: UserDomain,
         recipients: List<UserDomain>,
         expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS,
+        responseRequestId: String? = null,
     ) {
+        val stableResponseRequestId = responseRequestId?.let(::canonicalRequestIdOrReport)
+        if (responseRequestId != null && stableResponseRequestId == null) return
+        val attempt = deliveryController.begin(
+            kind = CloudDeliveryKind.DATA,
+            recipients = recipients.map(UserDomain::email),
+            transactionId = stableResponseRequestId
+        ) ?: return
+        launchDataAttempt(attempt, fields, owner, recipients, expiryDays, stableResponseRequestId)
+    }
+
+    fun retryFailedData(
+        fields: List<FieldDomain>,
+        owner: UserDomain,
+        recipients: List<UserDomain>,
+        expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS,
+        responseRequestId: String? = null,
+    ) {
+        val stableResponseRequestId = responseRequestId?.let(::canonicalRequestIdOrReport)
+        if (responseRequestId != null && stableResponseRequestId == null) return
+        val attempt = deliveryController.retryFailed(
+            CloudDeliveryKind.DATA,
+            transactionId = stableResponseRequestId
+        ) ?: return
+        launchDataAttempt(attempt, fields, owner, recipients, expiryDays, stableResponseRequestId)
+    }
+
+    private fun launchDataAttempt(
+        attempt: CloudDeliveryAttempt,
+        fields: List<FieldDomain>,
+        owner: UserDomain,
+        recipients: List<UserDomain>,
+        expiryDays: Int,
+        responseRequestId: String?
+    ) {
+        val attemptedRecipients = recipients.forAttempt(attempt)
+        _isLoading.value = true
         viewModelScope.launch {
-            _isLoading.value = true
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    cloudService.uploadData(fields, owner, recipients, expiryDays)
+            try {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        cloudService.uploadData(fields, owner, attemptedRecipients, expiryDays)
+                    }
                 }
-            }
-            _isLoading.value = false
-            result.onSuccess { resultMap ->
-                if (resultMap.isEmpty()) {
-                    _events.tryEmit(CloudEvent.Error(IllegalStateException("No backend acknowledgement received.")))
-                } else {
-                    _events.tryEmit(CloudEvent.DataUploaded(resultMap))
+                result.onSuccess { resultMap ->
+                    val receipt = deliveryController.complete(attempt, resultMap)
+                    if (responseRequestId != null && receipt != null) {
+                        saveResponseDeliveryHistory(responseRequestId, receipt)
+                    }
+                    if (resultMap.isEmpty()) {
+                        _events.tryEmit(
+                            CloudEvent.Error(IllegalStateException("No backend acknowledgement received."))
+                        )
+                    } else {
+                        _events.tryEmit(CloudEvent.DataUploaded(resultMap))
+                    }
+                }.onFailure { throwable ->
+                    val receipt = deliveryController.fail(attempt)
+                    if (responseRequestId != null && receipt != null) {
+                        saveResponseDeliveryHistory(responseRequestId, receipt)
+                    }
+                    _events.tryEmit(CloudEvent.Error(throwable))
                 }
-            }.onFailure { throwable ->
-                _events.tryEmit(CloudEvent.Error(throwable))
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -94,42 +156,211 @@ class CloudViewModel @Inject constructor(
         fields: List<FieldDomain>,
         owner: UserDomain,
         recipients: List<UserDomain>,
+        requestId: String,
         expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS,
     ) {
+        val stableRequestId = canonicalRequestIdOrReport(requestId) ?: return
+        val attempt = deliveryController.begin(
+            kind = CloudDeliveryKind.REQUEST,
+            recipients = recipients.map(UserDomain::email),
+            transactionId = stableRequestId
+        ) ?: return
+        launchRequestAttempt(attempt, fields, owner, recipients, stableRequestId, expiryDays)
+    }
+
+    fun retryFailedRequest(
+        fields: List<FieldDomain>,
+        owner: UserDomain,
+        recipients: List<UserDomain>,
+        requestId: String,
+        expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS,
+    ) {
+        val stableRequestId = canonicalRequestIdOrReport(requestId) ?: return
+        val attempt = deliveryController.retryFailed(
+            kind = CloudDeliveryKind.REQUEST,
+            transactionId = stableRequestId
+        ) ?: return
+        launchRequestAttempt(attempt, fields, owner, recipients, stableRequestId, expiryDays)
+    }
+
+    fun restoreRequestDelivery(requestId: String) {
+        val stableRequestId = canonicalRequestIdOrReport(requestId) ?: return
+        if (deliveryController.state.value != CloudDeliveryState.Review) return
+
         viewModelScope.launch {
-            _isLoading.value = true
-            val result = runCatching {
+            runCatching {
                 withContext(Dispatchers.IO) {
-                    cloudService.uploadRequest(fields, owner, recipients, expiryDays)
+                    requestRepository.findSentRequest(stableRequestId)
                 }
-            }
-            _isLoading.value = false
-            result.onSuccess { resultMap ->
-                if (resultMap.isEmpty()) {
-                    _events.tryEmit(CloudEvent.Error(IllegalStateException("No backend acknowledgement received.")))
-                    return@onSuccess
-                }
-
-                val request = RequestDomain(
-                    fields = fields,
-                    user = owner.email,
-                    recipients = recipients.map { it.email },
-                    dateAdded = Instant.now(),
-                    owned = true,
-                    responded = false
+            }.onSuccess { request ->
+                request?.toCloudDeliveryReceipt()?.let(deliveryController::restore)
+            }.onFailure { error ->
+                AppLogger.error("CloudViewModel", "event=restore_request_delivery_failed", error)
+                _events.emit(
+                    CloudEvent.Error(
+                        IllegalStateException("Saved delivery receipt could not be loaded.", error)
+                    )
                 )
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        requestRepository.saveSentRequest(request)
-                    }
-                }.onFailure { error ->
-                    AppLogger.error("CloudViewModel", "event=save_sent_request_failed", error)
-                }
-
-                _events.tryEmit(CloudEvent.RequestUploaded(resultMap))
-            }.onFailure { throwable ->
-                _events.tryEmit(CloudEvent.Error(throwable))
             }
         }
+    }
+
+    fun restoreResponseDelivery(requestId: String) {
+        val stableRequestId = canonicalRequestIdOrReport(requestId) ?: return
+        if (deliveryController.state.value != CloudDeliveryState.Review) return
+
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    requestRepository.findReceivedRequest(stableRequestId)
+                }
+            }.onSuccess { request ->
+                request?.toCloudDeliveryReceipt(CloudDeliveryKind.DATA)
+                    ?.let(deliveryController::restore)
+            }.onFailure { error ->
+                AppLogger.error("CloudViewModel", "event=restore_response_delivery_failed", error)
+                _events.emit(
+                    CloudEvent.Error(
+                        IllegalStateException("Saved response receipt could not be loaded.", error)
+                    )
+                )
+            }
+        }
+    }
+
+    fun resetDeliveryState(): Boolean {
+        val reset = deliveryController.reset()
+        if (reset) _isLoading.value = false
+        return reset
+    }
+
+    private fun launchRequestAttempt(
+        attempt: CloudDeliveryAttempt,
+        fields: List<FieldDomain>,
+        owner: UserDomain,
+        recipients: List<UserDomain>,
+        stableRequestId: String,
+        expiryDays: Int
+    ) {
+        val attemptedRecipients = recipients.forAttempt(attempt)
+        _isLoading.value = true
+        viewModelScope.launch {
+            try {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        cloudService.uploadRequest(
+                            fields = fields,
+                            owner = owner,
+                            recipients = attemptedRecipients,
+                            requestId = stableRequestId,
+                            expiryDays = expiryDays
+                        )
+                    }
+                }
+                result.onSuccess { resultMap ->
+                    val receipt = deliveryController.complete(attempt, resultMap)
+                    receipt?.let { saveRequestDeliveryHistory(it, fields, owner) }
+                    if (resultMap.isEmpty()) {
+                        _events.tryEmit(
+                            CloudEvent.Error(IllegalStateException("No backend acknowledgement received."))
+                        )
+                        return@onSuccess
+                    }
+
+                    _events.emit(CloudEvent.RequestUploaded(resultMap))
+                }.onFailure { throwable ->
+                    deliveryController.fail(attempt)?.let { receipt ->
+                        saveRequestDeliveryHistory(receipt, fields, owner)
+                    }
+                    _events.tryEmit(CloudEvent.Error(throwable))
+                }
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private suspend fun saveRequestDeliveryHistory(
+        receipt: com.shary.app.application.cloud.CloudDeliveryReceipt,
+        fields: List<FieldDomain>,
+        owner: UserDomain
+    ) {
+        val request = receipt.toPersistedRequest(
+            fields = fields,
+            ownerEmail = owner.email,
+            updatedAt = Instant.now()
+        ) ?: return
+        runCatching {
+            withContext(Dispatchers.IO) {
+                requestRepository.saveSentRequest(request)
+            }
+        }.onFailure { error ->
+            AppLogger.error("CloudViewModel", "event=save_sent_request_failed", error)
+            _events.emit(
+                CloudEvent.Error(
+                    IllegalStateException(
+                        "The delivery result is visible, but its history could not be saved.",
+                        error
+                    )
+                )
+            )
+        }
+    }
+
+    private suspend fun saveResponseDeliveryHistory(
+        requestId: String,
+        receipt: com.shary.app.application.cloud.CloudDeliveryReceipt
+    ) {
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                requestRepository.updateReceivedRequestDelivery(
+                    requestId = requestId,
+                    channel = RequestDeliveryChannel.CLOUD,
+                    outcomes = receipt.toRequestDeliveryOutcomes(),
+                    updatedAt = Instant.now()
+                )
+            }
+        }
+        result.onSuccess { updated ->
+            if (!updated) {
+                _events.emit(
+                    CloudEvent.Error(
+                        IllegalStateException(
+                            "The response result is visible, but its Request history was not found."
+                        )
+                    )
+                )
+            }
+        }.onFailure { error ->
+            AppLogger.error("CloudViewModel", "event=save_response_delivery_failed", error)
+            _events.emit(
+                CloudEvent.Error(
+                    IllegalStateException(
+                        "The response result is visible, but its history could not be saved.",
+                        error
+                    )
+                )
+            )
+        }
+    }
+
+    private fun canonicalRequestIdOrReport(requestId: String): String? {
+        return canonicalCloudRequestId(requestId) ?: run {
+            _events.tryEmit(
+                CloudEvent.Error(IllegalStateException("Outgoing request identity is unavailable."))
+            )
+            null
+        }
+    }
+}
+
+private fun List<UserDomain>.forAttempt(attempt: CloudDeliveryAttempt): List<UserDomain> {
+    val usersByAddress = linkedMapOf<String, UserDomain>()
+    forEach { user ->
+        val normalizedAddress = user.email.trim().lowercase(Locale.ROOT)
+        if (normalizedAddress.isNotEmpty()) usersByAddress.putIfAbsent(normalizedAddress, user)
+    }
+    return attempt.attemptedRecipients.mapNotNull { address ->
+        usersByAddress[address.trim().lowercase(Locale.ROOT)]
     }
 }

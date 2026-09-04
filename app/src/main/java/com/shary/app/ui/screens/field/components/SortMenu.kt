@@ -3,9 +3,10 @@ package com.shary.app.ui.screens.field.components
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -13,15 +14,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.shary.app.core.domain.types.enums.SortByParameter
 import com.shary.app.ui.screens.utils.LongPressHint
-import com.shary.app.viewmodels.field.FieldViewModel
 
 @Composable
 fun SortMenu(
@@ -44,8 +42,8 @@ fun SortMenu(
         LongPressHint("Open sorting options") {
             IconButton(onClick = { expanded = true }) {
                 Icon(
-                    Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = "Sort"
+                    imageVector = Icons.Default.SwapVert,
+                    contentDescription = "Sort fields"
                 )
             }
         }
@@ -57,7 +55,17 @@ fun SortMenu(
             SortByParameter.entries.forEach { option ->
                 val isAscending = isAscendingMap[option]!!
                 DropdownMenuItem(
-                    text = { Text(option.name) },
+                    text = { Text(option.label) },
+                    leadingIcon = if (option == currentSort) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     trailingIcon = {
                         LongPressHint("Toggle ascending or descending order") {
                             IconButton(onClick = { onSortChange(option, !isAscending) }

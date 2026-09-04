@@ -1,6 +1,7 @@
 package com.shary.app.core.domain.models
 
 import com.shary.app.core.domain.models.RequestDomain.Companion.initialize
+import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.utils.Validation.validateEmailSyntax
 import java.time.Instant
 import kotlin.String
@@ -10,9 +11,10 @@ import kotlin.String
 // User (Domain Model)
 // --------------------
 data class UserDomain(
-    var username: String = "",
-    var email: String = "",
-    val dateAdded: Instant = Instant.now()
+    val username: String = "",
+    val email: String = "",
+    val dateAdded: Instant = Instant.now(),
+    val tag: Tag = Tag.Unknown
 ) {
     companion object {
         fun UserDomain?.orEmpty(): UserDomain =
@@ -21,11 +23,13 @@ data class UserDomain(
         fun create(
             username: String = "",
             email: String = "",
+            tag: Tag = Tag.Unknown
         ): UserDomain {
             return UserDomain(
                 username = username,
                 email = email,
-                dateAdded = Instant.now()
+                dateAdded = Instant.now(),
+                tag = tag
             )
         }
     }
@@ -37,5 +41,6 @@ data class UserDomain(
 fun UserDomain.reset(): UserDomain = this.copy(
     username = "",
     email = "",
-    dateAdded = Instant.EPOCH
+    dateAdded = Instant.EPOCH,
+    tag = Tag.Unknown
 )

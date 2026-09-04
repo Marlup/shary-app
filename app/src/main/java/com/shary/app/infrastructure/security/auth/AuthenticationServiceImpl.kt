@@ -5,6 +5,7 @@ import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.interfaces.services.ClipboardService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.interfaces.states.AuthState
 import com.shary.app.core.domain.types.valueobjects.Purpose
@@ -21,6 +22,8 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -43,9 +46,11 @@ class AuthenticationServiceImpl @Inject constructor(
     private val cloud: CloudService,
     private val cache: CacheService,
     private val firebaseAuth: FirebaseAuth,
+    private val clipboardService: ClipboardService,
 ) : AuthenticationService {
 
     private val DELAY_TIME_SECONDS = 40L
+    private val sessionTransitionLock = Mutex()
     private val _state = MutableStateFlow(AuthState())
     override val state: StateFlow<AuthState> = _state
 
@@ -78,52 +83,62 @@ class AuthenticationServiceImpl @Inject constructor(
      * 3) Persist signature file (contains only public keys).
      * 4) Persist encrypted JSON credentials in storage.
      */
-    override suspend fun signUp(context: Context, username: String, email: String, password: String) = runCatching {
-        val canonicalEmail = normalizeEmail(email)
-        val safePassword = computeSafePassword(canonicalEmail, password)
-        AppLogger.info("AuthenticationServiceImpl", "event=signup_start email=${AppLogger.emailHint(canonicalEmail)}")
-        val isEmailVerified = ensureFirebaseEmailSignupAndVerification(canonicalEmail, password)
-        cloud.cloudState.value = cloud.cloudState.value.copy(
-            email = canonicalEmail,
-            isUserValidated = isEmailVerified
-        )
+    override suspend fun signUp(
+        context: Context,
+        username: String,
+        email: String,
+        password: String
+    ): Result<Unit> = sessionTransitionLock.withLock {
+        logoutForReloginUnlocked()
+        val result = runCatching {
+            val canonicalEmail = normalizeEmail(email)
+            val safePassword = computeSafePassword(canonicalEmail, password)
+            AppLogger.info("AuthenticationServiceImpl", "event=signup_start email=${AppLogger.emailHint(canonicalEmail)}")
+            val isEmailVerified = ensureFirebaseEmailSignupAndVerification(canonicalEmail, password)
+            cloud.cloudState.value = cloud.cloudState.value.copy(
+                email = canonicalEmail,
+                isUserValidated = isEmailVerified
+            )
 
-        // Initialize keys locally
-        crypto.initializeKeysWithUser(context, canonicalEmail, safePassword)
-        crypto.saveSignature(context, username, canonicalEmail, safePassword)
+            // Initialize keys locally
+            crypto.initializeKeysWithUser(context, canonicalEmail, safePassword)
+            crypto.saveSignature(context, username, canonicalEmail, safePassword)
 
-        // --- CLOUD REGISTRATION ---
-        val cloudReachable = cloud.sendPing()
-        AppLogger.info("AuthenticationServiceImpl", "event=cloud_registration_start")
-        if (cloudReachable && isEmailVerified) {
-            val registered = cloud.isUserRegisteredInCloud(canonicalEmail)
-        AppLogger.debug("AuthenticationServiceImpl", "event=cloud_check_user_registered")
-            if (!registered) {
-                val token = cloud.uploadUser(canonicalEmail)
-                if (token.isNotEmpty()) {
-                    AppLogger.info("AuthenticationServiceImpl", "event=cloud_user_uploaded")
-                    setAuthToken(token)
+            // --- CLOUD REGISTRATION ---
+            val cloudReachable = cloud.sendPing()
+            AppLogger.info("AuthenticationServiceImpl", "event=cloud_registration_start")
+            if (cloudReachable && isEmailVerified) {
+                val registered = cloud.isUserRegisteredInCloud(canonicalEmail)
+                AppLogger.debug("AuthenticationServiceImpl", "event=cloud_check_user_registered")
+                if (!registered) {
+                    val token = cloud.uploadUser(canonicalEmail)
+                    if (token.isNotEmpty()) {
+                        AppLogger.info("AuthenticationServiceImpl", "event=cloud_user_uploaded")
+                        setAuthToken(token)
+                    } else {
+                        AppLogger.warn("AuthenticationServiceImpl", "event=cloud_upload_failed_using_local")
+                    }
                 } else {
-                    AppLogger.warn("AuthenticationServiceImpl", "event=cloud_upload_failed_using_local")
+                    AppLogger.info("AuthenticationServiceImpl", "event=cloud_user_already_exists")
                 }
             } else {
-                AppLogger.info("AuthenticationServiceImpl", "event=cloud_user_already_exists")
+                if (!isEmailVerified) {
+                    AppLogger.warn("AuthenticationServiceImpl", "event=signup_email_not_verified_cloud_registration_deferred")
+                } else {
+                    AppLogger.warn("AuthenticationServiceImpl", "event=cloud_unreachable_offline_signup")
+                }
             }
-        } else {
-            if (!isEmailVerified) {
-                AppLogger.warn("AuthenticationServiceImpl", "event=signup_email_not_verified_cloud_registration_deferred")
-            } else {
-                AppLogger.warn("AuthenticationServiceImpl", "event=cloud_unreachable_offline_signup")
-            }
-        }
 
-        // Persist locally
-        cacheCredentials(username, canonicalEmail, safePassword,getAuthToken())
-        persistCredentials(context)
-        preLoadLocalKeys(canonicalEmail, safePassword)
-        if (!isEmailVerified) {
-            AppLogger.info("AuthenticationServiceImpl", "event=signup_pending_email_verification")
+            // Persist locally
+            cacheCredentials(username, canonicalEmail, safePassword, getAuthToken())
+            persistCredentials(context)
+            preLoadLocalKeys(canonicalEmail, safePassword)
+            if (!isEmailVerified) {
+                AppLogger.info("AuthenticationServiceImpl", "event=signup_pending_email_verification")
+            }
         }
+        if (result.isFailure) logoutForReloginUnlocked()
+        result
     }
 
     /**
@@ -133,33 +148,45 @@ class AuthenticationServiceImpl @Inject constructor(
      * 3) Load and decrypt JSON credentials from local storage.
      * 4) Verify that provided email + password match stored credentials.
      */
-    override suspend fun signIn(context: Context, email: String, password: String) = runCatching {
-        val canonicalEmail = normalizeEmail(email)
-        val safePassword = computeSafePassword(canonicalEmail, password)
-        ensureFirebaseVerifiedSignIn(canonicalEmail, password)
-        cloud.cloudState.value = cloud.cloudState.value.copy(
-            email = canonicalEmail,
-            isUserValidated = true
-        )
-        crypto.initializeKeysWithUser(context, canonicalEmail, safePassword)
-        preLoadLocalKeys(canonicalEmail, safePassword)
+    override suspend fun signIn(
+        context: Context,
+        email: String,
+        password: String
+    ): Result<Any> = sessionTransitionLock.withLock {
+        logoutForReloginUnlocked()
+        val result = runCatching {
+            val canonicalEmail = normalizeEmail(email)
+            val safePassword = computeSafePassword(canonicalEmail, password)
+            ensureFirebaseVerifiedSignIn(canonicalEmail, password)
+            cloud.cloudState.value = cloud.cloudState.value.copy(
+                email = canonicalEmail,
+                isUserValidated = true
+            )
+            crypto.initializeKeysWithUser(context, canonicalEmail, safePassword)
+            preLoadLocalKeys(canonicalEmail, safePassword)
 
-        loadCredentials(context, email, safePassword)
-        check(isAuthenticated(canonicalEmail, safePassword)) { "Invalid credentials" }
-        AppLogger.info("AuthenticationServiceImpl", "event=signin_local_auth_completed")
-        AppLogger.info("StartupTrace", "event=local_auth_done")
+            loadCredentials(context, email, safePassword)
+            check(isAuthenticated(canonicalEmail, safePassword)) { "Invalid credentials" }
+            AppLogger.info("AuthenticationServiceImpl", "event=signin_local_auth_completed")
+            AppLogger.info("StartupTrace", "event=local_auth_done")
+        }
+        if (result.isFailure) logoutForReloginUnlocked()
+        result
     }
 
-    override suspend fun logoutForRelogin() {
-        _state.value = AuthState()
-        cache.clearAllCaches()
-        cloud.signOutCloud()
-        firebaseAuth.signOut()
+    override suspend fun logoutForRelogin() = sessionTransitionLock.withLock {
+        logoutForReloginUnlocked()
+    }
+
+    private suspend fun logoutForReloginUnlocked() {
+        clearRuntimeSession()
+        runCatching { cloud.signOutCloud() }
+        runCatching { firebaseAuth.signOut() }
     }
 
     /** Clears in-memory state and deletes the encrypted credentials file. */
-    override suspend fun signOut(context: Context) {
-        logoutForRelogin()
+    override suspend fun signOut(context: Context) = sessionTransitionLock.withLock {
+        logoutForReloginUnlocked()
         store.deleteCredentials(context)
         deleteSignatureFile(context)
         deleteCredentialsTimestamp(context)
@@ -170,6 +197,18 @@ class AuthenticationServiceImpl @Inject constructor(
     /** Safe password = base64( SHA256(password + ":" + code) ) */
     private fun computeSafePassword(salt: String, password: String): String =
         base64Encode(crypto.hashPassword(password, salt))
+
+    private fun clearRuntimeSession() {
+        val previousState = _state.value
+        _state.value = AuthState()
+        runCatching {
+            previousState.localKeys.values.forEach { key -> key.fill(0) }
+            previousState.localKeys.clear()
+        }
+        runCatching { cache.clearAllCaches() }
+        runCatching { clipboardService.clearOwnedClip() }
+        runCatching { crypto.clearSessionIdentity() }
+    }
 
     private fun cacheCredentials(username: String, email: String, safePassword: String, token: String = "") {
         _state.value = _state.value.copy(
@@ -349,8 +388,7 @@ class AuthenticationServiceImpl @Inject constructor(
         store.deleteCredentials(context)
         deleteSignatureFile(context)
         deleteCredentialsTimestamp(context)
-        cache.clearAllCaches()
-        _state.value = AuthState()
+        clearRuntimeSession()
         AppLogger.warn("AuthenticationServiceImpl", "event=credentials_recovery_purge_completed")
     }
 }

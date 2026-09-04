@@ -9,12 +9,15 @@ import com.shary.app.RequestList
 import com.shary.app.UserList
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.FieldValueHistoryRepository
+import com.shary.app.core.domain.interfaces.repositories.ConnectorRepository
+import com.shary.app.core.domain.interfaces.repositories.ContactTagRepository
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
 import com.shary.app.core.domain.interfaces.repositories.SettingsRepository
 import com.shary.app.core.domain.interfaces.repositories.TagRepository
 import com.shary.app.core.domain.interfaces.repositories.ThemeRepository
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
 import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.interfaces.services.ClipboardService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.security.FieldCodec
 import com.shary.app.core.domain.interfaces.services.CloudService
@@ -25,6 +28,8 @@ import com.shary.app.infrastructure.persistance.datastore.requestListDataStore
 import com.shary.app.infrastructure.persistance.datastore.userListDataStore
 import com.shary.app.infrastructure.persistance.repositories.FieldRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.FieldValueHistoryRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.ConnectorRepositoryImpl
+import com.shary.app.infrastructure.persistance.repositories.ContactTagRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.RequestRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.SettingsRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.TagRepositoryImpl
@@ -32,6 +37,9 @@ import com.shary.app.infrastructure.persistance.repositories.ThemeRepositoryImpl
 import com.shary.app.infrastructure.persistance.repositories.UserRepositoryImpl
 import com.shary.app.infrastructure.services.cache.SelectionCacheService
 import com.shary.app.infrastructure.services.cloud.CloudServiceImpl
+import com.shary.app.infrastructure.services.clipboard.ClipboardCleanupCoordinator
+import com.shary.app.infrastructure.services.email.EmailAttachmentCleanupCoordinator
+import com.shary.app.infrastructure.services.email.EmailAttachmentStore
 import com.shary.app.infrastructure.services.email.EmailServiceImpl
 import com.shary.app.infrastructure.services.file.JsonFileServiceImpl
 import dagger.Module
@@ -89,6 +97,10 @@ object DependenciesContainer {
         @ApplicationContext context: Context
     ): TagRepository = TagRepositoryImpl(context)
 
+    @Provides @Singleton fun provideContactTagRepository(
+        @ApplicationContext context: Context
+    ): ContactTagRepository = ContactTagRepositoryImpl(context)
+
     @Provides @Singleton fun provideThemeRepository(
         @ApplicationContext context: Context
     ): ThemeRepository = ThemeRepositoryImpl(context)
@@ -97,13 +109,35 @@ object DependenciesContainer {
         @ApplicationContext context: Context
     ): SettingsRepository = SettingsRepositoryImpl(context)
 
+    @Provides @Singleton
+    fun provideConnectorRepository(
+        @ApplicationContext context: Context
+    ): ConnectorRepository = ConnectorRepositoryImpl(context)
+
     // ======== Services ========
 
     @Provides @Singleton
     fun provideEmailService(
         @ApplicationContext context: Context,
-        jsonFileService: JsonFileService
-    ): EmailService = EmailServiceImpl(context, jsonFileService)
+        jsonFileService: JsonFileService,
+        attachmentStore: EmailAttachmentStore,
+        cleanupCoordinator: EmailAttachmentCleanupCoordinator
+    ): EmailService = EmailServiceImpl(
+        context = context,
+        jsonFileService = jsonFileService,
+        attachmentStore = attachmentStore,
+        cleanupCoordinator = cleanupCoordinator
+    )
+
+    @Provides @Singleton
+    fun provideEmailAttachmentStore(
+        @ApplicationContext context: Context
+    ): EmailAttachmentStore = EmailAttachmentStore(context)
+
+    @Provides @Singleton
+    fun provideEmailAttachmentCleanupCoordinator(
+        attachmentStore: EmailAttachmentStore
+    ): EmailAttachmentCleanupCoordinator = EmailAttachmentCleanupCoordinator(attachmentStore)
 
     @Provides @Singleton fun provideCloudService(
         crypto: CryptographyManager,
@@ -116,6 +150,11 @@ object DependenciesContainer {
 
     @Provides @Singleton fun provideSelectionCacheService(
     ): CacheService = SelectionCacheService()
+
+    @Provides @Singleton
+    fun provideClipboardService(
+        coordinator: ClipboardCleanupCoordinator
+    ): ClipboardService = coordinator
 
 
     @Provides @Singleton

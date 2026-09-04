@@ -2,20 +2,30 @@ package com.shary.app.core.domain.interfaces.services
 
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
+import com.shary.app.core.domain.models.RequestWorkflowState
 import com.shary.app.core.domain.models.UserDomain
 import kotlinx.coroutines.flow.StateFlow
 
+data class AccountScopedCacheState(
+    val fields: List<FieldDomain> = emptyList(),
+    val requests: List<RequestDomain> = emptyList(),
+    val draftFields: List<FieldDomain> = emptyList(),
+    val draftRequest: RequestDomain = RequestDomain.initialize(),
+    val users: List<UserDomain> = emptyList(),
+    val owner: UserDomain = UserDomain(),
+    val ownerPhone: String? = null,
+    val requestWorkflow: RequestWorkflowState = RequestWorkflowState()
+)
 
 /**
- * Cache efímera de selección cross-screen (proceso).
- * No persiste en disco. Thread-safe vía flujos/serialización de accesos en la impl.
+ * Process-local account and cross-screen selection state.
+ *
+ * [accountState] is the authoritative inventory. Session teardown replaces it
+ * in one assignment so observers cannot see a partially cleared account.
  */
 interface CacheService {
 
-    // Observables (útiles para reactive UI/servicios)
-    val fieldsFlow: StateFlow<List<FieldDomain>>
-    val requestsFlow: StateFlow<List<RequestDomain>>
-    val usersFlow: StateFlow<List<UserDomain>>
+    val accountState: StateFlow<AccountScopedCacheState>
 
 
     // Fields
@@ -59,6 +69,13 @@ interface CacheService {
     fun getOwnerUsername(): String?
     fun getOwnerEmail(): String?
     fun getPhoneNumber(): String?
+
+    // Request workflow
+    fun getRequestWorkflow(): RequestWorkflowState
+    fun cacheRequestWorkflow(state: RequestWorkflowState)
+    fun updateRequestWorkflow(
+        transform: (RequestWorkflowState) -> RequestWorkflowState
+    ): RequestWorkflowState
 
 
     // General

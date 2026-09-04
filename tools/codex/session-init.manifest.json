@@ -1,0 +1,33 @@
+{
+    "manifest_version":  1,
+    "policy_version":  "2026-07-18.1",
+    "generated_at_utc":  "2026-07-23T18:43:52.4089874Z",
+    "required_files":  [
+                           {
+                               "path":  "AGENTS.md",
+                               "role":  "canonical_policy",
+                               "sha256":  "abe011b8f045ab8e7aaad7d41fc09d30367f2c20963e5219387edfd17a2c9da3"
+                           },
+                           {
+                               "path":  "CODEX.md",
+                               "role":  "codex_adapter",
+                               "sha256":  "566d1895d3ce62bcb722c42a448560fd7901a7fd2d1fa07a9ab977dd95ea3f7e"
+                           },
+                           {
+                               "path":  "CLAUDE.md",
+                               "role":  "claude_adapter",
+                               "sha256":  "a63d3d5937b7e3045534dc3be072424ec80ffdc5193e39d12349aba78c5e8dc6"
+                           },
+                           {
+                               "path":  ".claude/settings.local.json",
+                               "role":  "claude_local_settings",
+                               "sha256":  "2868d08ae706412bf4c55d1d73e0698e1c287a6da33509f1e387d1cafb709678"
+                           }
+                       ],
+    "load_order":  [
+                       "AGENTS.md",
+                       "CODEX.md",
+                       "CLAUDE.md",
+                       ".claude/settings.local.json"
+                   ]
+}

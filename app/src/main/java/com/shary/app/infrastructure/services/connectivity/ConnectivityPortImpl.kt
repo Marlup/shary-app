@@ -24,7 +24,7 @@ import kotlinx.coroutines.isActive
 class ConnectivityPortImpl @Inject constructor(
     private val cloudService: CloudService,
     private val statusDataSource: CloudStatusDataSource,
-    @ConnectivityPingPeriod private val pingPeriodMillis: Long
+    @param:ConnectivityPingPeriod private val pingPeriodMillis: Long
 ) : ConnectivityPort {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

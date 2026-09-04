@@ -17,7 +17,7 @@ private val Context.dataStore by preferencesDataStore("theme_prefs")
 
 @Singleton
 class ThemeRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ThemeRepository {
 
     companion object {

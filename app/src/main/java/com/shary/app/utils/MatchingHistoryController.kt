@@ -34,14 +34,14 @@ class MatchingHistoryController(
     fun undo() {
         if (!canUndo) return
         future.add(snapshot())
-        val prev = past.removeLast()
+        val prev = past.removeAt(past.lastIndex)
         restore(prev)
     }
 
     fun redo() {
         if (!canRedo) return
         past.add(snapshot())
-        val next = future.removeLast()
+        val next = future.removeAt(future.lastIndex)
         restore(next)
     }
 }

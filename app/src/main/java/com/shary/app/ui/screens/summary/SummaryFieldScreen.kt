@@ -29,6 +29,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,18 +43,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
-import com.shary.app.ui.components.RecipientBlob
+import com.shary.app.application.email.EmailShareState
 import com.shary.app.ui.components.ReviewKeyValueRow
 import com.shary.app.ui.components.ReviewSectionCard
 import com.shary.app.ui.components.SendMethodCard
 import com.shary.app.ui.components.SharyPrimaryButton
+import com.shary.app.application.cloud.CloudDeliveryState
+import com.shary.app.application.cloud.CloudDeliverySummary
 import com.shary.app.ui.screens.home.utils.SendOption
 import com.shary.app.ui.theme.Violet50
 import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet600
 import com.shary.app.ui.utils.cloudUiStatus
-import com.shary.app.core.domain.types.enums.StatusDataSentDb
+import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.viewmodels.communication.CloudViewModel
 import com.shary.app.viewmodels.communication.EmailViewModel
 import com.shary.app.viewmodels.configuration.SettingsViewModel
@@ -62,11 +69,17 @@ import com.shary.app.viewmodels.request.RequestViewModel
 import com.shary.app.viewmodels.user.UserViewModel
 import com.shary.app.ui.screens.utils.cloudErrorMessage
 import com.shary.app.ui.utils.isOnWifiNetwork
+import com.shary.app.core.domain.types.valueobjects.FieldValueContract
+import com.shary.app.core.domain.types.valueobjects.FieldValueTypes
+import com.shary.app.utils.BiometricAuthManager
 import com.shary.app.utils.log.AppLogger
 import kotlinx.coroutines.launch
 
 @Composable
-fun SummaryFieldScreen(navController: NavHostController) {
+fun SummaryFieldScreen(
+    navController: NavHostController,
+    responseRequestId: String? = null
+) {
     val context = LocalContext.current
     val emailViewModel: EmailViewModel = hiltViewModel()
     val cloudViewModel: CloudViewModel = hiltViewModel()
@@ -75,30 +88,112 @@ fun SummaryFieldScreen(navController: NavHostController) {
     val requestViewModel: RequestViewModel = hiltViewModel()
     val userViewModel: UserViewModel = hiltViewModel()
 
-    val fields = remember { fieldViewModel.getCachedFields() }
-    val recipients = remember { userViewModel.getCachedUsers() }
-    val recipient = recipients.firstOrNull()
+    val cachedFields = remember { fieldViewModel.getCachedFields() }
+    val vaultFields by fieldViewModel.fields.collectAsState()
+    val cachedRecipients = remember { userViewModel.getCachedUsers() }
+    val requestWorkflow by requestViewModel.requestWorkflow.collectAsState()
+    val workflowRestoreComplete by requestViewModel.isWorkflowRestoreComplete.collectAsState()
+    val reviewState = remember(
+        cachedFields,
+        vaultFields,
+        cachedRecipients,
+        requestWorkflow,
+        responseRequestId
+    ) {
+        resolveSummaryFieldReviewState(
+            cachedFields = if (responseRequestId == null) cachedFields else vaultFields,
+            generalRecipients = cachedRecipients,
+            workflow = requestWorkflow,
+            responseRequestId = responseRequestId
+        )
+    }
+    val fields = reviewState.fields
+    val recipients = reviewState.recipients
     var selectedMethod: SendOption by remember { mutableStateOf(SendOption.Cloud) }
+    val emailShareState by emailViewModel.shareState.collectAsState()
+    val emailBusy = emailShareState is EmailShareState.Preparing ||
+        emailShareState is EmailShareState.Prepared ||
+        emailShareState is EmailShareState.Launching
+    val cloudDeliveryState by cloudViewModel.deliveryState.collectAsState()
     val cloudLoading by cloudViewModel.isLoading.collectAsState()
+    val cloudSending = cloudDeliveryState is CloudDeliveryState.Sending
+    val cloudBusy = cloudSending || cloudLoading
+    val cloudReceipt = (cloudDeliveryState as? CloudDeliveryState.Receipt)?.receipt
     val cloudState by cloudViewModel.cloudState.collectAsState()
     val settings by settingsViewModel.settings.collectAsState()
     val cloudStatus = cloudUiStatus(cloudState)
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val sensitiveFieldCount = remember(fields) {
+        fields.count { FieldValueTypes.isSensitive(it.value) }
+    }
+    val hasSensitiveFields = sensitiveFieldCount > 0
+    val privacyCopy = reviewPrivacyCopy(
+        method = selectedMethod,
+        payloadKind = ReviewPayloadKind.FIELD_VALUES,
+        recipientCount = recipients.size,
+        sensitiveFieldCount = sensitiveFieldCount,
+        cloudExpiryDays = settings.defaultCloudExpiryDays
+    )
+    var sensitiveAuthorized by remember(fields) {
+        mutableStateOf(!hasSensitiveFields)
+    }
+    var responseStatusUpdateFailed by remember(responseRequestId) { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        emailViewModel.intent.collect { intent ->
-            context.startActivity(Intent.createChooser(intent, "Choose Email App"))
+    fun requestSensitiveAccess() {
+        if (!hasSensitiveFields) {
+            sensitiveAuthorized = true
+            return
         }
+        val activity = context as? FragmentActivity
+        if (activity == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Device authentication is unavailable on this screen")
+            }
+            return
+        }
+        val error = BiometricAuthManager(context, activity) {
+            sensitiveAuthorized = true
+        }.authenticate()
+        if (error != null) {
+            scope.launch { snackbarHostState.showSnackbar(error) }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && hasSensitiveFields) {
+                sensitiveAuthorized = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(hasSensitiveFields) {
+        if (hasSensitiveFields && !sensitiveAuthorized) requestSensitiveAccess()
+    }
+
+    LaunchedEffect(emailShareState) {
+        val preparedState = emailShareState as? EmailShareState.Prepared ?: return@LaunchedEffect
+        val attachmentId = preparedState.lease.attachmentId
+        val prepared = emailViewModel.claimPreparedShare(attachmentId) ?: return@LaunchedEffect
+        try {
+            context.startActivity(Intent.createChooser(prepared.intent, "Choose sharing app"))
+            emailViewModel.onShareSheetOpened(attachmentId)
+        } catch (error: Throwable) {
+            emailViewModel.onChooserLaunchFailed(attachmentId, error)
+        }
+    }
+
+    LaunchedEffect(responseRequestId) {
+        responseRequestId?.let(cloudViewModel::restoreResponseDelivery)
     }
 
     LaunchedEffect(Unit) {
         cloudViewModel.events.collect { event ->
             when (event) {
-                is CloudEvent.DataUploaded -> {
-                    requestViewModel.markActiveReceivedRequestAsResponded()
-                    snackbarHostState.showSnackbar(formatCloudAck(event.result))
-                }
                 is CloudEvent.Error -> {
                     snackbarHostState.showSnackbar(cloudErrorMessage(event.throwable))
                 }
@@ -107,9 +202,40 @@ fun SummaryFieldScreen(navController: NavHostController) {
         }
     }
 
+    LaunchedEffect(cloudReceipt, responseRequestId, reviewState.responseCompleted) {
+        if (
+            cloudReceipt?.summary == CloudDeliverySummary.SENT &&
+            responseRequestId != null &&
+            !reviewState.responseCompleted
+        ) {
+            responseStatusUpdateFailed = false
+            requestViewModel.markActiveReceivedRequestAsResponded(responseRequestId)
+        }
+    }
+
     LaunchedEffect(Unit) {
         emailViewModel.events.collect { message ->
             snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        requestViewModel.events.collect { event ->
+            if (event is RequestEvent.ResponseStatusUpdateFailed) {
+                responseStatusUpdateFailed = true
+                snackbarHostState.showSnackbar(
+                    "Data was sent, but request history could not be updated: " +
+                        (event.throwable.message ?: "unknown error")
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(reviewState.responseStateMissing, workflowRestoreComplete) {
+        if (reviewState.responseStateMissing && workflowRestoreComplete) {
+            snackbarHostState.showSnackbar(
+                "This response draft is no longer available. Return to Requests and select it again."
+            )
         }
     }
 
@@ -121,7 +247,7 @@ fun SummaryFieldScreen(navController: NavHostController) {
         Column {
             SummaryHero(
                 title = "Review & Send",
-                subtitle = "${fields.size} fields · ${recipients.size} recipient(s) · encrypted",
+                subtitle = "${fields.size} fields · ${recipients.size} recipients",
                 onBack = { navController.popBackStack() }
             )
 
@@ -132,13 +258,7 @@ fun SummaryFieldScreen(navController: NavHostController) {
                     .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                ReviewSectionCard(sectionLabel = "Recipient") {
-                    if (recipient != null) {
-                        RecipientBlob(name = recipient.username, email = recipient.email)
-                    } else {
-                        Text("No recipient selected", color = Violet500)
-                    }
-                }
+                SelectedRecipientsSection(recipients)
 
                 ReviewSectionCard(sectionLabel = "Fields") {
                     if (fields.isEmpty()) {
@@ -147,8 +267,23 @@ fun SummaryFieldScreen(navController: NavHostController) {
                         fields.forEachIndexed { index, field ->
                             ReviewKeyValueRow(
                                 key = field.key,
-                                value = com.shary.app.core.domain.types.valueobjects.FieldValueContract.parse(field.value).plainData,
+                                value = if (FieldValueTypes.isSensitive(field.value)) {
+                                    FieldValueTypes.displayData(
+                                        storedValue = field.value,
+                                        revealSensitive = sensitiveAuthorized
+                                    )
+                                } else {
+                                    FieldValueContract.parse(field.value).plainData
+                                },
                                 last = index == fields.lastIndex
+                            )
+                        }
+                        if (hasSensitiveFields && !sensitiveAuthorized) {
+                            Spacer(Modifier.height(8.dp))
+                            SharyPrimaryButton(
+                                text = "Unlock sensitive fields",
+                                onClick = ::requestSensitiveAccess,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -158,18 +293,19 @@ fun SummaryFieldScreen(navController: NavHostController) {
                     SendMethodCard(
                         icon = Icons.Default.Email,
                         title = "Email",
-                        description = recipient?.email?.let { "to $it" } ?: "No recipient",
+                        description = "Readable JSON attachment",
                         isSelected = selectedMethod == SendOption.Email,
-                        onClick = { selectedMethod = SendOption.Email }
+                        onClick = { selectedMethod = SendOption.Email },
+                        enabled = !cloudBusy && cloudReceipt == null && !emailBusy
                     )
                     Spacer(Modifier.height(8.dp))
                     SendMethodCard(
                         icon = Icons.Default.Cloud,
                         title = "Cloud",
-                        description = "Secure upload to cloud relay",
+                        description = "Encrypted on device · expires in ${settings.defaultCloudExpiryDays} days",
                         isSelected = selectedMethod == SendOption.Cloud,
                         onClick = { selectedMethod = SendOption.Cloud },
-                        enabled = cloudStatus.ready,
+                        enabled = cloudStatus.ready && !cloudBusy && cloudReceipt == null && !emailBusy,
                         onDisabledClick = {
                             scope.launch {
                                 snackbarHostState.showSnackbar("Cloud disabled: ${cloudStatus.reason}")
@@ -184,23 +320,80 @@ fun SummaryFieldScreen(navController: NavHostController) {
                             color = Violet500
                         )
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = privacyCopy.disclosure,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Violet500
+                    )
+                    privacyCopy.sensitiveWarning?.let { warning ->
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = warning,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                cloudReceipt?.let { CloudDeliveryReceiptSection(it) }
+                if (selectedMethod == SendOption.Email) {
+                    EmailShareReceiptSection(emailShareState)
                 }
 
                 SharyPrimaryButton(
-                    text = if (cloudLoading && selectedMethod == SendOption.Cloud) {
-                        "Sending..."
-                    } else {
-                        "Send securely"
+                    text = when {
+                        reviewState.responseCompleted &&
+                            cloudReceipt?.summary != CloudDeliverySummary.SENT -> "Response sent"
+                        selectedMethod == SendOption.Email -> when (emailShareState) {
+                            is EmailShareState.Preparing -> "Preparing attachment..."
+                            is EmailShareState.Prepared,
+                            is EmailShareState.Launching -> "Opening share sheet..."
+                            is EmailShareState.ShareSheetOpened -> "Open another sharing app"
+                            is EmailShareState.PreparationFailed,
+                            is EmailShareState.LaunchFailed -> "Try sharing again"
+                            EmailShareState.Idle -> privacyCopy.primaryAction
+                        }
+                        cloudSending -> "Sending..."
+                        cloudLoading && cloudReceipt?.summary == CloudDeliverySummary.SENT ->
+                            "Saving receipt..."
+                        cloudReceipt?.summary == CloudDeliverySummary.SENT &&
+                            responseRequestId != null &&
+                            !reviewState.responseCompleted &&
+                            responseStatusUpdateFailed -> "Retry request status update"
+                        cloudReceipt?.summary == CloudDeliverySummary.SENT &&
+                            responseRequestId != null &&
+                            !reviewState.responseCompleted -> "Updating request..."
+                        cloudReceipt?.summary == CloudDeliverySummary.SENT -> "Done"
+                        cloudReceipt != null -> "Retry failed (${cloudReceipt.failedRecipients.size})"
+                        else -> privacyCopy.primaryAction
                     },
                     onClick = {
+                        if (hasSensitiveFields && !sensitiveAuthorized) {
+                            requestSensitiveAccess()
+                            return@SharyPrimaryButton
+                        }
                         when (selectedMethod) {
                             SendOption.Email -> {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Preparing email composer...")
-                                }
                                 emailViewModel.sendResponse(fields, recipients)
                             }
                             SendOption.Cloud -> {
+                                if (cloudReceipt?.summary == CloudDeliverySummary.SENT) {
+                                    if (responseRequestId != null && !reviewState.responseCompleted) {
+                                        responseStatusUpdateFailed = false
+                                        requestViewModel.markActiveReceivedRequestAsResponded(responseRequestId)
+                                        return@SharyPrimaryButton
+                                    }
+                                    if (responseRequestId == null) {
+                                        fieldViewModel.clearSelectedFields()
+                                        userViewModel.clearSelectedUsers()
+                                    } else {
+                                        requestViewModel.clearActiveReceivedRequest()
+                                    }
+                                    cloudViewModel.resetDeliveryState()
+                                    navController.popBackStack()
+                                    return@SharyPrimaryButton
+                                }
                                 if (settings.wifiOnlyCloudSync && !isOnWifiNetwork(context)) {
                                     scope.launch {
                                         snackbarHostState.showSnackbar("Wi-Fi only sync is enabled. Connect to Wi-Fi to continue.")
@@ -214,28 +407,48 @@ fun SummaryFieldScreen(navController: NavHostController) {
                                     }
                                     return@SharyPrimaryButton
                                 }
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Sending data securely, please wait...")
-                                }
                                 AppLogger.info("SummaryFieldScreen", "event=send_to_cloud")
-                                cloudViewModel.uploadData(
-                                    fields = fields,
-                                    owner = owner,
-                                    recipients = recipients,
-                                    expiryDays = settings.defaultCloudExpiryDays
-                                )
+                                if (cloudReceipt == null) {
+                                    cloudViewModel.uploadData(
+                                        fields = fields,
+                                        owner = owner,
+                                        recipients = recipients,
+                                        expiryDays = settings.defaultCloudExpiryDays,
+                                        responseRequestId = responseRequestId
+                                    )
+                                } else {
+                                    cloudViewModel.retryFailedData(
+                                        fields = fields,
+                                        owner = owner,
+                                        recipients = recipients,
+                                        expiryDays = settings.defaultCloudExpiryDays,
+                                        responseRequestId = responseRequestId
+                                    )
+                                }
                             }
                         }
                     },
-                    enabled = fields.isNotEmpty() && recipients.isNotEmpty() && !cloudLoading &&
-                        (selectedMethod != SendOption.Cloud || cloudStatus.ready),
+                    enabled = fields.isNotEmpty() && recipients.isNotEmpty() && !cloudBusy && !emailBusy &&
+                        (
+                            !reviewState.responseCompleted ||
+                                cloudReceipt?.summary == CloudDeliverySummary.SENT
+                            ) &&
+                        (!hasSensitiveFields || sensitiveAuthorized) &&
+                        (selectedMethod != SendOption.Cloud || cloudStatus.ready) &&
+                        !(
+                            selectedMethod == SendOption.Cloud &&
+                                cloudReceipt?.summary == CloudDeliverySummary.SENT &&
+                                responseRequestId != null &&
+                                !reviewState.responseCompleted &&
+                                !responseStatusUpdateFailed
+                            ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 14.dp)
                 )
 
                 Text(
-                    text = "End-to-end encrypted · data never stored",
+                    text = privacyCopy.methodDescription,
                     style = MaterialTheme.typography.bodySmall,
                     color = Violet500,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -249,21 +462,6 @@ fun SummaryFieldScreen(navController: NavHostController) {
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
         )
-    }
-}
-
-private fun formatCloudAck(result: Map<String, StatusDataSentDb>): String {
-    if (result.isEmpty()) return "No backend acknowledgement received."
-
-    val successCount = result.count { (_, status) ->
-        status == StatusDataSentDb.SUCCESS || status == StatusDataSentDb.STORED
-    }
-    val failedCount = result.size - successCount
-
-    return when {
-        successCount == result.size -> "Sent successfully to $successCount recipient(s)."
-        successCount == 0 -> "Send failed for all recipients."
-        else -> "Sent to $successCount recipient(s), $failedCount failed."
     }
 }
 

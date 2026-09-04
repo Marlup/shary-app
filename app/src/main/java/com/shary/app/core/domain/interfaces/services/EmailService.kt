@@ -4,14 +4,24 @@ import android.content.Intent
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.UserDomain
 
-interface EmailService {
-    suspend fun sendRequestFile(
-        fields: List<FieldDomain>,
-        recipients: List<UserDomain>
-    ): Result<Intent>
+data class PreparedEmailShare(
+    val attachmentId: String,
+    val intent: Intent,
+    val expiresAtEpochMillis: Long
+)
 
-    suspend fun sendResponseFile(
+interface EmailService {
+    suspend fun prepareRequestShare(
         fields: List<FieldDomain>,
         recipients: List<UserDomain>
-    ): Result<Intent>
+    ): Result<PreparedEmailShare>
+
+    suspend fun prepareResponseShare(
+        fields: List<FieldDomain>,
+        recipients: List<UserDomain>
+    ): Result<PreparedEmailShare>
+
+    suspend fun retainPreparedShare(attachmentId: String): Boolean
+
+    suspend fun discardPreparedShare(attachmentId: String): Boolean
 }

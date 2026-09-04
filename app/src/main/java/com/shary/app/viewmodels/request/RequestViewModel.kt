@@ -2,6 +2,16 @@ package com.shary.app.viewmodels.request
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.application.request.RequestInboxDecision
+import com.shary.app.application.request.RequestInboxDecisionController
+import com.shary.app.application.request.RequestInboxDecisionReceipt
+import com.shary.app.application.request.RequestInboxDecisionState
+import com.shary.app.application.request.RequestDraftFieldAddOutcome
+import com.shary.app.application.request.RequestWorkflowAction
+import com.shary.app.application.request.addRequestedFieldToDraft
+import com.shary.app.application.request.reduceRequestWorkflow
+import com.shary.app.application.request.requireAuthenticatedRequester
+import com.shary.app.application.request.normalizeRequestedFieldKeys
 import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.events.RequestEvent
 import com.shary.app.core.domain.interfaces.repositories.RequestRepository
@@ -9,16 +19,26 @@ import com.shary.app.core.domain.interfaces.services.CacheService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.RequestDomain
+import com.shary.app.core.domain.models.RequestWorkflowState
+import com.shary.app.core.domain.models.RequestedFieldDraft
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.domain.models.hasPersistableDraftIdentity
+import com.shary.app.core.domain.models.canonicalCloudRequestId
+import com.shary.app.core.domain.models.stableImportedRequestId
 import com.shary.app.core.domain.types.enums.CloudPayloadDecision
 import com.shary.app.core.domain.types.enums.RequestListMode
 import com.shary.app.core.domain.types.valueobjects.CloudInboxItem
 import com.shary.app.core.domain.types.valueobjects.DataPayload
 import com.shary.app.infrastructure.services.cloud.CloudRateLimitedException
+import com.shary.app.infrastructure.security.helper.SecurityUtils.hashMessageB64
 import com.shary.app.utils.log.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,12 +46,14 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.time.Instant
+import java.util.UUID
 
 @HiltViewModel
 class RequestViewModel @Inject constructor(
@@ -40,20 +62,45 @@ class RequestViewModel @Inject constructor(
     private val cloudService: CloudService
 ) : ViewModel() {
 
-    private val _listMode = MutableStateFlow(RequestListMode.RECEIVED)
-    val listMode: StateFlow<RequestListMode> = _listMode.asStateFlow()
+    private val workflowPersistence = Channel<WorkflowPersistence>(Channel.UNLIMITED)
 
-    private val _draftFields = MutableStateFlow<List<FieldDomain>>(emptyList())
-    private val _draftRequest = MutableStateFlow(RequestDomain.initialize())
-    val draftFields: StateFlow<List<FieldDomain>> = _draftFields.asStateFlow()
-    val draftRequest: StateFlow<RequestDomain> = _draftRequest.asStateFlow()
+    val requestWorkflow: StateFlow<RequestWorkflowState> =
+        cacheSelection.accountState
+            .map { it.requestWorkflow }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                cacheSelection.getRequestWorkflow()
+            )
+
+    val listMode: StateFlow<RequestListMode> = requestWorkflow
+        .map { it.mode }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            cacheSelection.getRequestWorkflow().mode
+        )
+
+    val draftFields: StateFlow<List<FieldDomain>> = requestWorkflow
+        .map(RequestWorkflowState::visibleDraftFields)
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            cacheSelection.getRequestWorkflow().visibleDraftFields()
+        )
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _isWorkflowRestoreComplete = MutableStateFlow(false)
+    val isWorkflowRestoreComplete: StateFlow<Boolean> =
+        _isWorkflowRestoreComplete.asStateFlow()
     private val _isCloudInboxLoading = MutableStateFlow(false)
     val isCloudInboxLoading: StateFlow<Boolean> = _isCloudInboxLoading.asStateFlow()
     private val _requestInboxItems = MutableStateFlow<List<CloudInboxItem>>(emptyList())
     val requestInboxItems: StateFlow<List<CloudInboxItem>> = _requestInboxItems.asStateFlow()
+    private val requestInboxDecisionController = RequestInboxDecisionController()
+    val requestInboxDecisionState: StateFlow<RequestInboxDecisionState> =
+        requestInboxDecisionController.state
 
     val receivedRequests: StateFlow<List<RequestDomain>> =
         requestRepository.getReceivedRequests()
@@ -67,6 +114,39 @@ class RequestViewModel @Inject constructor(
     val events: SharedFlow<RequestEvent> = _events.asSharedFlow()
     private var decisionCooldownUntilEpochSeconds: Long = 0L
 
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            for (command in workflowPersistence) {
+                val result = runCatching {
+                    requestRepository.saveWorkflowDraft(command.ownerAddress, command.workflow)
+                }.onFailure { error ->
+                    AppLogger.error("RequestViewModel", "event=persist_workflow_draft_failed", error)
+                }
+                command.completion?.complete(result.isSuccess)
+            }
+        }
+        viewModelScope.launch {
+            cacheSelection.accountState
+                .map { it.owner.email.trim().lowercase() }
+                .distinctUntilChanged()
+                .collectLatest { ownerAddress ->
+                    _isWorkflowRestoreComplete.value = false
+                    if (ownerAddress.isNotBlank()) {
+                        restorePersistedWorkflow(ownerAddress)
+                        _isWorkflowRestoreComplete.value = true
+                    }
+                }
+        }
+    }
+
+    private fun dispatch(action: RequestWorkflowAction): RequestWorkflowState {
+        val updated = cacheSelection.updateRequestWorkflow { current ->
+            reduceRequestWorkflow(current, action)
+        }
+        queueWorkflowPersistence(updated)
+        return updated
+    }
+
     // -------------------- Draft Request --------------------
 
     fun getCachedRequests(): List<RequestDomain> = cacheSelection.getRequests()
@@ -76,36 +156,71 @@ class RequestViewModel @Inject constructor(
 
 
     fun setListMode(mode: RequestListMode) {
-        _listMode.value = mode
-        if (mode == RequestListMode.SENT) {
-            clearActiveReceivedRequest()
-        }
+        dispatch(RequestWorkflowAction.ChangeMode(mode))
     }
 
     // -------------------- Draft Fields --------------------
 
-    fun getDraftFields(): List<FieldDomain> = cacheSelection.getDraftFields()
-    fun anyDraftFieldCached() = cacheSelection.isAnyDraftFieldCached()
-    fun toggleFieldSelection(field: FieldDomain) {
-        _draftFields.update { current -> if (field in current) current - field else current + field }
+    fun getDraftFields(): List<FieldDomain> =
+        cacheSelection.getRequestWorkflow().outgoingRequestDraft.requestedFields
+            .map(RequestedFieldDraft::toFieldDomain)
+
+    fun anyDraftFieldCached(): Boolean =
+        cacheSelection.getRequestWorkflow().outgoingRequestDraft.requestedFields.isNotEmpty()
+
+    suspend fun setOutgoingRecipients(users: List<UserDomain>): String? {
+        val current = cacheSelection.getRequestWorkflow()
+        val updated = reduceRequestWorkflow(
+            current,
+            RequestWorkflowAction.SetOutgoingRecipients(
+                recipientAddresses = users.map(UserDomain::email),
+                candidateRequestId = UUID.randomUUID().toString()
+            )
+        )
+        val requestId = updated.outgoingRequestDraft
+            .takeIf { it.requestedFields.isNotEmpty() && it.recipientAddresses.isNotEmpty() }
+            ?.requestId
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        if (!persistWorkflowNow(updated)) return null
+        cacheSelection.cacheRequestWorkflow(updated)
+        return requestId
     }
 
-    fun addDraftField(field: FieldDomain) {
-        AppLogger.debug("RequestViewModel", "event=add_draft_field")
-        _draftFields.update { current ->
-            val exists = current.any { it.key.equals(field.key, ignoreCase = true) }
-            if (exists) current else current + field
+    fun toggleFieldSelection(field: FieldDomain) {
+        val current = getDraftFields()
+        val updated = if (current.any { it.key.equals(field.key, ignoreCase = true) }) {
+            current.filterNot { it.key.equals(field.key, ignoreCase = true) }
+        } else {
+            current + field
         }
+        setDraftFields(updated)
+    }
+
+    fun addDraftField(field: FieldDomain): RequestDraftFieldAddOutcome {
+        AppLogger.debug("RequestViewModel", "event=add_draft_field")
+        val transition = addRequestedFieldToDraft(
+            current = cacheSelection.getRequestWorkflow().outgoingRequestDraft.requestedFields,
+            candidate = RequestedFieldDraft(
+                key = field.key,
+                keyAlias = field.keyAlias
+            )
+        )
+        if (transition.outcome == RequestDraftFieldAddOutcome.ADDED) {
+            setDraftFields(transition.requestedFields.map(RequestedFieldDraft::toFieldDomain))
+        }
+        return transition.outcome
     }
 
     fun removeDraftFields() {
-        if (_draftFields.value.isEmpty()) return
-        val toRemove = _draftFields.value.toSet()
-        _draftFields.update { current -> current.filterNot { it in toRemove } }
+        dispatch(RequestWorkflowAction.ClearOutgoingDraft)
     }
 
     fun clearDraftFields() {
-        _draftFields.value = emptyList()
+        when (cacheSelection.getRequestWorkflow().mode) {
+            RequestListMode.RECEIVED -> dispatch(RequestWorkflowAction.ClearReceivedWorkflow)
+            RequestListMode.SENT -> dispatch(RequestWorkflowAction.ClearOutgoingDraft)
+        }
     }
 
     fun restoreDraftFields(fields: List<FieldDomain>) {
@@ -113,50 +228,113 @@ class RequestViewModel @Inject constructor(
         setDraftFields(fields)
     }
 
-    fun setActiveReceivedRequest(request: RequestDomain) {
-        _draftRequest.value = request
-        cacheSelection.cacheDraftRequest(request)
+    fun setActiveReceivedRequest(request: RequestDomain): Boolean {
+        val updated = dispatch(RequestWorkflowAction.SelectReceivedRequest(request))
+        return updated.activeReceivedRequest?.id == request.id.trim()
     }
 
     fun clearActiveReceivedRequest() {
-        _draftRequest.value = RequestDomain.initialize()
-        cacheSelection.clearCachedDraftRequest()
+        dispatch(RequestWorkflowAction.ClearReceivedWorkflow)
     }
 
-    fun markActiveReceivedRequestAsResponded() {
-        val selected = _draftRequest.value
-        if (selected.fields.isEmpty() || selected.user.isBlank()) return
+    suspend fun prepareResponse(fields: List<FieldDomain>): String? {
+        if (fields.isEmpty()) return null
+        val current = cacheSelection.getRequestWorkflow()
+        val response = current.responseDraft ?: return null
+        val updated = reduceRequestWorkflow(
+            current,
+            RequestWorkflowAction.SetResponseMatches(
+                requestId = response.requestId,
+                matchedFieldKeys = fields.map { it.key }
+            )
+        )
+        val requestId = updated.responseDraft
+            ?.takeIf { it.matchedFieldKeys.isNotEmpty() }
+            ?.requestId
+            ?: return null
+        if (!persistWorkflowNow(updated)) return null
+        cacheSelection.cacheRequestWorkflow(updated)
+        return requestId
+    }
+
+    fun markActiveReceivedRequestAsResponded(requestId: String) {
+        val workflow = cacheSelection.getRequestWorkflow()
+        val selected = workflow.activeReceivedRequest ?: return
+        if (selected.id != requestId || workflow.responseDraft?.requestId != requestId) return
 
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                requestRepository.markReceivedRequestResponded(selected, responded = true)
+            val markResult = runCatching {
+                withContext(Dispatchers.IO) {
+                    requestRepository.markReceivedRequestResponded(selected, responded = true)
+                }
             }
-            _draftRequest.value = selected.copy(responded = true)
-            cacheSelection.cacheDraftRequest(_draftRequest.value)
-            clearActiveReceivedRequest()
+            val marked = markResult.getOrElse { error ->
+                _events.tryEmit(RequestEvent.ResponseStatusUpdateFailed(error))
+                return@launch
+            }
+            if (!marked) {
+                _events.tryEmit(
+                    RequestEvent.ResponseStatusUpdateFailed(
+                        IllegalStateException("Received request no longer exists")
+                    )
+                )
+                return@launch
+            }
+            dispatch(RequestWorkflowAction.CompleteResponse(requestId))
         }
-    }
-
-    fun updateDraftRequest() {
-        AppLogger.debug("RequestViewModel", "event=update_draft_request_start")
-        if (draftFields.value.isNotEmpty()){
-            cacheSelection.cacheDraftRequest(
-                RequestDomain.initialize().copy(fields = draftFields.value)
-            )
-            AppLogger.debug("RequestViewModel", "event=update_draft_request_success count=${_draftFields.value.size}")
-        }
-    }
-
-    fun setDraftFields() {
-        setDraftFields(_draftFields.value)
     }
 
     fun setDraftFields(fields: List<FieldDomain>) {
         AppLogger.debug("RequestViewModel", "event=set_draft_fields_start")
-        val draftFields = fields.distinctBy { it.key.lowercase() }
-        _draftFields.value = draftFields
-        AppLogger.debug("RequestViewModel", "event=set_draft_fields_success count=${_draftFields.value.size}")
-        cacheSelection.cacheDraftFields(draftFields)
+        val updated = dispatch(
+            RequestWorkflowAction.SetOutgoingFields(
+                fields = fields,
+                candidateRequestId = UUID.randomUUID().toString()
+            )
+        )
+        AppLogger.debug(
+            "RequestViewModel",
+            "event=set_draft_fields_success count=${updated.outgoingRequestDraft.requestedFields.size}"
+        )
+    }
+
+    private suspend fun restorePersistedWorkflow(ownerAddress: String) {
+        if (cacheSelection.getRequestWorkflow().hasPersistableDraftIdentity()) return
+        val restored = runCatching {
+            withContext(Dispatchers.IO) {
+                requestRepository.findWorkflowDraft(ownerAddress)
+            }
+        }.onFailure { error ->
+            AppLogger.error("RequestViewModel", "event=restore_workflow_draft_failed", error)
+        }.getOrNull() ?: return
+
+        val currentOwner = cacheSelection.getOwnerEmail()?.trim()?.lowercase()
+        if (
+            currentOwner == ownerAddress &&
+            !cacheSelection.getRequestWorkflow().hasPersistableDraftIdentity()
+        ) {
+            cacheSelection.cacheRequestWorkflow(restored)
+        }
+    }
+
+    private fun queueWorkflowPersistence(workflow: RequestWorkflowState) {
+        val ownerAddress = cacheSelection.getOwnerEmail()?.trim()?.lowercase().orEmpty()
+        if (ownerAddress.isBlank()) return
+        workflowPersistence.trySend(WorkflowPersistence(ownerAddress, workflow))
+    }
+
+    private suspend fun persistWorkflowNow(workflow: RequestWorkflowState): Boolean {
+        val ownerAddress = cacheSelection.getOwnerEmail()?.trim()?.lowercase().orEmpty()
+        if (ownerAddress.isBlank()) return false
+        val completion = CompletableDeferred<Boolean>()
+        workflowPersistence.send(
+            WorkflowPersistence(
+                ownerAddress = ownerAddress,
+                workflow = workflow,
+                completion = completion
+            )
+        )
+        return completion.await()
     }
 
     /**
@@ -233,16 +411,26 @@ class RequestViewModel @Inject constructor(
     }
 
     fun acceptRequestInboxItem(email: String, item: CloudInboxItem) {
+        val verification = item.payload.verification
+        if (!requestInboxDecisionController.tryStart(verification, RequestInboxDecision.ACCEPT)) {
+            return
+        }
+        _isCloudInboxLoading.value = true
         viewModelScope.launch {
-            _isCloudInboxLoading.value = true
+            var localRequestedKeyCount: Int? = null
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     enforceDecisionCooldownOrThrow()
                     val decryptedJson = cloudService.decryptRequestFromInbox(email, item.payload).getOrThrow()
                     val importedKeyCount = importDecryptedRequestJsons(
                         jsonStrings = listOf(decryptedJson),
-                        targetUserEmail = email
+                        targetUserEmail = email,
+                        authenticatedRequesterIds = listOf(item.payload.user),
+                        externalRequestIds = listOf(
+                            "${item.payload.verification}:${item.payload.creationAt}"
+                        )
                     )
+                    localRequestedKeyCount = importedKeyCount
                     val backendAcknowledged = cloudService.sendRequestDecision(
                         email = email,
                         payload = item.payload,
@@ -256,6 +444,15 @@ class RequestViewModel @Inject constructor(
 
             result.onSuccess { (importedKeyCount, backendAcknowledged) ->
                 removeRequestInboxItem(item.payload)
+                requestInboxDecisionController.succeed(
+                    RequestInboxDecisionReceipt(
+                        verification = verification,
+                        decision = RequestInboxDecision.ACCEPT,
+                        localRequestAvailable = true,
+                        requestedKeyCount = importedKeyCount,
+                        backendAcknowledged = backendAcknowledged
+                    )
+                )
                 _events.tryEmit(
                     RequestEvent.CloudInboxAccepted(
                         importedKeyCount = importedKeyCount,
@@ -264,14 +461,25 @@ class RequestViewModel @Inject constructor(
                 )
             }.onFailure { error ->
                 captureDecisionCooldown(error)
+                requestInboxDecisionController.fail(
+                    verification = verification,
+                    decision = RequestInboxDecision.ACCEPT,
+                    error = error,
+                    localRequestAvailable = localRequestedKeyCount != null,
+                    requestedKeyCount = localRequestedKeyCount ?: 0
+                )
                 _events.tryEmit(RequestEvent.FetchError(error))
             }
         }
     }
 
     fun rejectRequestInboxItem(email: String, item: CloudInboxItem) {
+        val verification = item.payload.verification
+        if (!requestInboxDecisionController.tryStart(verification, RequestInboxDecision.REJECT)) {
+            return
+        }
+        _isCloudInboxLoading.value = true
         viewModelScope.launch {
-            _isCloudInboxLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     enforceDecisionCooldownOrThrow()
@@ -287,12 +495,30 @@ class RequestViewModel @Inject constructor(
 
             result.onSuccess { backendAcknowledged ->
                 removeRequestInboxItem(item.payload)
+                requestInboxDecisionController.succeed(
+                    RequestInboxDecisionReceipt(
+                        verification = verification,
+                        decision = RequestInboxDecision.REJECT,
+                        localRequestAvailable = false,
+                        requestedKeyCount = 0,
+                        backendAcknowledged = backendAcknowledged
+                    )
+                )
                 _events.tryEmit(RequestEvent.CloudInboxRejected(backendAcknowledged))
             }.onFailure { error ->
                 captureDecisionCooldown(error)
+                requestInboxDecisionController.fail(
+                    verification = verification,
+                    decision = RequestInboxDecision.REJECT,
+                    error = error
+                )
                 _events.tryEmit(RequestEvent.FetchError(error))
             }
         }
+    }
+
+    fun consumeRequestInboxDecisionReceipt() {
+        requestInboxDecisionController.consumeReceipt()
     }
 
     private fun enforceDecisionCooldownOrThrow() {
@@ -323,7 +549,9 @@ class RequestViewModel @Inject constructor(
 
     private suspend fun importDecryptedRequestJsons(
         jsonStrings: List<String>,
-        targetUserEmail: String
+        targetUserEmail: String,
+        authenticatedRequesterIds: List<String?> = emptyList(),
+        externalRequestIds: List<String?> = emptyList()
     ): Int {
         if (jsonStrings.isEmpty()) return 0
 
@@ -333,7 +561,9 @@ class RequestViewModel @Inject constructor(
             val request = parseRequestFromJson(
                 jsonString = jsonString,
                 targetUserEmail = targetUserEmail,
-                sourceIndex = idx
+                sourceIndex = idx,
+                authenticatedRequesterId = authenticatedRequesterIds.getOrNull(idx),
+                externalRequestId = externalRequestIds.getOrNull(idx)
             )
             requestRepository.saveReceivedRequest(request)
             totalMatchedFields += request.fields.size
@@ -344,7 +574,9 @@ class RequestViewModel @Inject constructor(
     private fun parseRequestFromJson(
         jsonString: String,
         targetUserEmail: String,
-        sourceIndex: Int
+        sourceIndex: Int,
+        authenticatedRequesterId: String?,
+        externalRequestId: String?
     ): RequestDomain {
         val jsonObject = JSONObject(jsonString)
 
@@ -358,9 +590,32 @@ class RequestViewModel @Inject constructor(
             throw IllegalStateException("Request[$sourceIndex] has no 'keys'")
         }
 
-        val requestedFields = MutableList(keysJson.length()) { i ->
-            FieldDomain.initialize().copy(key = keysJson.getString(i))
+        val requestedKeys = normalizeRequestedFieldKeys(
+            List(keysJson.length()) { index -> keysJson.optString(index) }
+        )
+        if (requestedKeys.isEmpty()) {
+            throw IllegalStateException("Request[$sourceIndex] has no valid 'keys'")
         }
+        val requestedFields = requestedKeys.map { key ->
+            FieldDomain.initialize().copy(key = key)
+        }
+        val verifiedRequesterId = authenticatedRequesterId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { senderId ->
+                requireAuthenticatedRequester(
+                    requesterAddress = userEmail,
+                    authenticatedRequesterId = senderId,
+                    addressHasher = ::hashMessageB64
+                )
+            }
+            .orEmpty()
+        val requestId = canonicalCloudRequestId(jsonObject.optString("request_id"))
+            ?: stableImportedRequestId(
+                requesterAddress = userEmail,
+                recipientAddress = targetUserEmail,
+                fieldKeys = requestedFields.map { it.key },
+                externalReference = externalRequestId
+            )
         AppLogger.debug(
             "RequestViewModel",
             "event=fetch_request_keys index=$sourceIndex count=${requestedFields.size}"
@@ -372,7 +627,9 @@ class RequestViewModel @Inject constructor(
             recipients = listOf(targetUserEmail),
             dateAdded = Instant.now(),
             owned = false,
-            responded = false
+            responded = false,
+            id = requestId,
+            requesterId = verifiedRequesterId
         )
     }
 
@@ -397,3 +654,21 @@ class RequestViewModel @Inject constructor(
         }.distinctBy { it.lowercase() }.sortedBy { it.lowercase() }.take(12)
     }.getOrDefault(emptyList())
 }
+
+private data class WorkflowPersistence(
+    val ownerAddress: String,
+    val workflow: RequestWorkflowState,
+    val completion: CompletableDeferred<Boolean>? = null
+)
+
+private fun RequestWorkflowState.visibleDraftFields(): List<FieldDomain> = when (mode) {
+    RequestListMode.RECEIVED -> activeReceivedRequest?.fields.orEmpty()
+    RequestListMode.SENT -> outgoingRequestDraft.requestedFields.map(RequestedFieldDraft::toFieldDomain)
+}
+
+private fun RequestedFieldDraft.toFieldDomain(): FieldDomain = FieldDomain(
+    key = key,
+    value = "",
+    keyAlias = keyAlias,
+    dateAdded = Instant.EPOCH
+)

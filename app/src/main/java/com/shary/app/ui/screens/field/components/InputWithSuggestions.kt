@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,12 +35,14 @@ fun InputWithSuggestions(
     onKeyChange: (String) -> Unit,
     predefinedKeys: List<String>,
     label: String = "Enter input",
-    showError: Boolean = false
+    showError: Boolean = false,
+    supportingText: (@Composable () -> Unit)? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     var showSuggestions by remember { mutableStateOf(false) }
     var filteredSuggestions by remember { mutableStateOf(listOf<String>()) }
     val focusRequester = remember { FocusRequester() }
-
     val textFieldBounds = remember { mutableStateOf(Rect.Zero) }
 
     Box {
@@ -47,7 +51,6 @@ fun InputWithSuggestions(
             isError = showError && key.isBlank(),
             onValueChange = {
                 onKeyChange(it)
-
                 showSuggestions = it.isNotEmpty()
                 filteredSuggestions = predefinedKeys.filter { suggestion ->
                     suggestion.contains(it, ignoreCase = true)
@@ -57,11 +60,12 @@ fun InputWithSuggestions(
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
                 .onGloballyPositioned { layoutCoordinates ->
-                    val position = layoutCoordinates.boundsInRoot()
-                    textFieldBounds.value = position
+                    textFieldBounds.value = layoutCoordinates.boundsInRoot()
                 },
-
             label = { Text(label) },
+            supportingText = supportingText,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
             singleLine = true
         )
 
@@ -71,7 +75,7 @@ fun InputWithSuggestions(
                 offset = IntOffset(
                     x = textFieldBounds.value.left.toInt(),
                     y = textFieldBounds.value.bottom.toInt() / 2
-                ),
+                )
             ) {
                 Card(
                     modifier = Modifier

@@ -3,6 +3,9 @@ package com.shary.app.viewmodels.field
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shary.app.application.cloud.CloudFieldImportPlanner
+import com.shary.app.application.cloud.CloudImportDiff
+import com.shary.app.application.session.SessionDataCoordinator
 import com.shary.app.application.security.ChangePasswordAndRewrapDataKeyUseCase
 import com.shary.app.core.constants.CloudInboxPolicy
 import com.shary.app.core.domain.interfaces.events.FieldEvent
@@ -33,8 +36,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import org.json.JSONArray
 
 @HiltViewModel
 class FieldViewModel @Inject constructor(
@@ -43,17 +44,20 @@ class FieldViewModel @Inject constructor(
     private val cacheSelection: CacheService,
     private val cloudService: CloudService,
     private val authenticationService: AuthenticationService,
-    private val changePasswordAndRewrapDataKeyUseCase: ChangePasswordAndRewrapDataKeyUseCase
+    private val changePasswordAndRewrapDataKeyUseCase: ChangePasswordAndRewrapDataKeyUseCase,
+    private val sessionDataCoordinator: SessionDataCoordinator
 ) : ViewModel() {
     private data class CloudFetchSummary(
         val downloadedKeys: List<String>,
         val loadedKeys: List<String>,
-        val preDownloadedKeys: List<String>
+        val preDownloadedKeys: List<String>,
+        val diff: CloudImportDiff = CloudImportDiff()
     )
 
     // Domain state exposed to UI
     private val _fields = MutableStateFlow<List<FieldDomain>>(emptyList())
     val fields: StateFlow<List<FieldDomain>> = _fields.asStateFlow()
+    val sessionDataState = sessionDataCoordinator.state
 
     private val _selectedKeys = MutableStateFlow<Set<String>>(emptySet())
     val selectedFields: StateFlow<List<FieldDomain>> =
@@ -71,6 +75,8 @@ class FieldViewModel @Inject constructor(
 
     // One-shot events (snackbar/toast/navigation)
     private val _events = MutableSharedFlow<FieldEvent>(extraBufferCapacity = 1)
+    private val editorOperationController = FieldEditorOperationController()
+    val editorOperationState: StateFlow<FieldEditorOperationState> = editorOperationController.state
 
     private val _searchCriteria = MutableStateFlow("")
     val searchCriteria: StateFlow<String> = _searchCriteria.asStateFlow()
@@ -120,7 +126,12 @@ class FieldViewModel @Inject constructor(
     private var decisionCooldownUntilEpochSeconds: Long = 0L
 
     init {
-        refresh()
+        viewModelScope.launch {
+            sessionDataCoordinator.state.collect { sessionState ->
+                _fields.value = sessionState.fields
+            }
+        }
+        if (!sessionDataCoordinator.state.value.started) refresh()
     }
 
     // ------------------- Public API (called from Screen) -------------------
@@ -138,12 +149,31 @@ class FieldViewModel @Inject constructor(
 
     /** Add a new field. Handles custom tag persistence and de-duplication. */
     fun addField(field: FieldDomain) {
+        addField(field, editorOperation = false)
+    }
+
+    fun submitEditorAddField(field: FieldDomain) {
+        addField(field, editorOperation = true)
+    }
+
+    fun resetEditorOperationState() {
+        editorOperationController.reset()
+    }
+
+    private fun addField(field: FieldDomain, editorOperation: Boolean) {
+        val normalized = normalize(field)
+        if (editorOperation && !editorOperationController.claim(
+                FieldEditorOperation.ADD,
+                normalized.key
+            )
+        ) {
+            return
+        }
         viewModelScope.launch {
             _isLoading.value = true
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     writeMutex.withLock {
-                        val normalized = normalize(field)
                         validateValueOrThrow(normalized.value)
                         fieldRepository.saveFieldIfNotExists(normalized)
                     }
@@ -152,12 +182,29 @@ class FieldViewModel @Inject constructor(
             _isLoading.value = false
             result.onSuccess { created ->
                 if (created) {
-                    _events.tryEmit(FieldEvent.Saved(field))
+                    if (editorOperation) {
+                        editorOperationController.succeed(FieldEditorOperation.ADD, normalized.key)
+                    }
+                    _events.tryEmit(FieldEvent.Saved(normalized))
                     refresh()
                 } else {
-                    _events.tryEmit(FieldEvent.AlreadyExists(field.key))
+                    if (editorOperation) {
+                        editorOperationController.fail(
+                            FieldEditorOperation.ADD,
+                            normalized.key,
+                            "A field with this key already exists."
+                        )
+                    }
+                    _events.tryEmit(FieldEvent.AlreadyExists(normalized.key))
                 }
             }.onFailure { e ->
+                if (editorOperation) {
+                    editorOperationController.fail(
+                        FieldEditorOperation.ADD,
+                        normalized.key,
+                        e.message.orEmpty()
+                    )
+                }
                 _events.tryEmit(FieldEvent.Error(e))
             }
         }
@@ -286,26 +333,7 @@ class FieldViewModel @Inject constructor(
     // ----------------------------- Internals --------------------------------
 
     private fun refresh() {
-        refreshJob?.cancel()
-        val sequence = ++refreshSequence
-        refreshJob = viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                fieldRepository
-                    .getAllFieldsProgressive(firstBatchSize = 1, chunkSize = 1)
-                    .collect { progressivelyLoaded ->
-                        _fields.value = progressivelyLoaded
-                    }
-            } catch (_: CancellationException) {
-                return@launch
-            } catch (throwable: Throwable) {
-                _events.tryEmit(FieldEvent.Error(throwable))
-            } finally {
-                if (refreshSequence == sequence) {
-                    _isLoading.value = false
-                }
-            }
-        }
+        sessionDataCoordinator.refreshFields()
     }
 
     /** Normalize trims and ensure dateAdded is set. */
@@ -338,14 +366,40 @@ class FieldViewModel @Inject constructor(
      * - Refreshes only once at the end if something changed.
      */
     fun updateField(field: FieldDomain, newField: FieldDomain) {
+        updateField(field, newField, editorOperation = false)
+    }
+
+    fun submitEditorUpdateField(field: FieldDomain, newField: FieldDomain) {
+        updateField(field, newField, editorOperation = true)
+    }
+
+    private fun updateField(
+        field: FieldDomain,
+        newField: FieldDomain,
+        editorOperation: Boolean
+    ) {
         val valueTrimmed = newField.value.trim()
         val aliasTrimmed = newField.keyAlias.trim()
 
         val shouldUpdateValue = field.value != valueTrimmed
         val shouldUpdateAlias = field.keyAlias != aliasTrimmed
         val shouldUpdateTag = field.tag != newField.tag.getSafeTag()
+        val shouldUpdateMcpShareable = field.isMcpShareable != newField.isMcpShareable
 
-        if (!shouldUpdateValue && !shouldUpdateAlias && !shouldUpdateTag) return
+        if (editorOperation && !editorOperationController.claim(
+                FieldEditorOperation.UPDATE,
+                field.key
+            )
+        ) {
+            return
+        }
+
+        if (!shouldUpdateValue && !shouldUpdateAlias && !shouldUpdateTag && !shouldUpdateMcpShareable) {
+            if (editorOperation) {
+                editorOperationController.succeed(FieldEditorOperation.UPDATE, field.key)
+            }
+            return
+        }
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -365,12 +419,18 @@ class FieldViewModel @Inject constructor(
                             AppLogger.debug("FieldViewModel", "event=update_tag key=${field.key}")
                             fieldRepository.updateTag(field.key, newField.tag.getSafeTag())
                         }
+                        if (shouldUpdateMcpShareable) {
+                            fieldRepository.updateMcpShareable(field.key, newField.isMcpShareable)
+                        }
                     }
                 }
             }
             _isLoading.value = false
 
             result.onSuccess {
+                if (editorOperation) {
+                    editorOperationController.succeed(FieldEditorOperation.UPDATE, field.key)
+                }
                 if (shouldUpdateValue) _events.tryEmit(FieldEvent.ValueUpdated(field.key))
                 if (shouldUpdateAlias) _events.tryEmit(FieldEvent.AliasUpdated(field.key))
                 if (shouldUpdateTag) _events.tryEmit(FieldEvent.TagUpdated(field.key,
@@ -379,12 +439,20 @@ class FieldViewModel @Inject constructor(
                 // Single refresh after performing all updates
                 refresh()
             }.onFailure { e ->
+                if (editorOperation) {
+                    editorOperationController.fail(
+                        FieldEditorOperation.UPDATE,
+                        field.key,
+                        e.message.orEmpty()
+                    )
+                }
                 _events.tryEmit(FieldEvent.Error(e))
             }
         }
     }
 
     fun recoverPreviousValue(field: FieldDomain) {
+        if (!editorOperationController.claim(FieldEditorOperation.RECOVER, field.key)) return
         viewModelScope.launch {
             _isLoading.value = true
             val result = runCatching {
@@ -401,12 +469,22 @@ class FieldViewModel @Inject constructor(
             _isLoading.value = false
 
             result.onSuccess {
+                editorOperationController.succeed(FieldEditorOperation.RECOVER, field.key)
                 _events.tryEmit(FieldEvent.ValueRecovered(field.key))
                 refresh()
             }.onFailure { e ->
+                editorOperationController.fail(
+                    FieldEditorOperation.RECOVER,
+                    field.key,
+                    e.message.orEmpty()
+                )
                 _events.tryEmit(FieldEvent.Error(e))
             }
         }
+    }
+
+    fun setMcpShareable(field: FieldDomain, shareable: Boolean) {
+        updateField(field, field.copy(isMcpShareable = shareable))
     }
 
     fun restoreDeletedFields(fields: List<FieldDomain>) {
@@ -441,20 +519,22 @@ class FieldViewModel @Inject constructor(
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val payloads = cloudService.fetchPayloadInboxFromEmail(email).getOrThrow()
+                    val existingFields = fieldRepository.getAllFields().first()
                     payloads
                         .sortedByDescending { it.creationAt }
                         .map { payload ->
-                            val previewNames = if (CloudInboxPolicy.ENABLE_FIELD_NAME_PREVIEW) {
-                                cloudService.decryptPayloadFromInbox(email, payload)
-                                    .getOrNull()
-                                    ?.let(::extractPreviewFieldNames)
-                                    .orEmpty()
-                            } else {
-                                emptyList()
+                            val decryptedJson = if (CloudInboxPolicy.ENABLE_FIELD_NAME_PREVIEW) {
+                                cloudService.decryptPayloadFromInbox(email, payload).getOrNull()
+                            } else null
+                            val plan = decryptedJson?.let {
+                                CloudFieldImportPlanner.plan(listOf(it), existingFields)
                             }
                             CloudInboxItem(
                                 payload = payload,
-                                previewFieldNames = previewNames
+                                previewFieldNames = decryptedJson
+                                    ?.let(CloudFieldImportPlanner::previewKeys)
+                                    .orEmpty(),
+                                importDiff = plan?.diff
                             )
                         }
                 }
@@ -588,72 +668,37 @@ class FieldViewModel @Inject constructor(
             )
         }
 
-        val downloadedKeys = mutableListOf<String>()
-        val loadedKeys = mutableListOf<String>()
-        val preDownloadedKeys = mutableListOf<String>()
+        val now = Instant.now()
 
-        writeMutex.withLock {
-            val existingKeys = fieldRepository
-                .getAllFields()
-                .first()
-                .map { it.key.trim().lowercase() }
-                .toMutableSet()
-
-            jsonStrings.forEachIndexed { idx, jsonString ->
+        return writeMutex.withLock {
+            jsonStrings.forEachIndexed { idx, _ ->
                 AppLogger.debug("FieldViewModel", "event=fetched_payload index=$idx")
-
-                val jsonObject = JSONObject(jsonString)
-                val keys = jsonObject.keys()
-
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val normalizedKey = key.trim()
-                    downloadedKeys += normalizedKey
-
-                    val rawValue = jsonObject.opt(key)
-                    val (value, alias) = when (rawValue) {
-                        is JSONObject -> {
-                            val nestedValue = rawValue.optString("value")
-                            val nestedAlias = rawValue.optString("alias")
-                            nestedValue to nestedAlias
-                        }
-                        is String -> rawValue to ""
-                        is JSONArray -> rawValue.toString() to ""
-                        null -> "" to ""
-                        else -> rawValue.toString() to ""
-                    }
-
-                    if (existingKeys.contains(normalizedKey.lowercase())) {
-                        preDownloadedKeys += normalizedKey
-                        continue
-                    }
-
-                    val field = FieldDomain(
-                        key = normalizedKey,
-                        value = value,
-                        keyAlias = alias,
-                        tag = Tag.Unknown,
-                        dateAdded = Instant.now()
-                    )
-
-                    val created = fieldRepository.saveFieldIfNotExists(normalize(field))
-                    if (created) {
-                        loadedKeys += normalizedKey
-                        existingKeys += normalizedKey.lowercase()
-                    } else {
-                        preDownloadedKeys += normalizedKey
-                    }
-
-                    AppLogger.debug("FieldViewModel", "event=fetched_key key=$key")
-                }
             }
-        }
 
-        return CloudFetchSummary(
-            downloadedKeys = downloadedKeys.distinctBy { it.lowercase() },
-            loadedKeys = loadedKeys.distinctBy { it.lowercase() },
-            preDownloadedKeys = preDownloadedKeys.distinctBy { it.lowercase() }
-        )
+            val existingFields = fieldRepository.getAllFields().first()
+            val plan = CloudFieldImportPlanner.plan(jsonStrings, existingFields)
+            val loadedKeys = mutableListOf<String>()
+            val preDownloadedKeys = plan.diff.duplicateKeys.toMutableList()
+
+            plan.fieldsToCreate.forEach { incoming ->
+                val created = fieldRepository.saveFieldIfNotExists(
+                    normalize(incoming.toFieldDomain(now))
+                )
+                if (created) {
+                    loadedKeys += incoming.key
+                } else {
+                    preDownloadedKeys += incoming.key
+                }
+                AppLogger.debug("FieldViewModel", "event=fetched_key key=${incoming.key}")
+            }
+
+            CloudFetchSummary(
+                downloadedKeys = plan.incomingFields.map { it.key }.distinctBy { it.lowercase() },
+                loadedKeys = loadedKeys.distinctBy { it.lowercase() },
+                preDownloadedKeys = preDownloadedKeys.distinctBy { it.lowercase() },
+                diff = plan.diff
+            )
+        }
     }
 
     private fun emitCloudImportSummary(summary: CloudFetchSummary) {
@@ -689,16 +734,6 @@ class FieldViewModel @Inject constructor(
         }
     }
 
-    private fun extractPreviewFieldNames(jsonString: String): List<String> = runCatching {
-        val jsonObject = JSONObject(jsonString)
-        val names = mutableListOf<String>()
-        val keys = jsonObject.keys()
-        while (keys.hasNext()) {
-            names += keys.next()
-        }
-        names.distinctBy { it.lowercase() }.sortedBy { it.lowercase() }.take(12)
-    }.getOrDefault(emptyList())
-
     fun changePasswordAndRewrapDataKey(
         context: Context,
         oldPassword: String,
@@ -730,6 +765,7 @@ class FieldViewModel @Inject constructor(
                         )
                     }
                 }
+                sessionDataCoordinator.clear()
                 authenticationService.logoutForRelogin()
             }
             _isLoading.value = false

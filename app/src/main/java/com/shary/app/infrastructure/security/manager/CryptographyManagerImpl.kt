@@ -71,8 +71,15 @@ class CryptographyManagerImpl(
      */
     override fun initializeKeysWithUser(context: Context, email: String, safePassword: String) {
         val id = deriveIdentity(email, safePassword.toCharArray(), getAppId())
+        cachedIdentity?.clearSensitiveMaterial()
         cachedUserEmail = email
         cachedIdentity = id
+    }
+
+    override fun clearSessionIdentity() {
+        cachedIdentity?.clearSensitiveMaterial()
+        cachedIdentity = null
+        cachedUserEmail = null
     }
 
     /**
