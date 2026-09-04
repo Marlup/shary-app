@@ -3,6 +3,7 @@ package com.shary.app.infrastructure.connector.mcp
 import com.shary.app.infrastructure.connector.transport.LoopbackRequest
 import com.shary.app.infrastructure.connector.transport.LoopbackResponse
 import com.shary.app.infrastructure.connector.transport.LoopbackServer
+import com.shary.app.core.domain.types.valueobjects.FieldValueTypes
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -74,7 +75,7 @@ class SharyMcpDispatcher @Inject constructor(
                 "serverInfo" to mapOf(
                     "name" to "shary-mcp",
                     "title" to "Shary MCP Server",
-                    "version" to "0.1.0"
+                    "version" to "0.3.0"
                 ),
                 "instructions" to "Use this server only with a paired Shary connector. Send Authorization: Bearer <token> on MCP HTTP requests. Mutating tools require idempotency_key and may require confirm=true."
             )
@@ -114,6 +115,10 @@ class SharyMcpDispatcher @Inject constructor(
             ?: return jsonRpcError(request.id, McpErrorCodes.INVALID_PARAMS, "tools/call name is required")
         val arguments = request.params["arguments"]?.let { McpJsonCodec.mapAt(it, "arguments") } ?: emptyMap()
 
+        if (name == "shary.fields.types") {
+            return jsonRpcResult(request.id, fieldTypesResult())
+        }
+
         val loopbackRequest = when (name) {
             "shary.fields.list" -> loopbackRequest(
                 context = context,
@@ -122,6 +127,18 @@ class SharyMcpDispatcher @Inject constructor(
                 path = "/connector/v1/fields",
                 arguments = arguments
             )
+
+            "shary.fields.get" -> {
+                val key = arguments.requiredString("key")
+                    ?: return jsonRpcError(request.id, McpErrorCodes.INVALID_PARAMS, "key is required")
+                loopbackRequest(
+                    context = context,
+                    requestId = request.requestId(),
+                    method = "GET",
+                    path = "/connector/v1/fields/$key",
+                    arguments = arguments
+                )
+            }
 
             "shary.fields.create" -> loopbackRequest(
                 context = context,
@@ -242,6 +259,23 @@ class SharyMcpDispatcher @Inject constructor(
         )
     }
 
+    private fun fieldTypesResult(): Map<String, Any?> {
+        val types = FieldValueTypes.available.map { type ->
+            mapOf("name" to type.name, "description" to type.description)
+        }
+        val structured = mapOf("types" to types, "count" to types.size)
+        return linkedMapOf(
+            "content" to listOf(
+                mapOf(
+                    "type" to "text",
+                    "text" to McpJsonCodec.stringify(structured)
+                )
+            ),
+            "structuredContent" to structured,
+            "isError" to false
+        )
+    }
+
     private fun toolErrorResult(
         code: String,
         message: String,
@@ -269,9 +303,25 @@ class SharyMcpDispatcher @Inject constructor(
         tool(
             name = "shary.fields.list",
             title = "List Shary Fields",
-            description = "List fields from the paired Shary vault using the fields.read capability.",
+            description = "List field metadata from the paired Shary vault without exposing values.",
             properties = emptyMap(),
             required = emptyList()
+        ),
+        tool(
+            name = "shary.fields.types",
+            title = "List Shary Field Types",
+            description = "List canonical value_type names accepted by Shary field writes.",
+            properties = emptyMap(),
+            required = emptyList()
+        ),
+        tool(
+            name = "shary.fields.get",
+            title = "Read Shary Field Value",
+            description = "Read one field value using the separate fields.value.read capability.",
+            properties = mapOf(
+                "key" to stringSchema("Existing field key name.")
+            ),
+            required = listOf("key")
         ),
         tool(
             name = "shary.fields.create",
@@ -280,6 +330,7 @@ class SharyMcpDispatcher @Inject constructor(
             properties = mapOf(
                 "key" to stringSchema("Field key name."),
                 "value" to stringSchema("Field value."),
+                "value_type" to fieldValueTypeSchema(),
                 "key_alias" to stringSchema("Optional display alias."),
                 "tag" to stringSchema("Optional Shary tag name."),
                 "idempotency_key" to stringSchema("Client-generated unique key for this mutation."),
@@ -294,6 +345,7 @@ class SharyMcpDispatcher @Inject constructor(
             properties = mapOf(
                 "key" to stringSchema("Existing field key name."),
                 "value" to stringSchema("Replacement value."),
+                "value_type" to fieldValueTypeSchema(),
                 "key_alias" to stringSchema("Replacement display alias."),
                 "tag" to stringSchema("Replacement Shary tag name."),
                 "idempotency_key" to stringSchema("Client-generated unique key for this mutation."),
@@ -349,6 +401,7 @@ class SharyMcpDispatcher @Inject constructor(
                             ),
                             "key" to stringSchema("Field key."),
                             "value" to stringSchema("Field value."),
+                            "value_type" to fieldValueTypeSchema(),
                             "key_alias" to stringSchema("Field alias."),
                             "tag" to stringSchema("Field tag."),
                             "email" to stringSchema("User email."),
@@ -394,6 +447,12 @@ class SharyMcpDispatcher @Inject constructor(
 
     private fun stringSchema(description: String): Map<String, String> =
         mapOf("type" to "string", "description" to description)
+
+    private fun fieldValueTypeSchema(): Map<String, Any?> = mapOf(
+        "type" to "string",
+        "description" to "Canonical field value type. Call shary.fields.types to list supported values.",
+        "enum" to FieldValueTypes.available.map { it.name }
+    )
 
     private fun booleanSchema(description: String): Map<String, String> =
         mapOf("type" to "boolean", "description" to description)

@@ -13,8 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.theme.SurfaceLight
+import com.shary.app.ui.theme.TextMuted
 import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet500
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +44,7 @@ fun SharyTopBar(
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Violet500,
+                                color = TextMuted,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

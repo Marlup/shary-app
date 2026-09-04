@@ -1,6 +1,7 @@
 package com.shary.app.utils
 
 import android.content.Context
+import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -16,31 +17,37 @@ class BiometricAuthManager(
 
     fun authenticate(): String? {
         val biometricManager = BiometricManager.from(context)
-        val canAuthenticate = biometricManager.canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        )
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        val canAuthenticate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            biometricManager.canAuthenticate(authenticators)
+        } else {
+            // Android 10 and lower cannot reliably query the combined credential mode.
+            BiometricManager.BIOMETRIC_SUCCESS
+        }
 
         if (canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS) {
             return when (canAuthenticate) {
                 BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ->
-                    "No hay biometría configurada. Por favor, actívala en los ajustes."
+                    "No biometric or device credential is configured."
                 BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE ->
-                    "Este dispositivo no tiene hardware biométrico."
+                    "This device does not support biometric authentication."
                 BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE ->
-                    "El hardware biométrico no está disponible actualmente."
-                else -> "Error desconocido al verificar biometría."
+                    "Biometric authentication is currently unavailable."
+                else -> "Device authentication is unavailable."
             }
         }
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Autenticación requerida")
-            .setSubtitle("Usa huella, rostro o PIN")
-            .setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
-            .build()
+        val promptBuilder = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Confirm Shary access")
+            .setSubtitle("Use biometrics, PIN, pattern, or password")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            promptBuilder.setAllowedAuthenticators(authenticators)
+        } else {
+            @Suppress("DEPRECATION")
+            promptBuilder.setDeviceCredentialAllowed(true)
+        }
+        val promptInfo = promptBuilder.build()
 
         val biometricPrompt = BiometricPrompt(
             activity,
@@ -53,12 +60,11 @@ class BiometricAuthManager(
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    // Puedes loguear el error si quieres, pero no mostramos desde aquí
                 }
             }
         )
 
         biometricPrompt.authenticate(promptInfo)
-        return null // todo OK
+        return null
     }
 }

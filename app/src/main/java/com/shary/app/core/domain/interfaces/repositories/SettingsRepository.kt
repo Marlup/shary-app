@@ -9,6 +9,7 @@ interface SettingsRepository {
     suspend fun setRememberEmailAtLogin(enabled: Boolean)
     suspend fun saveRememberedEmail(email: String)
     suspend fun clearRememberedEmail()
+    suspend fun setMcpEnabled(enabled: Boolean)
     suspend fun setAutoOpenCloudInboxOnStart(enabled: Boolean)
     suspend fun setDefaultCloudExpiryDays(days: Int)
     suspend fun setShowFriendlySenderIdentity(enabled: Boolean)

@@ -11,6 +11,7 @@ import com.shary.app.infrastructure.persistance.credentials.FileCredentialsStore
 import com.shary.app.infrastructure.security.auth.AuthenticationServiceImpl
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.services.CacheService
+import com.shary.app.core.domain.interfaces.services.ClipboardService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.infrastructure.security.auth.InMemoryAuthBackend
 import dagger.Module
@@ -45,13 +46,15 @@ object AuthModule {
         fileCredentialsStore: FileCredentialsStore,
         cloudService: CloudService,
         cacheService: CacheService,
-        firebaseAuth: FirebaseAuth
+        firebaseAuth: FirebaseAuth,
+        clipboardService: ClipboardService
     ): AuthenticationService = AuthenticationServiceImpl(
         crypto,
         fileCredentialsStore,
         cloudService,
         cacheService,
-        firebaseAuth
+        firebaseAuth,
+        clipboardService
     )
 
     @Provides @Singleton fun provideAuthBackend(

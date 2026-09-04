@@ -46,4 +46,10 @@ data class Identity(
     fun getKexSeed(): ByteArray = kexSeed.copyOf()
     fun getSignSeedString(): String = SecurityUtils.base64Encode(signSeed.copyOf())
     fun getKexSeedString(): String = SecurityUtils.base64Encode(kexSeed.copyOf())
+
+    /** Best-effort zeroization before an in-memory identity leaves the session. */
+    fun clearSensitiveMaterial() {
+        signSeed.fill(0)
+        kexSeed.fill(0)
+    }
 }

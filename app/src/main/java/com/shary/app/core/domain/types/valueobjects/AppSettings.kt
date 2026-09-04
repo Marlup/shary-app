@@ -3,6 +3,7 @@ package com.shary.app.core.domain.types.valueobjects
 data class AppSettings(
     val rememberEmailAtLogin: Boolean = true,
     val rememberedEmail: String = "",
+    val mcpEnabled: Boolean = false,
     val autoOpenCloudInboxOnStart: Boolean = false,
     val defaultCloudExpiryDays: Int = 7,
     val showFriendlySenderIdentity: Boolean = true,

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
@@ -29,16 +30,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.theme.SelectionCardBg
 import com.shary.app.ui.theme.SharyRadius
 import com.shary.app.ui.theme.SharySpacing
 import com.shary.app.ui.theme.SurfaceWhite
+import com.shary.app.ui.theme.TextMuted
 import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet600
 import com.shary.app.ui.theme.Violet900
+import com.shary.app.core.domain.types.enums.Tag
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -52,6 +59,7 @@ fun UserCard(
     onToggleSelection: () -> Unit,
     onLongPressCopy: (String) -> Unit = {},
     copyLongPressMillis: Long = 600L,
+    tag: Tag? = null,
     modifier: Modifier = Modifier
 ) {
     val borderColor = animateColorAsState(
@@ -117,17 +125,26 @@ fun UserCard(
             }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Violet900,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Violet900,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (tag != null && tag != Tag.Unknown) {
+                        TagChip(tag = tag)
+                    }
+                }
                 Text(
                     text = email,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Violet500,
+                    color = TextMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -135,26 +152,38 @@ fun UserCard(
             Spacer(Modifier.size(8.dp))
             Box(
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .pointerInput(isSelected) {
-                        detectTapGestures(onTap = { onToggleSelection() })
-                    }
-                    .background(if (isSelected) Violet600 else Color.Transparent, CircleShape)
-                    .border(
-                        width = 1.5.dp,
-                        color = if (isSelected) Violet600 else Violet200,
-                        shape = CircleShape
-                    ),
+                    .toggleable(
+                        value = isSelected,
+                        role = Role.Checkbox,
+                        onValueChange = { onToggleSelection() }
+                    )
+                    .semantics {
+                        toggleableState = if (isSelected) ToggleableState.On else ToggleableState.Off
+                        stateDescription = if (isSelected) "Selected" else "Not selected"
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp)
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(if (isSelected) Violet600 else Color.Transparent, CircleShape)
+                        .border(
+                            width = 1.5.dp,
+                            color = if (isSelected) Violet600 else Violet200,
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
             }
         }

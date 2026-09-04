@@ -25,6 +25,7 @@ interface CloudService {
         fields: List<FieldDomain>,
         owner: UserDomain,
         recipients: List<UserDomain>,
+        requestId: String,
         expiryDays: Int = CloudInboxPolicy.DEFAULT_EXPIRY_DAYS
     ): Map<String, StatusDataSentDb>
     

@@ -12,8 +12,12 @@ This folder is organized by intent so current source-of-truth docs stay focused 
   - Security/auth architecture and device-storage design notes.
   - Supported MCP baseline:
     `docs/architecture/SHARY_REMOTE_MCP_OAUTH_DESIGN.md`.
+- `ai/`
+  - Repo-local agent retrieval docs, session-init guidance, module-awareness
+    entry points, task-to-code navigation, and script contracts.
 - `design/`
-  - UX/UI design briefs and proposal implementation plans.
+  - UX/UI design briefs, proposal implementation plans, and product overview
+    documents.
 - `implementation/`
   - Consolidated implementation summaries (canonical merged reports).
 - `testing/`
@@ -40,6 +44,16 @@ This folder is organized by intent so current source-of-truth docs stay focused 
   - `docs/architecture/SHARY_REMOTE_MCP_OAUTH_DESIGN.md`
 - Supported MCP validation guide:
   - `docs/testing/connector-mcp-real-agent-e2e.md`
+- Native Android UI testing guide:
+  - `docs/testing/android-native-ui-testing.md`
+- Repo-local agent retrieval guide:
+  - `docs/ai/README.md`
+- Task-to-code navigation map:
+  - `docs/ai/CODEBASE_NAVIGATION.md`
+- App overview documents:
+  - `docs/design/SHARY_APP_EXECUTIVE_OVERVIEW.md`
+  - `docs/design/SHARY_APP_TECHNICAL_OVERVIEW.md`
+  - `docs/design/SHARY_ELEMENT_ACTION_MAP.md`
 
 ## What Was Tidied
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -20,13 +21,17 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.theme.SharyRadius
 import com.shary.app.ui.theme.SurfaceLight
 import com.shary.app.ui.theme.SurfaceMid
+import com.shary.app.ui.theme.TextMuted
+import com.shary.app.ui.theme.TextSubtle
 import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet600
 import com.shary.app.ui.theme.Violet900
 
@@ -35,36 +40,37 @@ import com.shary.app.ui.theme.Violet900
 fun SharySearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
-    placeholder: String,
+    placeholder: String = "Search",
     activeFilter: String? = null,
     filters: List<String> = emptyList(),
     onFilterChange: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(SurfaceLight)
-            .padding(horizontal = 18.dp, vertical = 8.dp)
+        modifier = modifier.testTag("shary-search-bar")
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(48.dp)
                 .background(color = SurfaceMid, shape = SharyRadius.input)
+                .clip(SharyRadius.input)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = "Search",
-                tint = com.shary.app.ui.theme.AliasMuted,
+                tint = TextMuted,
                 modifier = Modifier.size(16.dp)
             )
             androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
             androidx.compose.foundation.text.BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(SharyRadius.input),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = Violet900),
                 singleLine = true,
                 decorationBox = { inner ->
@@ -72,7 +78,9 @@ fun SharySearchBar(
                         Text(
                             text = placeholder,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = com.shary.app.ui.theme.AliasMuted
+                            color = TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     inner()
@@ -91,7 +99,7 @@ fun SharySearchBar(
                 filters.forEach { filter ->
                     val isSelected = filter == activeFilter
                     val bg = if (isSelected) Violet600 else SurfaceLight
-                    val fg = if (isSelected) Color(0xFFF0ECFF) else Violet500
+                    val fg = if (isSelected) Color(0xFFF0ECFF) else TextSubtle
                     val border = if (isSelected) Violet600 else Violet200
                     Text(
                         text = filter,

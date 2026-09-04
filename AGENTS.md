@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 ## Purpose
 Operational guide for agent work in this repository.  
@@ -21,13 +21,26 @@ Default mode: implement pragmatically, validate changes, and keep durable docs a
 2. This includes responses, progress updates, plans, explanations, repository documentation, code comments, commit messages, and generated instructions.
 3. Preserve non-English text only when quoting user-provided content verbatim or storing a raw-order backup; keep all surrounding agent-authored metadata in English.
 
+## Agent Retrieval Surfaces
+
+After session-init passes, use these repo-local retrieval surfaces before
+loading broad code or historical notes:
+
+1. `docs/ai/README.md`
+2. `docs/ai/CODEBASE_NAVIGATION.md` for task-to-code and validation shortcuts
+3. the nearest scoped `AGENTS.md`, then the nearest module `README.md`
+4. `docs/ai/SHARY_AGENT_REPO_SPEC.md`
+5. `docs/ai/SCRIPT_CATALOG.md` when a script or harness is involved
+6. the relevant active product/architecture doc under `docs/design/` or
+   `docs/architecture/`
+
 ## Session-Init Checklist (Required)
 
 Load and enforce policy files in this exact order at every session start:
 
-1. `AGENT.md` (canonical source of truth)
-2. `CODEX.md` (Codex adapter; references `AGENT.md`)
-3. `CLAUDE.md` (Claude adapter; references `AGENT.md`)
+1. `AGENTS.md` (canonical source of truth)
+2. `CODEX.md` (Codex adapter; references `AGENTS.md`)
+3. `CLAUDE.md` (Claude adapter; references `AGENTS.md`)
 4. `.claude/settings.local.json` (tool-local settings)
 
 Enforcement gate:
@@ -36,6 +49,22 @@ Enforcement gate:
 2. Fail startup if any required file is missing.
 3. Fail startup if any required file checksum does not match `tools/codex/session-init.manifest.json`.
 4. After intentional policy edits, run `tools/codex/update-manifest.ps1` and commit the manifest change together with the edited policy files.
+
+## Documentation Sync Rule (Required)
+
+When changing an agent-facing script, module boundary, or repo-local workflow,
+update the matching documentation in the same patch.
+
+At minimum:
+
+- script changes:
+  - update the nearest script-folder `README.md`;
+  - update `docs/ai/SCRIPT_CATALOG.md`.
+- application-layer changes:
+  - update the nearest module `README.md` under
+    `app/src/main/java/com/shary/app/application/`.
+- policy or retrieval-flow changes:
+  - update this file and the relevant `docs/ai/*.md` file.
 
 ## Backlog Recording (Required)
 
@@ -51,7 +80,7 @@ For each non-trivial task:
    - `docs/backlog/orders_draft/works-index.md`
 5. Add one short index entry per change:
    - brief title
-   - 1-2 sentence description
+   - 2-8 sentence description
 6. When a completed task implements or advances a defined plan step, add an
    explicit plan-source pointer in the polished work log and in the relevant
    index entry when concise:
@@ -66,6 +95,15 @@ For each non-trivial task:
    - analysis
    - design options/drafts
    - evaluation and decision notes
+
+## Checkpoint review (Required)
+
+To recover the latest checkpoint and review the last completed task:
+
+1. Read the first (newest) entry in both:
+   - `docs/backlog/orders_draft/works-index.md`
+   - `docs/backlog/works/works-index.md`
+2. Then read the related raw order and polished work note linked by those entries.
 
 ## Delivery Procedure
 

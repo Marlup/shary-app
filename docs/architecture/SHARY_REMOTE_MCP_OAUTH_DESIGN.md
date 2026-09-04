@@ -74,7 +74,9 @@ The product-facing lifecycle is grant-based, not local-server based.
 
 - `shary.vaults.list` exposes alias, opaque vault ID, scopes, expiry, and
   online state only.
-- `shary.fields.list` exposes metadata only.
+- `shary.fields.list` exposes metadata only, including canonical `value_type`.
+- `shary.fields.types` lists writable types without queueing a vault operation.
+- Field writes accept `value_type`, `key_alias`, and `tag`; omitted type remains plain text.
 - `shary.fields.get` requires `fields.value.read` and an exact key.
 - Owner UID, email, FCM token, local connector bearer, and refresh secret are
   never returned to the agent.

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
@@ -30,6 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.theme.SelectionCardBg
@@ -37,19 +43,24 @@ import com.shary.app.ui.theme.SharyRadius
 import com.shary.app.ui.theme.SurfaceWhite
 import com.shary.app.ui.theme.TagMintBg
 import com.shary.app.ui.theme.TagMintText
+import com.shary.app.ui.theme.TagPeachBg
+import com.shary.app.ui.theme.TagPeachText
 import com.shary.app.ui.theme.TagSkyBg
 import com.shary.app.ui.theme.TagSkyText
 import com.shary.app.ui.theme.TagVioletBg
 import com.shary.app.ui.theme.TagVioletText
+import com.shary.app.ui.theme.TextMuted
 import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet600
+import com.shary.app.ui.theme.Violet700
 import com.shary.app.ui.theme.Violet900
 
 enum class RequestStatusTone {
     RECEIVED,
     PENDING,
-    SENT
+    SENT,
+    PARTIAL,
+    FAILED
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -107,7 +118,7 @@ fun RequestCard(
                     Text(
                         text = "$timestamp · $fieldCount field${if (fieldCount == 1) "" else "s"} requested",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Violet500
+                        color = TextMuted
                     )
                 }
                 RequestStatusChip(label = statusLabel, tone = statusTone)
@@ -124,7 +135,7 @@ fun RequestCard(
                     Text(
                         text = key,
                         style = MaterialTheme.typography.labelMedium,
-                        color = Violet500,
+                        color = TextMuted,
                         modifier = Modifier
                             .background(com.shary.app.ui.theme.SurfaceMid, SharyRadius.chip)
                             .padding(horizontal = 9.dp, vertical = 3.dp)
@@ -136,7 +147,7 @@ fun RequestCard(
                 Text(
                     text = "Match to my fields →",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Violet600,
+                    color = Violet700,
                     modifier = Modifier
                         .padding(top = 10.dp)
                         .minimumInteractiveComponentSize()
@@ -165,24 +176,38 @@ private fun RequestSelectionRing(
 ) {
     Box(
         modifier = Modifier
-            .size(20.dp)
+            .size(48.dp)
             .clip(CircleShape)
-            .background(if (isSelected) Violet600 else Color.Transparent, CircleShape)
-            .clickable(onClick = onToggleSelection)
-            .border(
-                width = 1.5.dp,
-                color = if (isSelected) Violet600 else Violet200,
-                shape = CircleShape
-            ),
+            .toggleable(
+                value = isSelected,
+                role = Role.Checkbox,
+                onValueChange = { onToggleSelection() }
+            )
+            .semantics {
+                toggleableState = if (isSelected) ToggleableState.On else ToggleableState.Off
+                stateDescription = if (isSelected) "Selected" else "Not selected"
+            },
         contentAlignment = Alignment.Center
     ) {
-        if (isSelected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
-                tint = Color.White,
-                modifier = Modifier.size(12.dp)
-            )
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(if (isSelected) Violet600 else Color.Transparent, CircleShape)
+                .border(
+                    width = 1.5.dp,
+                    color = if (isSelected) Violet600 else Violet200,
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
     }
 }
@@ -193,6 +218,9 @@ private fun RequestStatusChip(label: String, tone: RequestStatusTone) {
         RequestStatusTone.RECEIVED -> TagSkyBg to TagSkyText
         RequestStatusTone.PENDING -> TagVioletBg to TagVioletText
         RequestStatusTone.SENT -> TagMintBg to TagMintText
+        RequestStatusTone.PARTIAL -> TagPeachBg to TagPeachText
+        RequestStatusTone.FAILED -> MaterialTheme.colorScheme.errorContainer to
+            MaterialTheme.colorScheme.onErrorContainer
     }
 
     Text(

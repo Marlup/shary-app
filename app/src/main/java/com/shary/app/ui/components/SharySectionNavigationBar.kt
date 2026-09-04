@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.HorizontalDivider
@@ -19,12 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.shary.app.ui.theme.SurfaceLight
+import com.shary.app.ui.theme.TextMuted
 import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet400
-import com.shary.app.ui.theme.Violet600
+import com.shary.app.ui.theme.Violet700
 
 enum class SectionTab {
     FIELDS,
+    CONNECT,
     USERS,
     REQUESTS
 }
@@ -57,6 +59,13 @@ fun SharySectionNavigationBar(
                 colors = itemColors()
             )
             NavigationBarItem(
+                selected = currentTab == SectionTab.CONNECT,
+                onClick = { onTabSelected(SectionTab.CONNECT) },
+                icon = { Icon(imageVector = Icons.Default.Link, contentDescription = "Connect") },
+                label = { Text(text = "Connect") },
+                colors = itemColors()
+            )
+            NavigationBarItem(
                 selected = currentTab == SectionTab.USERS,
                 onClick = { onTabSelected(SectionTab.USERS) },
                 icon = { Icon(imageVector = Icons.Default.Person, contentDescription = "Contacts") },
@@ -76,9 +85,9 @@ fun SharySectionNavigationBar(
 
 @Composable
 private fun itemColors() = NavigationBarItemDefaults.colors(
-    selectedIconColor = Violet600,
-    selectedTextColor = Violet600,
-    unselectedIconColor = Violet400,
-    unselectedTextColor = Violet400,
+    selectedIconColor = Violet700,
+    selectedTextColor = Violet700,
+    unselectedIconColor = TextMuted,
+    unselectedTextColor = TextMuted,
     indicatorColor = Color.Transparent
 )

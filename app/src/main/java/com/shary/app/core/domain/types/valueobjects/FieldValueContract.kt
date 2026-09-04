@@ -2,7 +2,10 @@ package com.shary.app.core.domain.types.valueobjects
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+
+const val SENSITIVE_MASK = "*****"
 
 @Serializable
 data class FieldValueEnvelope(
@@ -48,6 +51,164 @@ data class FileTypeCheck(
     val allowed: Boolean,
     val reason: String? = null
 )
+
+@Serializable
+enum class TaskStatus(val wireName: String) {
+    @SerialName("todo")
+    TODO("todo"),
+
+    @SerialName("doing")
+    DOING("doing"),
+
+    @SerialName("done")
+    DONE("done"),
+
+    @SerialName("review")
+    REVIEW("review"),
+
+    @SerialName("cancel")
+    CANCEL("cancel")
+}
+
+@Serializable
+data class TaskItem(
+    val title: String,
+    val status: TaskStatus = TaskStatus.TODO
+)
+
+enum class TaskValueValidationIssue(val message: String) {
+    EMPTY("Add at least one task."),
+    BLANK_TITLE("Task titles cannot be blank."),
+    ENCODING_FAILED("Tasks could not be encoded.")
+}
+
+sealed interface TaskValueEncodingResult {
+    data class Success(val encodedValue: String) : TaskValueEncodingResult
+
+    data class Invalid(
+        val issue: TaskValueValidationIssue,
+        val invalidIndices: List<Int> = emptyList()
+    ) : TaskValueEncodingResult
+}
+
+object TaskValueContract {
+    private val json = Json {
+        ignoreUnknownKeys = false
+        encodeDefaults = true
+    }
+    private val serializer = ListSerializer(TaskItem.serializer())
+
+    fun tryEncode(items: List<TaskItem>): TaskValueEncodingResult {
+        if (items.isEmpty()) {
+            return TaskValueEncodingResult.Invalid(TaskValueValidationIssue.EMPTY)
+        }
+
+        val normalized = items.map { item ->
+            item.copy(title = item.title.trim())
+        }
+        val invalidIndices = normalized.mapIndexedNotNull { index, item ->
+            index.takeIf { item.title.isBlank() }
+        }
+        if (invalidIndices.isNotEmpty()) {
+            return TaskValueEncodingResult.Invalid(
+                issue = TaskValueValidationIssue.BLANK_TITLE,
+                invalidIndices = invalidIndices
+            )
+        }
+
+        return runCatching { json.encodeToString(serializer, normalized) }
+            .fold(
+                onSuccess = TaskValueEncodingResult::Success,
+                onFailure = {
+                    TaskValueEncodingResult.Invalid(TaskValueValidationIssue.ENCODING_FAILED)
+                }
+            )
+    }
+
+    fun encode(items: List<TaskItem>): String = when (val result = tryEncode(items)) {
+        is TaskValueEncodingResult.Success -> result.encodedValue
+        is TaskValueEncodingResult.Invalid -> throw IllegalArgumentException(result.issue.message)
+    }
+
+    fun decode(data: String): Result<List<TaskItem>> = runCatching {
+        json.decodeFromString(serializer, data).also { items ->
+            require(items.isNotEmpty()) { "Add at least one task." }
+            require(items.all { it.title.trim().isNotBlank() }) { "Task titles cannot be blank." }
+        }
+    }
+
+    fun normalize(data: String): String = encode(decode(data).getOrThrow())
+}
+
+enum class FieldValueType(
+    val wireName: String,
+    val description: String
+) {
+    PLAIN("plain", "Unstructured text."),
+    EMAIL("email", "Email address."),
+    LIST("list", "Ordered text values."),
+    LINK_URL("link_url", "Web, FTP, or mailto link."),
+    JSON("json", "JSON object or array."),
+    QUESTIONNAIRE("questionnaire", "Questionnaire value and answer configuration."),
+    YAML("yaml", "YAML document."),
+    FILE("file", "Allowed file name or content URI reference."),
+    TASKS("tasks", "Task titles with todo, doing, done, review, or cancel status."),
+    SENSITIVE("sensitive", "Locally protected value requiring device authentication.");
+
+    companion object {
+        fun fromWireName(value: String?): FieldValueType? = when (value.orEmpty().trim().lowercase()) {
+            "link", "url" -> LINK_URL
+            "yml" -> YAML
+            else -> entries.firstOrNull { it.wireName == value.orEmpty().trim().lowercase() }
+        }
+    }
+}
+
+data class FieldValueTypeInfo(
+    val name: String,
+    val description: String
+)
+
+object FieldValueTypes {
+    val available: List<FieldValueTypeInfo> = FieldValueType.entries.map {
+        FieldValueTypeInfo(name = it.wireName, description = it.description)
+    }
+
+    fun encodeForStorage(value: String, requestedType: String?): Result<String> = runCatching {
+        val type = FieldValueType.fromWireName(requestedType)
+            ?: throw IllegalArgumentException("Unsupported value_type='${requestedType.orEmpty()}'.")
+        when (type) {
+            FieldValueType.PLAIN -> value
+            FieldValueType.TASKS -> FieldValueContract.encode(
+                data = TaskValueContract.normalize(value),
+                spec = FieldValueSpec(kind = type.wireName)
+            )
+            else -> FieldValueContract.encode(
+                data = value,
+                spec = FieldValueSpec(kind = type.wireName)
+            ).also { encoded ->
+                val validation = FieldValueContract.validate(encoded, strictModeEnabled = true)
+                require(validation.isValid) { validation.hint ?: "Invalid ${type.wireName} value." }
+            }
+        }
+    }
+
+    fun wireTypeOf(storedValue: String): String {
+        val parsed = FieldValueContract.parse(storedValue)
+        return parsed.envelope?.spec?.kind
+            ?.let(FieldValueType::fromWireName)
+            ?.wireName
+            ?: FieldValueType.PLAIN.wireName
+    }
+
+    fun isSensitive(storedValue: String): Boolean =
+        wireTypeOf(storedValue) == FieldValueType.SENSITIVE.wireName
+
+    fun displayData(storedValue: String, revealSensitive: Boolean = false): String {
+        if (isSensitive(storedValue) && !revealSensitive) return SENSITIVE_MASK
+        return FieldValueContract.parse(storedValue).plainData
+    }
+}
 
 object FieldFilePolicy {
     private val allowedExtensions = setOf(
@@ -144,7 +305,9 @@ object FieldValueContract {
         val spec = parsed.envelope?.spec ?: return FieldValueValidationResult(isValid = true)
         return when (spec.kind.trim().lowercase()) {
             "file" -> validateFileTypedValue(parsed.plainData, parsed.envelope.meta)
-            "json", "yaml", "yml", "list", "questionnaire", "link_url", "link", "url" -> {
+            "email" -> validateEmailTypedValue(parsed.plainData)
+            "tasks" -> validateTasksTypedValue(parsed.plainData)
+            "json", "yaml", "yml", "list", "questionnaire", "link_url", "link", "url", "sensitive" -> {
                 FieldValueValidationResult(isValid = true)
             }
             else -> FieldValueValidationResult(
@@ -175,4 +338,28 @@ object FieldValueContract {
         }
         return FieldValueValidationResult(isValid = true)
     }
+
+    private fun validateEmailTypedValue(data: String): FieldValueValidationResult {
+        val email = data.trim()
+        val valid = email.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
+        return if (valid) {
+            FieldValueValidationResult(isValid = true)
+        } else {
+            FieldValueValidationResult(
+                isValid = false,
+                hint = "Enter a valid email address."
+            )
+        }
+    }
+
+    private fun validateTasksTypedValue(data: String): FieldValueValidationResult =
+        TaskValueContract.decode(data).fold(
+            onSuccess = { FieldValueValidationResult(isValid = true) },
+            onFailure = {
+                FieldValueValidationResult(
+                    isValid = false,
+                    hint = it.message ?: "Enter a valid task list."
+                )
+            }
+        )
 }

@@ -7,7 +7,6 @@ import android.provider.OpenableColumns
 import androidx.compose.runtime.Composable
 import com.shary.app.core.domain.models.FieldDomain
 import java.time.Instant
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
@@ -17,6 +16,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import com.shary.app.core.domain.types.enums.PredefinedKey
+import com.shary.app.core.domain.types.enums.Tag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,16 +43,21 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.testTag
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import com.shary.app.core.domain.types.valueobjects.FieldValueMeta
 import com.shary.app.core.domain.types.valueobjects.FieldValueSpec
+import com.shary.app.core.domain.types.valueobjects.TaskItem
+import com.shary.app.core.domain.types.valueobjects.TaskStatus
+import com.shary.app.core.domain.types.valueobjects.TaskValueContract
+import com.shary.app.core.domain.types.valueobjects.TaskValueEncodingResult
+import com.shary.app.core.domain.types.valueobjects.TaskValueValidationIssue
 import com.shary.app.ui.components.SharyPrimaryButton
 import com.shary.app.ui.components.SharySoftButton
 import com.shary.app.ui.theme.SharyRadius
@@ -66,25 +71,30 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 private enum class ValueTypeOption(val wireKind: String, val label: String) {
+    Text("text", "Text"),
     List("list", "List"),
+    Email("email", "Email"),
     LinkUrl("link_url", "Link/URL"),
     Json("json", "JSON"),
     Questionnaire("questionnaire", "Questionnaire"),
     Yaml("yaml", "YAML"),
-    File("file", "File");
+    File("file", "File"),
+    Tasks("tasks", "Tasks"),
+    Sensitive("sensitive", "Sensitive");
 
     companion object {
         fun fromWire(kind: String?): ValueTypeOption =
             when (kind.orEmpty().trim().lowercase()) {
                 "link", "url" -> LinkUrl
-                else -> entries.firstOrNull { it.wireKind.equals(kind.orEmpty(), ignoreCase = true) } ?: Json
+                "" -> Text
+                else -> entries.firstOrNull { it.wireKind.equals(kind.orEmpty(), ignoreCase = true) } ?: Text
             }
     }
 }
 
 private data class ValueSpecDraft(
-    val typedEnabled: Boolean = false,
-    val type: ValueTypeOption = ValueTypeOption.Json,
+    val typedEnabled: Boolean = true,
+    val type: ValueTypeOption = ValueTypeOption.Text,
     val separator: String = ",",
     val isMultiSelection: Boolean = false,
     val answerCount: String = "",
@@ -102,6 +112,7 @@ private data class ParsedValueDraft(
 private val valueSpecJson = Json { ignoreUnknownKeys = true }
 private val httpUrlRegex = Regex("^(https?|ftp)://\\S+$", RegexOption.IGNORE_CASE)
 private val mailtoRegex = Regex("^mailto:\\S+@\\S+\\.\\S+$", RegexOption.IGNORE_CASE)
+private val emailRegex = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$", RegexOption.IGNORE_CASE)
 private val fileUriRegex = Regex("^(content|file)://\\S+$", RegexOption.IGNORE_CASE)
 
 private fun autoDetectValueSpec(plainValue: String): ValueSpecDraft? {
@@ -112,6 +123,12 @@ private fun autoDetectValueSpec(plainValue: String): ValueSpecDraft? {
         return ValueSpecDraft(
             typedEnabled = true,
             type = ValueTypeOption.File
+        )
+    }
+    if (emailRegex.matches(candidate)) {
+        return ValueSpecDraft(
+            typedEnabled = true,
+            type = ValueTypeOption.Email
         )
     }
     if (httpUrlRegex.matches(candidate) || mailtoRegex.matches(candidate)) {
@@ -150,7 +167,7 @@ private fun parseValueDraft(rawValue: String): ParsedValueDraft {
     if (parsed.envelope?.spec == null) {
         return ParsedValueDraft(
             plainValue = rawValue,
-            specDraft = ValueSpecDraft(typedEnabled = false)
+            specDraft = ValueSpecDraft(typedEnabled = true, type = ValueTypeOption.Text)
         )
     }
 
@@ -180,7 +197,14 @@ private fun encodeValueFromDraft(
     plainValue: String,
     draft: ValueSpecDraft
 ): String {
-    if (!draft.typedEnabled) return plainValue
+    if (!draft.typedEnabled || draft.type == ValueTypeOption.Text) return plainValue
+
+    if (draft.type == ValueTypeOption.Tasks) {
+        return FieldValueContract.encode(
+            data = plainValue,
+            spec = FieldValueSpec(kind = draft.type.wireKind)
+        )
+    }
 
     val options = mutableMapOf<String, String>()
     when (draft.type) {
@@ -359,6 +383,44 @@ private fun QuestionnaireAnswersEditor(
 }
 
 @Composable
+private fun TaskStatusSelector(
+    status: TaskStatus,
+    onStatusSelected: (TaskStatus) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Text(status.wireName)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            TaskStatus.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.wireName) },
+                    onClick = {
+                        onStatusSelected(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun encodeTaskDraft(
+    taskItems: List<TaskItem>,
+    pendingTitle: String
+): TaskValueEncodingResult {
+    val pendingTask = pendingTitle.trim()
+        .takeIf(String::isNotEmpty)
+        ?.let(::TaskItem)
+    val itemsToEncode = if (pendingTask == null) taskItems else taskItems + pendingTask
+    return TaskValueContract.tryEncode(itemsToEncode)
+}
+
+@Composable
 private fun FieldValueInput(
     value: String,
     onValueChange: (String) -> Unit,
@@ -368,9 +430,109 @@ private fun FieldValueInput(
     onAddListItem: () -> Unit,
     onUpdateListItem: (Int, String) -> Unit,
     onRemoveListItem: (Int) -> Unit,
+    taskItems: List<TaskItem>,
+    taskValidation: TaskValueEncodingResult.Invalid?,
+    onAddTask: () -> Unit,
+    onUpdateTask: (Int, TaskItem) -> Unit,
+    onRemoveTask: (Int) -> Unit,
     onBrowseFile: () -> Unit
 ) {
     when {
+        draft.typedEnabled && draft.type == ValueTypeOption.Tasks -> {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        label = { Text("(required) Task title") },
+                        supportingText = {
+                            when {
+                                showError && taskValidation?.issue == TaskValueValidationIssue.EMPTY ->
+                                    Text(TaskValueValidationIssue.EMPTY.message)
+                                showError && taskValidation?.issue == TaskValueValidationIssue.BLANK_TITLE ->
+                                    Text("Fix the blank task titles below")
+                                showError && taskValidation?.issue == TaskValueValidationIssue.ENCODING_FAILED ->
+                                    Text(TaskValueValidationIssue.ENCODING_FAILED.message)
+                                else -> Text("New tasks start as todo")
+                            }
+                        },
+                        isError = showError &&
+                            (taskValidation?.issue == TaskValueValidationIssue.EMPTY ||
+                                taskValidation?.issue == TaskValueValidationIssue.ENCODING_FAILED),
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("field-task-pending-title")
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    FilledTonalButton(
+                        onClick = onAddTask,
+                        enabled = value.isNotBlank(),
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text("+")
+                    }
+                }
+
+                if (taskItems.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        taskItems.forEachIndexed { index, task ->
+                            val hasBlankTitle = showError &&
+                                index in taskValidation?.invalidIndices.orEmpty()
+                            Surface(
+                                tonalElevation = 1.dp,
+                                shape = MaterialTheme.shapes.small
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = task.title,
+                                        onValueChange = {
+                                            onUpdateTask(index, task.copy(title = it))
+                                        },
+                                        label = { Text("Task ${index + 1}") },
+                                        supportingText = if (hasBlankTitle) {
+                                            { Text(TaskValueValidationIssue.BLANK_TITLE.message) }
+                                        } else {
+                                            null
+                                        },
+                                        isError = hasBlankTitle,
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("field-task-title-$index")
+                                    )
+                                    TaskStatusSelector(
+                                        status = task.status,
+                                        onStatusSelected = {
+                                            onUpdateTask(index, task.copy(status = it))
+                                        }
+                                    )
+                                    IconButton(onClick = { onRemoveTask(index) }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Remove task"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         draft.typedEnabled && draft.type == ValueTypeOption.List -> {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -380,7 +542,7 @@ private fun FieldValueInput(
                     OutlinedTextField(
                         value = value,
                         onValueChange = onValueChange,
-                        label = { Text("Value *") },
+                        label = { Text("(required) Enter value") },
                         supportingText = {
                             when {
                                 showError && listItems.isEmpty() && value.isBlank() -> Text("Add at least one element")
@@ -478,14 +640,26 @@ private fun FieldValueInput(
         }
 
         else -> {
+            val invalidEmail = draft.typedEnabled &&
+                draft.type == ValueTypeOption.Email &&
+                value.isNotBlank() &&
+                !emailRegex.matches(value.trim())
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                label = { Text("Value *") },
-                isError = showError && value.isBlank(),
+                label = { Text("(required) Enter value") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (draft.typedEnabled && draft.type == ValueTypeOption.Email) {
+                        KeyboardType.Email
+                    } else {
+                        KeyboardType.Text
+                    }
+                ),
+                isError = showError && (value.isBlank() || invalidEmail),
                 supportingText = {
-                    if (showError && value.isBlank()) {
-                        Text("Required")
+                    when {
+                        showError && value.isBlank() -> Text("Required")
+                        showError && invalidEmail -> Text("Enter a valid email address")
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -496,69 +670,12 @@ private fun FieldValueInput(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TypedValueEditor(
+private fun TypeSpecificOptions(
     draft: ValueSpecDraft,
     onChange: (ValueSpecDraft) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            "Typed value",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Switch(
-            checked = draft.typedEnabled,
-            onCheckedChange = { enabled ->
-                onChange(draft.copy(typedEnabled = enabled))
-            }
-        )
-    }
-
-    if (!draft.typedEnabled) return
-
-    Spacer(Modifier.height(8.dp))
-
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
-    ) {
-        OutlinedTextField(
-            value = draft.type.label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Value type") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor(
-                    type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
-                    enabled = true
-                )
-                .fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            ValueTypeOption.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    onClick = {
-                        onChange(draft.copy(type = option))
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-
-    Spacer(Modifier.height(8.dp))
-
     when (draft.type) {
+        ValueTypeOption.Text -> Unit
         ValueTypeOption.List -> {
             OutlinedTextField(
                 value = draft.separator,
@@ -624,13 +741,79 @@ private fun TypedValueEditor(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        ValueTypeOption.Json, ValueTypeOption.Yaml, ValueTypeOption.LinkUrl -> {
+        ValueTypeOption.Json,
+        ValueTypeOption.Yaml,
+        ValueTypeOption.LinkUrl,
+        ValueTypeOption.Email,
+        ValueTypeOption.Tasks,
+        ValueTypeOption.Sensitive -> {
             Text(
                 "No extra options for this type.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+private fun CompactValueTypeSelector(
+    draft: ValueSpecDraft,
+    onChange: (ValueSpecDraft) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        SharySoftButton(
+            text = draft.type.label,
+            icon = Icons.Default.Category,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("field-value-type-selector"),
+            onClick = { expanded = true }
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            ValueTypeOption.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    modifier = Modifier.testTag("field-value-type-option-${option.wireKind}"),
+                    onClick = {
+                        onChange(draft.copy(type = option, typedEnabled = true))
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldMetadataSelectors(
+    draft: ValueSpecDraft,
+    onDraftChange: (ValueSpecDraft) -> Unit,
+    selectedTag: Tag,
+    onTagSelected: (Tag) -> Unit,
+    availableTags: List<Tag>?
+) {
+    Column(
+        modifier = Modifier.width(132.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        CompactValueTypeSelector(
+            draft = draft,
+            onChange = onDraftChange,
+            modifier = Modifier.fillMaxWidth()
+        )
+        CompactTagSelector(
+            selectedTag = selectedTag,
+            onTagSelected = onTagSelected,
+            availableTags = availableTags,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -643,11 +826,17 @@ private fun TypedValueEditor(
 fun AddFieldDialog(
     onDismiss: () -> Unit,
     onAddField: (FieldDomain) -> Unit,
+    availableTags: List<Tag>? = null,
+    isSaving: Boolean = false,
+    errorMessage: String? = null,
 ) {
     EditorAddFieldDialog(
         onDismiss = onDismiss,
         onConfirm = onAddField,
-        confirmLabel = "Add"
+        confirmLabel = "Add",
+        availableTags = availableTags,
+        isSaving = isSaving,
+        errorMessage = errorMessage
     )
 }
 
@@ -657,7 +846,10 @@ fun UpdateFieldDialog(
     onDismiss: () -> Unit,
     onUpdateField: (FieldDomain) -> Unit,
     canRecoverPreviousValue: Boolean = false,
-    onRecoverPreviousValue: (() -> Unit)? = null
+    onRecoverPreviousValue: (() -> Unit)? = null,
+    availableTags: List<Tag>? = null,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     EditorUpdateFieldDialog(
         initialField = targetField,
@@ -666,7 +858,10 @@ fun UpdateFieldDialog(
         onConfirm = onUpdateField,
         confirmLabel = "Save",
         canRecoverPreviousValue = canRecoverPreviousValue,
-        onRecoverPreviousValue = onRecoverPreviousValue
+        onRecoverPreviousValue = onRecoverPreviousValue,
+        availableTags = availableTags,
+        isSaving = isSaving,
+        errorMessage = errorMessage
     )
 }
 
@@ -674,11 +869,15 @@ fun UpdateFieldDialog(
 fun AddCopiedFieldDialog(
     targetField: FieldDomain,
     onDismiss: () -> Unit,
-    onAddCopiedField: (FieldDomain) -> Unit
+    onAddCopiedField: (FieldDomain) -> Unit,
+    availableTags: List<Tag>? = null,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     val initialField = targetField.copy(
         key = "${targetField.key} - Copy",
-        dateAdded = Instant.EPOCH
+        dateAdded = Instant.EPOCH,
+        isMcpShareable = false
     )
 
     EditorUpdateFieldDialog(
@@ -686,7 +885,10 @@ fun AddCopiedFieldDialog(
         title = "Update Field ${initialField.key}",
         onDismiss = onDismiss,
         onConfirm = onAddCopiedField,
-        confirmLabel = "Save"
+        confirmLabel = "Save",
+        availableTags = availableTags,
+        isSaving = isSaving,
+        errorMessage = errorMessage
     )
 }
 
@@ -695,7 +897,10 @@ fun AddCopiedFieldDialog(
 fun EditorAddFieldDialog(
     onDismiss: () -> Unit,
     onConfirm: (FieldDomain) -> Unit,
-    confirmLabel: String
+    confirmLabel: String,
+    availableTags: List<Tag>? = null,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -706,9 +911,9 @@ fun EditorAddFieldDialog(
     // Seed empty domain model (dateAdded set on confirm inside FieldEditorDialog)
     var editingField by remember { mutableStateOf<FieldDomain>(FieldDomain.initialize()) }
     var showErrors by remember { mutableStateOf(false) }
-    var showAdvanced by remember { mutableStateOf(false) }
     var valueSpecDraft by remember { mutableStateOf(ValueSpecDraft()) }
     var listItems by remember { mutableStateOf(emptyList<String>()) }
+    var taskItems by remember { mutableStateOf(emptyList<TaskItem>()) }
     var typedSpecTouched by remember { mutableStateOf(false) }
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -728,18 +933,32 @@ fun EditorAddFieldDialog(
             sizeBytes = fileMeta.sizeBytes
         )
     }
-    fun currentValueToPersist(): String =
-        if (valueSpecDraft.typedEnabled && valueSpecDraft.type == ValueTypeOption.List) {
-            joinListItems(listItems, editingField.value, valueSpecDraft.separator)
-        } else {
-            editingField.value.trim()
+    fun currentTaskEncoding(): TaskValueEncodingResult =
+        encodeTaskDraft(taskItems, editingField.value)
+
+    fun currentValueToPersist(): String? =
+        when {
+            valueSpecDraft.typedEnabled && valueSpecDraft.type == ValueTypeOption.List ->
+                joinListItems(listItems, editingField.value, valueSpecDraft.separator)
+            valueSpecDraft.typedEnabled && valueSpecDraft.type == ValueTypeOption.Tasks ->
+                (currentTaskEncoding() as? TaskValueEncodingResult.Success)?.encodedValue
+            else -> editingField.value.trim()
         }
-    fun isValid(): Boolean = editingField.key.isNotBlank() && currentValueToPersist().isNotBlank()
+
+    fun isValid(): Boolean {
+        val value = currentValueToPersist() ?: return false
+        if (editingField.key.isBlank() || value.isBlank()) return false
+        return !valueSpecDraft.typedEnabled ||
+            valueSpecDraft.type != ValueTypeOption.Email ||
+            emailRegex.matches(value.trim())
+    }
     fun onSpecDraftChange(updatedDraft: ValueSpecDraft) {
         typedSpecTouched = true
         val previousDraft = valueSpecDraft
         val wasList = previousDraft.typedEnabled && previousDraft.type == ValueTypeOption.List
         val isList = updatedDraft.typedEnabled && updatedDraft.type == ValueTypeOption.List
+        val wasTasks = previousDraft.typedEnabled && previousDraft.type == ValueTypeOption.Tasks
+        val isTasks = updatedDraft.typedEnabled && updatedDraft.type == ValueTypeOption.Tasks
 
         if (!wasList && isList) {
             listItems = splitListItems(editingField.value, updatedDraft.separator)
@@ -750,11 +969,33 @@ fun EditorAddFieldDialog(
             )
             listItems = emptyList()
         }
+        if (!wasTasks && isTasks) {
+            taskItems = emptyList()
+        } else if (wasTasks && !isTasks) {
+            when (val result = currentTaskEncoding()) {
+                is TaskValueEncodingResult.Success -> {
+                    editingField = editingField.copy(value = result.encodedValue)
+                }
+                is TaskValueEncodingResult.Invalid -> {
+                    if (result.issue != TaskValueValidationIssue.EMPTY) {
+                        showErrors = true
+                        return
+                    }
+                    editingField = editingField.copy(value = "")
+                }
+            }
+            taskItems = emptyList()
+        }
+        if (updatedDraft.type != ValueTypeOption.Sensitive ||
+            previousDraft.type != ValueTypeOption.Sensitive
+        ) {
+            editingField = editingField.copy(isMcpShareable = false)
+        }
         valueSpecDraft = updatedDraft
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         sheetState = sheetState,
         shape = SharyRadius.sheet,
         containerColor = SurfaceLight,
@@ -774,16 +1015,36 @@ fun EditorAddFieldDialog(
                 .padding(horizontal = 18.dp, vertical = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                "Add New Field",
-                style = MaterialTheme.typography.headlineLarge,
-                color = Violet900
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Add New Field",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Violet900,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp)
+                )
+                FieldMetadataSelectors(
+                    draft = valueSpecDraft,
+                    onDraftChange = ::onSpecDraftChange,
+                    selectedTag = editingField.tag,
+                    onTagSelected = { selectedTag ->
+                        editingField = editingField.copy(tag = selectedTag)
+                    },
+                    availableTags = availableTags
+                )
+            }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
-                "Required",
+                "Category.${valueSpecDraft.type.label}",
                 style = MaterialTheme.typography.labelSmall,
                 color = Violet500
             )
@@ -795,7 +1056,7 @@ fun EditorAddFieldDialog(
                 key = editingField.key,
                 onKeyChange = { editingField = editingField.copy(key = it) },
                 predefinedKeys = PredefinedKey.entries.map { it.key },
-                label = "Key *",
+                label = "(required) Enter key",
                 showError = showErrors
             )
 
@@ -820,61 +1081,75 @@ fun EditorAddFieldDialog(
                 onRemoveListItem = { index ->
                     listItems = listItems.filterIndexed { currentIndex, _ -> currentIndex != index }
                 },
+                taskItems = taskItems,
+                taskValidation = currentTaskEncoding() as? TaskValueEncodingResult.Invalid,
+                onAddTask = {
+                    editingField.value.trim().takeIf { it.isNotEmpty() }?.let { title ->
+                        taskItems = taskItems + TaskItem(title = title)
+                        editingField = editingField.copy(value = "")
+                    }
+                },
+                onUpdateTask = { index, updatedTask ->
+                    taskItems = taskItems.mapIndexed { currentIndex, currentTask ->
+                        if (currentIndex == index) updatedTask else currentTask
+                    }
+                },
+                onRemoveTask = { index ->
+                    taskItems = taskItems.filterIndexed { currentIndex, _ -> currentIndex != index }
+                },
                 onBrowseFile = { filePickerLauncher.launch(arrayOf("*/*")) }
             )
 
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = Violet200, thickness = 1.dp)
-            Spacer(Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showAdvanced = !showAdvanced }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = if (showAdvanced) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = null
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "Advanced options",
-                    style = MaterialTheme.typography.labelLarge
-                )
+            OutlinedTextField(
+                value = editingField.keyAlias,
+                onValueChange = { editingField = editingField.copy(keyAlias = it) },
+                label = { Text("(Optional) Alias") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (valueSpecDraft.type == ValueTypeOption.Sensitive) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Allow MCP access")
+                        Text(
+                            "Off by default. Local authentication is still required.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = editingField.isMcpShareable,
+                        onCheckedChange = {
+                            editingField = editingField.copy(isMcpShareable = it)
+                        }
+                    )
+                }
             }
 
-            if (showAdvanced) {
+            if (valueSpecDraft.type != ValueTypeOption.Text) {
                 Spacer(Modifier.height(8.dp))
-
-                // --- Alias (optional) ---
-                OutlinedTextField(
-                    value = editingField.keyAlias,
-                    onValueChange = { editingField = editingField.copy(keyAlias = it) },
-                    label = { Text("Alias") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                // --- Tag picker (expects String; convert to/from UiFieldTag) ---
-                TagPicker(
-                    selectedTag = editingField.tag,
-                    onTagSelected = { selectedTag ->
-                        editingField = editingField.copy(tag = selectedTag)
-                    },
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                TypedValueEditor(
+                TypeSpecificOptions(
                     draft = valueSpecDraft,
                     onChange = ::onSpecDraftChange
                 )
             }
 
             Spacer(Modifier.height(20.dp))
+
+            errorMessage?.let { message ->
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(8.dp))
+            }
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -883,14 +1158,16 @@ fun EditorAddFieldDialog(
                 SharySoftButton(
                     text = "Cancel",
                     onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSaving
                 )
                 SharyPrimaryButton(
-                    text = confirmLabel,
+                    text = if (isSaving) "Saving..." else confirmLabel,
                     onClick = {
                         showErrors = true
                         if (!isValid()) return@SharyPrimaryButton
                         val persistedPlainValue = currentValueToPersist()
+                            ?: return@SharyPrimaryButton
                         val draftToPersist =
                             if (!typedSpecTouched && !valueSpecDraft.typedEnabled) {
                                 autoDetectValueSpec(persistedPlainValue) ?: valueSpecDraft
@@ -905,13 +1182,14 @@ fun EditorAddFieldDialog(
                             ),
                             keyAlias = editingField.keyAlias.trim(),
                             tag = editingField.tag,
-                            dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded
+                            dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded,
+                            isMcpShareable = valueSpecDraft.type == ValueTypeOption.Sensitive &&
+                                editingField.isMcpShareable
                         )
                         onConfirm(normalizedField)
-                        Toast.makeText(context, "Field added", Toast.LENGTH_SHORT).show()
-                        onDismiss()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSaving && (!showErrors || isValid())
                 )
             }
         }
@@ -927,7 +1205,10 @@ fun EditorUpdateFieldDialog(
     onConfirm: (FieldDomain) -> Unit,
     confirmLabel: String,
     canRecoverPreviousValue: Boolean = false,
-    onRecoverPreviousValue: (() -> Unit)? = null
+    onRecoverPreviousValue: (() -> Unit)? = null,
+    availableTags: List<Tag>? = null,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -943,19 +1224,29 @@ fun EditorUpdateFieldDialog(
             initialField.copy(
                 value = if (
                     parsedDraft.specDraft.typedEnabled &&
-                    parsedDraft.specDraft.type == ValueTypeOption.List
+                    parsedDraft.specDraft.type in setOf(ValueTypeOption.List, ValueTypeOption.Tasks)
                 ) "" else parsedDraft.plainValue
             )
         )
     }
     var showErrors by remember { mutableStateOf(false) }
-    var showAdvanced by remember { mutableStateOf(false) }
     var valueSpecDraft by remember(initialField) { mutableStateOf(parsedDraft.specDraft) }
     var typedSpecTouched by remember(initialField) { mutableStateOf(false) }
     var listItems by remember(initialField) {
         mutableStateOf(
             if (parsedDraft.specDraft.typedEnabled && parsedDraft.specDraft.type == ValueTypeOption.List) {
                 splitListItems(parsedDraft.plainValue, parsedDraft.specDraft.separator)
+            } else {
+                emptyList()
+            }
+        )
+    }
+    var taskItems by remember(initialField) {
+        mutableStateOf(
+            if (parsedDraft.specDraft.typedEnabled &&
+                parsedDraft.specDraft.type == ValueTypeOption.Tasks
+            ) {
+                TaskValueContract.decode(parsedDraft.plainValue).getOrDefault(emptyList())
             } else {
                 emptyList()
             }
@@ -979,18 +1270,32 @@ fun EditorUpdateFieldDialog(
             sizeBytes = fileMeta.sizeBytes
         )
     }
-    fun currentValueToPersist(): String =
-        if (valueSpecDraft.typedEnabled && valueSpecDraft.type == ValueTypeOption.List) {
-            joinListItems(listItems, editingField.value, valueSpecDraft.separator)
-        } else {
-            editingField.value.trim()
+    fun currentTaskEncoding(): TaskValueEncodingResult =
+        encodeTaskDraft(taskItems, editingField.value)
+
+    fun currentValueToPersist(): String? =
+        when {
+            valueSpecDraft.typedEnabled && valueSpecDraft.type == ValueTypeOption.List ->
+                joinListItems(listItems, editingField.value, valueSpecDraft.separator)
+            valueSpecDraft.typedEnabled && valueSpecDraft.type == ValueTypeOption.Tasks ->
+                (currentTaskEncoding() as? TaskValueEncodingResult.Success)?.encodedValue
+            else -> editingField.value.trim()
         }
-    fun isValid(): Boolean = editingField.key.isNotBlank() && currentValueToPersist().isNotBlank()
+
+    fun isValid(): Boolean {
+        val value = currentValueToPersist() ?: return false
+        if (editingField.key.isBlank() || value.isBlank()) return false
+        return !valueSpecDraft.typedEnabled ||
+            valueSpecDraft.type != ValueTypeOption.Email ||
+            emailRegex.matches(value.trim())
+    }
     fun onSpecDraftChange(updatedDraft: ValueSpecDraft) {
         typedSpecTouched = true
         val previousDraft = valueSpecDraft
         val wasList = previousDraft.typedEnabled && previousDraft.type == ValueTypeOption.List
         val isList = updatedDraft.typedEnabled && updatedDraft.type == ValueTypeOption.List
+        val wasTasks = previousDraft.typedEnabled && previousDraft.type == ValueTypeOption.Tasks
+        val isTasks = updatedDraft.typedEnabled && updatedDraft.type == ValueTypeOption.Tasks
 
         if (!wasList && isList) {
             listItems = splitListItems(editingField.value, updatedDraft.separator)
@@ -1001,12 +1306,34 @@ fun EditorUpdateFieldDialog(
             )
             listItems = emptyList()
         }
+        if (!wasTasks && isTasks) {
+            taskItems = emptyList()
+        } else if (wasTasks && !isTasks) {
+            when (val result = currentTaskEncoding()) {
+                is TaskValueEncodingResult.Success -> {
+                    editingField = editingField.copy(value = result.encodedValue)
+                }
+                is TaskValueEncodingResult.Invalid -> {
+                    if (result.issue != TaskValueValidationIssue.EMPTY) {
+                        showErrors = true
+                        return
+                    }
+                    editingField = editingField.copy(value = "")
+                }
+            }
+            taskItems = emptyList()
+        }
+        if (updatedDraft.type != ValueTypeOption.Sensitive ||
+            previousDraft.type != ValueTypeOption.Sensitive
+        ) {
+            editingField = editingField.copy(isMcpShareable = false)
+        }
         valueSpecDraft = updatedDraft
     }
 
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         sheetState = sheetState,
         shape = SharyRadius.sheet,
         containerColor = SurfaceLight,
@@ -1026,16 +1353,36 @@ fun EditorUpdateFieldDialog(
                 .padding(horizontal = 18.dp, vertical = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineLarge,
-                color = Violet900
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Violet900,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp)
+                )
+                FieldMetadataSelectors(
+                    draft = valueSpecDraft,
+                    onDraftChange = ::onSpecDraftChange,
+                    selectedTag = editingField.tag,
+                    onTagSelected = { selectedTag ->
+                        editingField = editingField.copy(tag = selectedTag)
+                    },
+                    availableTags = availableTags
+                )
+            }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
-                "Required",
+                "Category.${valueSpecDraft.type.label}",
                 style = MaterialTheme.typography.labelSmall,
                 color = Violet500
             )
@@ -1047,7 +1394,7 @@ fun EditorUpdateFieldDialog(
                 key = editingField.key,
                 onKeyChange = { editingField = editingField.copy(key = it) },
                 predefinedKeys = PredefinedKey.entries.map { it.key },
-                label = "Key *",
+                label = "(required) Enter key",
                 showError = showErrors
             )
 
@@ -1072,55 +1419,60 @@ fun EditorUpdateFieldDialog(
                 onRemoveListItem = { index ->
                     listItems = listItems.filterIndexed { currentIndex, _ -> currentIndex != index }
                 },
+                taskItems = taskItems,
+                taskValidation = currentTaskEncoding() as? TaskValueEncodingResult.Invalid,
+                onAddTask = {
+                    editingField.value.trim().takeIf { it.isNotEmpty() }?.let { title ->
+                        taskItems = taskItems + TaskItem(title = title)
+                        editingField = editingField.copy(value = "")
+                    }
+                },
+                onUpdateTask = { index, updatedTask ->
+                    taskItems = taskItems.mapIndexed { currentIndex, currentTask ->
+                        if (currentIndex == index) updatedTask else currentTask
+                    }
+                },
+                onRemoveTask = { index ->
+                    taskItems = taskItems.filterIndexed { currentIndex, _ -> currentIndex != index }
+                },
                 onBrowseFile = { filePickerLauncher.launch(arrayOf("*/*")) }
             )
 
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = Violet200, thickness = 1.dp)
-            Spacer(Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showAdvanced = !showAdvanced }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = if (showAdvanced) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = null
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "Advanced options",
-                    style = MaterialTheme.typography.labelLarge
-                )
+            OutlinedTextField(
+                value = editingField.keyAlias,
+                onValueChange = { editingField = editingField.copy(keyAlias = it) },
+                label = { Text("(Optional) Alias") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (valueSpecDraft.type == ValueTypeOption.Sensitive) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Allow MCP access")
+                        Text(
+                            "Off by default. Local authentication is still required.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = editingField.isMcpShareable,
+                        onCheckedChange = {
+                            editingField = editingField.copy(isMcpShareable = it)
+                        }
+                    )
+                }
             }
 
-            if (showAdvanced) {
+            if (valueSpecDraft.type != ValueTypeOption.Text) {
                 Spacer(Modifier.height(8.dp))
-
-                // --- Alias (optional) ---
-                OutlinedTextField(
-                    value = editingField.keyAlias,
-                    onValueChange = { editingField = editingField.copy(keyAlias = it) },
-                    label = { Text("Alias") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                // --- Tag picker (expects String; convert to/from UiFieldTag) ---
-                TagPicker(
-                    selectedTag = editingField.tag,
-                    onTagSelected = { selectedTag ->
-                        editingField = editingField.copy(tag = selectedTag)
-                    },
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                TypedValueEditor(
+                TypeSpecificOptions(
                     draft = valueSpecDraft,
                     onChange = ::onSpecDraftChange
                 )
@@ -1131,12 +1483,18 @@ fun EditorUpdateFieldDialog(
             if (canRecoverPreviousValue && onRecoverPreviousValue != null) {
                 SharySoftButton(
                     text = "Recover value",
-                    onClick = {
-                        onRecoverPreviousValue()
-                        Toast.makeText(context, "Previous value recovered", Toast.LENGTH_SHORT).show()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                    onClick = onRecoverPreviousValue,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSaving
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            errorMessage?.let { message ->
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -1148,14 +1506,16 @@ fun EditorUpdateFieldDialog(
                 SharySoftButton(
                     text = "Cancel",
                     onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSaving
                 )
                 SharyPrimaryButton(
-                    text = confirmLabel,
+                    text = if (isSaving) "Saving..." else confirmLabel,
                     onClick = {
                         showErrors = true
                         if (!isValid()) return@SharyPrimaryButton
                         val persistedPlainValue = currentValueToPersist()
+                            ?: return@SharyPrimaryButton
                         val draftToPersist =
                             if (!typedSpecTouched && !valueSpecDraft.typedEnabled) {
                                 autoDetectValueSpec(persistedPlainValue) ?: valueSpecDraft
@@ -1170,13 +1530,14 @@ fun EditorUpdateFieldDialog(
                             ),
                             keyAlias = editingField.keyAlias.trim(),
                             tag = editingField.tag,
-                            dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded
+                            dateAdded = if (editingField.dateAdded == Instant.EPOCH) Instant.now() else editingField.dateAdded,
+                            isMcpShareable = valueSpecDraft.type == ValueTypeOption.Sensitive &&
+                                editingField.isMcpShareable
                         )
                         onConfirm(normalizedField)
-                        Toast.makeText(context, "Field saved", Toast.LENGTH_SHORT).show()
-                        onDismiss()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSaving && (!showErrors || isValid())
                 )
             }
         }

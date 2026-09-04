@@ -1,22 +1,22 @@
 {
     "manifest_version":  1,
-    "policy_version":  "2026-06-19.1",
-    "generated_at_utc":  "2026-06-20T12:09:19.1597684Z",
+    "policy_version":  "2026-07-18.1",
+    "generated_at_utc":  "2026-07-23T18:43:52.4089874Z",
     "required_files":  [
                            {
-                               "path":  "AGENT.md",
+                               "path":  "AGENTS.md",
                                "role":  "canonical_policy",
-                               "sha256":  "62485e61d2e8342126af9f8464df26b2b4cbf634d804fe2f56687dc45046d90b"
+                               "sha256":  "abe011b8f045ab8e7aaad7d41fc09d30367f2c20963e5219387edfd17a2c9da3"
                            },
                            {
                                "path":  "CODEX.md",
                                "role":  "codex_adapter",
-                               "sha256":  "b9aec257e010d7b2b4f5af22221f12244fe64fb989c90c9916f24b1c8eff3265"
+                               "sha256":  "566d1895d3ce62bcb722c42a448560fd7901a7fd2d1fa07a9ab977dd95ea3f7e"
                            },
                            {
                                "path":  "CLAUDE.md",
                                "role":  "claude_adapter",
-                               "sha256":  "7bf994be2e550be395ab741e5f745d0cbfa24f2a3515e73b3d3c02c318a19d3e"
+                               "sha256":  "a63d3d5937b7e3045534dc3be072424ec80ffdc5193e39d12349aba78c5e8dc6"
                            },
                            {
                                "path":  ".claude/settings.local.json",
@@ -25,7 +25,7 @@
                            }
                        ],
     "load_order":  [
-                       "AGENT.md",
+                       "AGENTS.md",
                        "CODEX.md",
                        "CLAUDE.md",
                        ".claude/settings.local.json"

@@ -33,6 +33,7 @@ class SettingsRepositoryImpl @Inject constructor(
     private object Keys {
         val REMEMBER_EMAIL_AT_LOGIN = booleanPreferencesKey("remember_email_at_login")
         val REMEMBERED_EMAIL = stringPreferencesKey("remembered_email")
+        val MCP_ENABLED = booleanPreferencesKey("mcp_enabled")
         val AUTO_OPEN_CLOUD_INBOX = booleanPreferencesKey("auto_open_cloud_inbox_on_start")
         val DEFAULT_CLOUD_EXPIRY_DAYS = intPreferencesKey("default_cloud_expiry_days")
         val SHOW_FRIENDLY_SENDER_IDENTITY = booleanPreferencesKey("show_friendly_sender_identity")
@@ -52,6 +53,7 @@ class SettingsRepositoryImpl @Inject constructor(
             } else {
                 ""
             },
+            mcpEnabled = prefs[Keys.MCP_ENABLED] ?: false,
             autoOpenCloudInboxOnStart = prefs[Keys.AUTO_OPEN_CLOUD_INBOX] ?: false,
             defaultCloudExpiryDays = (prefs[Keys.DEFAULT_CLOUD_EXPIRY_DAYS]
                 ?: CloudInboxPolicy.DEFAULT_EXPIRY_DAYS)
@@ -85,6 +87,12 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun clearRememberedEmail() {
         context.settingsDataStore.edit { prefs ->
             prefs[Keys.REMEMBERED_EMAIL] = ""
+        }
+    }
+
+    override suspend fun setMcpEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[Keys.MCP_ENABLED] = enabled
         }
     }
 

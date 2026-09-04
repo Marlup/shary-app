@@ -10,6 +10,7 @@ message Field {
   string keyAlias = 3;
   string tag = 4;
   int64 dateAdded = 5;
+  bool isMcpShareable = 6;
 }
 
 message FieldList {

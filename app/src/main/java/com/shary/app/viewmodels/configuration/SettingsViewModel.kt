@@ -34,6 +34,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.clearRememberedEmail() }
     }
 
+    fun setMcpEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setMcpEnabled(enabled) }
+    }
+
     fun setAutoOpenCloudInboxOnStart(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoOpenCloudInboxOnStart(enabled) }
     }

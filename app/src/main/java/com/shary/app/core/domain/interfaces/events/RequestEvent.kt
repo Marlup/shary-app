@@ -10,4 +10,5 @@ sealed interface RequestEvent {
     ) : RequestEvent
     data class CloudInboxRejected(val backendAcknowledged: Boolean) : RequestEvent
     data class FetchError(val throwable: Throwable) : RequestEvent
+    data class ResponseStatusUpdateFailed(val throwable: Throwable) : RequestEvent
 }

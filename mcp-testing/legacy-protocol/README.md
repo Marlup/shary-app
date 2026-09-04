@@ -1,101 +1,191 @@
-# Shary MCP protocol PowerShell tests
+# Shary MCP legacy protocol PowerShell tests
 
-These scripts are executable versions of
-`docs/archive/mcp-local-legacy/testing/connector-mcp-e2e-quickstart.md`. Each script sends real requests
-and throws when an expected result is missing. `run-mcp-tests.ps1` exits with
-code `1` on the first failed assertion.
+## Purpose
 
-## Before running
+This folder preserves the direct protocol and local ADB conformance scripts
+for the older localhost MCP flow. It remains useful for development-only
+transport checks and for the `LocalAdb` preflight path used by
+`mcp-testing/real/start-real-agent-run.ps1`.
 
-1. Prepare and open the current Shary debug build:
+## Positioning
 
-   ```powershell
-   # Compile, run the focused MCP tests, install Shary, and launch it.
-   .\mcp-testing\protocol\prepare-mcp-tests.ps1 -DeviceSerial "emulator-5554"
-   ```
+- Active supported product path:
+  - remote OAuth MCP as documented in
+    `docs/testing/connector-mcp-real-agent-e2e.md`.
+- This folder:
+  - legacy/development conformance tooling for localhost MCP protocol checks.
 
-2. In **Settings > Assistant Connectors**, start MCP.
-3. Pair the connector mode needed by the tests.
-4. Copy the bearer value. Do not save tokens in repository files.
+## Operator flow
 
-Tokens may include or omit the `Bearer ` prefix.
+1. Optionally prepare the Android debug build and launch Shary with
+   `prepare-mcp-tests.ps1`.
+2. Start MCP in the app and pair the needed connector mode.
+3. Run `run-mcp-tests.ps1` for transport plus authenticated scenarios.
+4. Run `cleanup-mcp-tests.ps1` when finished.
 
-## Public and transport tests
+## Script contracts
 
-```powershell
-.\mcp-testing\protocol\run-mcp-tests.ps1
-```
+### `prepare-mcp-tests.ps1`
 
-This configures ADB forwarding and tests transport, initialize, ping, tool
-discovery, and origin protection.
+- Purpose:
+  - compile the debug app, run the focused MCP unit suite, optionally install
+    the APK, and launch Shary on the target device.
+- Inputs:
+  - optional `-DeviceSerial`, `-SkipBuild`, `-SkipInstall`.
+- Outputs:
+  - compiled/tested app state and a launched debug build.
+- Side effects:
+  - runs Gradle tasks;
+  - can install the debug APK;
+  - launches the app over ADB.
 
-If forwarding is already configured:
+### `run-mcp-tests.ps1`
 
-```powershell
-.\mcp-testing\protocol\run-mcp-tests.ps1 -SkipAdb
-```
+- Purpose:
+  - orchestrate the selected protocol scripts in the correct order.
+- Inputs:
+  - optional `-McpUrl`, `-DeviceSerial`, `-ReadOnlyToken`, `-ReadWriteToken`,
+    `-ExpectedFieldKey`, `-ExpectedUserEmail`, `-SkipAdb`,
+    `-IncludeMutations`.
+- Outputs:
+  - pass/fail process result for the requested protocol scenarios.
+- Side effects:
+  - may create test fields and users when `-IncludeMutations` is supplied.
 
-For multiple connected Android targets:
+### `cleanup-mcp-tests.ps1`
 
-```powershell
-.\mcp-testing\protocol\run-mcp-tests.ps1 -DeviceSerial "emulator-5554"
-```
+- Purpose:
+  - remove ADB forwarding and clear MCP token environment variables.
+- Inputs:
+  - optional `-DeviceSerial`.
+- Outputs:
+  - cleaned local shell environment and removed TCP forward.
 
-## Read-only tests
+### `mcp-common.ps1`
 
-Keep the token only in the current PowerShell process:
+- Purpose:
+  - shared helper library for token resolution, JSON-RPC calls, tool calls,
+    assertions, and test suffix generation.
+- Inputs:
+  - dot-sourced by the other protocol scripts.
+- Outputs:
+  - helper functions, not a standalone test result.
 
-```powershell
-# Read the token interactively so its value is not part of the command history.
-$env:SHARY_MCP_READ_ONLY_TOKEN = Read-Host "Paste read-only bearer"
+### `mcp-client.ps1`
 
-# Run public tests plus authenticated read-only assertions.
-.\mcp-testing\protocol\run-mcp-tests.ps1
-```
+- Purpose:
+  - manual JSON-RPC caller for one MCP method.
+- Inputs:
+  - required `-Method`;
+  - optional `-ParamsJson`, `-McpUrl`, `-Token`, `-WithoutAuth`.
+- Outputs:
+  - JSON response rendered to stdout.
 
-This adds authenticated field/user reads and verifies that a write is denied
-with `unauthorized_scope`.
+### `mcp-prerequisites.ps1`
 
-## Read-write policy tests
+- Purpose:
+  - verify ADB connectivity and forwarding, then probe MCP transport behavior.
+- Inputs:
+  - optional `-McpUrl`, `-DeviceSerial`, `-SkipAdb`, `-PassThru`.
+- Outputs:
+  - pass/fail result, optionally structured transport data.
+- Expected transport assertion:
+  - `GET` returns HTTP `405` and explains SSE is unsupported.
 
-```powershell
-# Read the token interactively so its value is not part of the command history.
-$env:SHARY_MCP_READ_WRITE_TOKEN = Read-Host "Paste read-write bearer"
+### `mcp-init.ps1`
 
-# Run public tests plus non-mutating read-write policy assertions.
-.\mcp-testing\protocol\run-mcp-tests.ps1
-```
+- Purpose:
+  - verify MCP `initialize` behavior and advertised server metadata.
+- Inputs:
+  - optional `-McpUrl`, `-PassThru`.
+- Outputs:
+  - pass/fail result, optionally raw initialize response.
 
-Without `-IncludeMutations`, the runner checks only requests that must fail:
-missing idempotency, missing confirmation, and invalid token.
+### `mcp-ping-noAuth.ps1`
 
-## Full mutating run
+- Purpose:
+  - verify unauthenticated `ping` behavior.
+- Inputs:
+  - optional `-McpUrl`, `-PassThru`.
 
-```powershell
-# Keep both secrets in this PowerShell process only.
-$env:SHARY_MCP_READ_ONLY_TOKEN = Read-Host "Paste read-only bearer"
-$env:SHARY_MCP_READ_WRITE_TOKEN = Read-Host "Paste read-write bearer"
+### `mcp-discover-tools.ps1`
 
-# Opt in to field/user creation and preview/commit tests.
-.\mcp-testing\protocol\run-mcp-tests.ps1 -IncludeMutations
-```
+- Purpose:
+  - verify `tools/list` and the expected Shary tool inventory.
+- Inputs:
+  - optional `-McpUrl`, `-PassThru`.
 
-The mutating run creates uniquely named `.test` fields and users. The current
-MCP tool set has no delete operations, so remove those records from Shary after
-the run if they are no longer needed.
+### `mcp-origin-protection.ps1`
 
-Run cleanup afterward:
+- Purpose:
+  - verify non-local `Origin` requests are rejected.
+- Inputs:
+  - optional `-McpUrl`, `-PassThru`.
+- Expected assertion:
+  - HTTP `403` with a forbidden-origin response.
 
-```powershell
-# Remove ADB forwarding and clear token variables from this PowerShell process.
-.\mcp-testing\protocol\cleanup-mcp-tests.ps1 -DeviceSerial "emulator-5554"
-```
+### `mcp-list-fields.ps1`
 
-## Run an individual script
+- Purpose:
+  - perform an authenticated field metadata list.
+- Inputs:
+  - optional `-Token`, `-McpUrl`, `-ExpectedKey`, `-PassThru`.
+- Expected assertion:
+  - metadata list must not expose field values.
 
-```powershell
-.\mcp-testing\protocol\mcp-init.ps1
-.\mcp-testing\protocol\mcp-list-fields.ps1 -Token "Bearer PASTE_TOKEN_HERE"
-.\mcp-testing\protocol\mcp-client.ps1 -Method "tools/list" -WithoutAuth
-```
+### `mcp-list-users.ps1`
 
+- Purpose:
+  - perform an authenticated user list.
+- Inputs:
+  - optional `-Token`, `-McpUrl`, `-ExpectedEmail`, `-PassThru`.
+
+### `mcp-readonly-denial.ps1`
+
+- Purpose:
+  - verify a read-only token cannot create fields.
+- Inputs:
+  - optional `-Token`, `-McpUrl`, `-PassThru`.
+- Expected error:
+  - `unauthorized_scope`.
+
+### `mcp-policy-errors.ps1`
+
+- Purpose:
+  - verify mutation-control failures such as missing idempotency, missing
+    confirmation, and invalid token handling.
+- Inputs:
+  - optional `-Token`, `-McpUrl`, `-PassThru`.
+
+### `mcp-readwrite-crud.ps1`
+
+- Purpose:
+  - perform direct field/user create and update scenarios with a read-write
+    token.
+- Inputs:
+  - optional `-Token`, `-McpUrl`, `-TestSuffix`, `-PassThru`.
+- Side effects:
+  - creates and updates `.test` field and user records.
+
+### `mcp-preview-commit.ps1`
+
+- Purpose:
+  - verify batch preview and commit semantics.
+- Inputs:
+  - optional `-Token`, `-McpUrl`, `-TestSuffix`, `-PassThru`.
+- Side effects:
+  - creates `.test` records through the preview/commit path.
+
+## Token handling
+
+- Keep bearer values only in the current shell process or pass them directly.
+- Do not store them in repo files.
+
+## Update triggers
+
+Update this README and `docs/ai/SCRIPT_CATALOG.md` when:
+
+- a script parameter changes;
+- assertions or expected tool lists change;
+- the folder's legacy/development positioning changes;
+- a new protocol helper or scenario script is added.

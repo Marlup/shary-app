@@ -88,6 +88,7 @@ class FieldDetailDialogTest {
     @Test
     fun updateFieldDialogCanEditAndAddListElements() {
         var savedField: FieldDomain? = null
+        var dismissCount = 0
         val encodedListValue = FieldValueContract.encode(
             data = "api,worker",
             spec = FieldValueSpec(
@@ -106,8 +107,9 @@ class FieldDetailDialogTest {
         composeTestRule.setContent {
             UpdateFieldDialog(
                 targetField = targetField,
-                onDismiss = {},
-                onUpdateField = { savedField = it }
+                onDismiss = { dismissCount++ },
+                onUpdateField = { savedField = it },
+                availableTags = listOf(Tag.Unknown)
             )
         }
 
@@ -123,5 +125,6 @@ class FieldDetailDialogTest {
         val parsed = FieldValueContract.parse(savedField!!.value)
         assertEquals("api-prod,worker,scheduler", parsed.plainData)
         assertEquals("list", parsed.envelope!!.spec!!.kind)
+        assertEquals(0, dismissCount)
     }
 }

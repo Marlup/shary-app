@@ -9,10 +9,12 @@ import androidx.lifecycle.viewModelScope
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.services.CloudService
 import com.shary.app.core.domain.interfaces.viewmodels.AuthenticationEvent
+import com.shary.app.application.session.SessionDataCoordinator
 import com.shary.app.utils.log.AppLogger
 import com.shary.app.utils.log.StartupTrace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,24 @@ import kotlinx.coroutines.withContext
 
 /** Represents which auth flow the user is performing */
 enum class AuthenticationMode { LOGIN, SIGNUP }
+
+internal suspend fun <T> runSessionReplacingAuthTransition(
+    clearSessionData: () -> Unit,
+    transition: suspend () -> Result<T>
+): Result<T> {
+    clearSessionData()
+    return try {
+        transition().also { result ->
+            if (result.isFailure) clearSessionData()
+        }
+    } catch (error: CancellationException) {
+        clearSessionData()
+        throw error
+    } catch (error: Throwable) {
+        clearSessionData()
+        Result.failure(error)
+    }
+}
 
 /** Holds the form fields for login/signup */
 data class AuthLogForm(
@@ -53,12 +73,14 @@ data class AuthLogForm(
 @HiltViewModel
 class AuthenticationViewModel @Inject constructor(
     private val authService: AuthenticationService,
-    private val cloudService: CloudService
+    private val cloudService: CloudService,
+    private val sessionDataCoordinator: SessionDataCoordinator
 ) : ViewModel() {
 
     // Public reactive state for UI binding
     val authState = authService.state
     val cloudState = cloudService.cloudState
+    val sessionDataState = sessionDataCoordinator.state
 
     // Current mode (LOGIN or SIGNUP)
     private val _currentMode = MutableStateFlow(AuthenticationMode.LOGIN)
@@ -136,32 +158,40 @@ class AuthenticationViewModel @Inject constructor(
             return
         }
 
+        if (_loading.value) return
+        _loading.value = true
+
         // Launch login/signup in background
         viewModelScope.launch {
 
             AppLogger.debug("AuthenticationViewModel", "event=submit_validated")
-            _loading.value = true
-            val result = withContext(Dispatchers.IO) {
-                when (_logForm.value.mode) {
-                    AuthenticationMode.LOGIN ->
-                        authService.signIn(context, f.email, f.password)
-                    AuthenticationMode.SIGNUP -> {
-                        // Pre sign out to safety avoid preloaded user uid and tokens.
-                        authService.signOut(context)
-                        authService.signUp(context, f.username, f.email, f.password)
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    runSessionReplacingAuthTransition(sessionDataCoordinator::clear) {
+                        when (f.mode) {
+                            AuthenticationMode.LOGIN ->
+                                authService.signIn(context, f.email, f.password)
+                            AuthenticationMode.SIGNUP -> {
+                                // Preserve the existing account-replacement behavior until
+                                // durable vault ownership is explicitly defined.
+                                authService.signOut(context)
+                                authService.signUp(context, f.username, f.email, f.password)
+                            }
+                        }
                     }
                 }
-            }
-            _loading.value = false
-
-            result.onSuccess {
-                _events.trySend(AuthenticationEvent.Success)
-            }.onFailure { e ->
-                val msg = when (_logForm.value.mode) {
-                    AuthenticationMode.LOGIN -> e.message ?: "Invalid credentials"
-                    AuthenticationMode.SIGNUP -> e.message ?: "Sign up failed"
+                result.onSuccess {
+                    sessionDataCoordinator.startAndAwaitInitialFields()
+                    _events.trySend(AuthenticationEvent.Success)
+                }.onFailure { e ->
+                    val msg = when (f.mode) {
+                        AuthenticationMode.LOGIN -> e.message ?: "Invalid credentials"
+                        AuthenticationMode.SIGNUP -> e.message ?: "Sign up failed"
+                    }
+                    emitError(msg)
                 }
-                emitError(msg)
+            } finally {
+                _loading.value = false
             }
         }
     }

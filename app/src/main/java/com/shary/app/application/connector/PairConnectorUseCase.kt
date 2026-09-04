@@ -8,6 +8,7 @@ import com.shary.app.core.domain.types.enums.ConnectorPolicyMode
 import com.shary.app.core.domain.types.valueobjects.ConnectorClient
 import com.shary.app.core.domain.types.valueobjects.ConnectorPolicy
 import com.shary.app.core.domain.types.valueobjects.ConnectorSession
+import com.shary.app.core.domain.types.valueobjects.ConnectorOwnerBinding
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,7 +24,8 @@ class ConnectorLimitReachedException(maxActiveConnectors: Int) :
 data class PairConnectorRequest(
     val displayName: String,
     val allowedCapabilities: Set<ConnectorCapability>,
-    val sessionTtlSeconds: Long = DEFAULT_SESSION_TTL_SECONDS
+    val sessionTtlSeconds: Long = DEFAULT_SESSION_TTL_SECONDS,
+    val ownerBinding: ConnectorOwnerBinding? = null
 ) {
     companion object {
         const val DEFAULT_SESSION_TTL_SECONDS: Long = 20 * 60
@@ -39,9 +41,19 @@ data class PairConnectorResult(
 )
 
 @Singleton
-class PairConnectorUseCase @Inject constructor(
-    private val connectorRepository: ConnectorRepository
+class PairConnectorUseCase private constructor(
+    private val connectorRepository: ConnectorRepository,
+    private val ownerResolver: ConnectorOwnerResolver?,
+    @Suppress("UNUSED_PARAMETER") constructorMarker: Unit
 ) {
+    @Inject
+    constructor(
+        connectorRepository: ConnectorRepository,
+        ownerResolver: ConnectorOwnerResolver
+    ) : this(connectorRepository, ownerResolver, Unit)
+
+    internal constructor(connectorRepository: ConnectorRepository) : this(connectorRepository, null, Unit)
+
     suspend operator fun invoke(request: PairConnectorRequest): PairConnectorResult =
         connectorManagementMutex.withLock {
             require(request.displayName.isNotBlank()) { "displayName cannot be blank" }
@@ -49,6 +61,14 @@ class PairConnectorUseCase @Inject constructor(
             require(request.sessionTtlSeconds in 60..(24 * 60 * 60)) {
                 "sessionTtlSeconds out of range"
             }
+            val owner = request.ownerBinding ?: ownerResolver?.currentBinding()
+                ?: error("Connector owner binding is required.")
+            require(
+                owner.ownerUid.isNotBlank() &&
+                    owner.vaultId.isNotBlank() &&
+                    owner.agentProfileId.isNotBlank() &&
+                    owner.grantId.isNotBlank()
+            ) { "Connector owner binding is incomplete." }
 
             val activeConnectorCount = connectorRepository.clients.first()
                 .count { it.status != ConnectorClientStatus.REVOKED }
@@ -80,7 +100,11 @@ class PairConnectorUseCase @Inject constructor(
                     displayName = request.displayName.trim(),
                     createdAt = now,
                     status = status,
-                    lastActivityAt = now
+                    lastActivityAt = now,
+                    ownerUid = owner.ownerUid,
+                    vaultId = owner.vaultId,
+                    agentProfileId = owner.agentProfileId,
+                    grantId = owner.grantId
                 )
             )
 
@@ -90,7 +114,11 @@ class PairConnectorUseCase @Inject constructor(
                     mode = ConnectorPolicyMode.STRICT,
                     askEveryTime = true,
                     allowedCapabilities = request.allowedCapabilities,
-                    updatedAt = now
+                    updatedAt = now,
+                    ownerUid = owner.ownerUid,
+                    vaultId = owner.vaultId,
+                    agentProfileId = owner.agentProfileId,
+                    grantId = owner.grantId
                 )
             )
 
@@ -101,7 +129,11 @@ class PairConnectorUseCase @Inject constructor(
                     accessTokenHash = sha256Hex(accessToken),
                     refreshSecretHash = sha256Hex(refreshSecret),
                     issuedAt = now,
-                    expiresAt = expiresAt
+                    expiresAt = expiresAt,
+                    ownerUid = owner.ownerUid,
+                    vaultId = owner.vaultId,
+                    agentProfileId = owner.agentProfileId,
+                    grantId = owner.grantId
                 )
             )
 

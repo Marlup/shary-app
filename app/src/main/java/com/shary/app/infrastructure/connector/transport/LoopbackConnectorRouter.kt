@@ -1,5 +1,6 @@
 package com.shary.app.infrastructure.connector.transport
 
+import androidx.compose.ui.graphics.Color
 import com.shary.app.application.connector.CommitConnectorActionsRequest
 import com.shary.app.application.connector.CommitConnectorActionsUseCase
 import com.shary.app.application.connector.ConnectorMutationAction
@@ -7,6 +8,7 @@ import com.shary.app.application.connector.ConnectorMutationType
 import com.shary.app.application.connector.PreviewConnectorActionsRequest
 import com.shary.app.application.connector.PreviewConnectorActionsUseCase
 import com.shary.app.application.connector.policy.ConnectorPolicyEvaluator
+import com.shary.app.application.connector.policy.SensitiveFieldMcpPolicy
 import com.shary.app.core.domain.interfaces.repositories.ConnectorRepository
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
@@ -20,6 +22,8 @@ import com.shary.app.core.domain.types.valueobjects.ConnectorErrorCodes
 import com.shary.app.core.domain.types.valueobjects.ConnectorErrorEnvelope
 import com.shary.app.core.domain.types.valueobjects.ConnectorErrorPayload
 import com.shary.app.core.domain.types.valueobjects.ConnectorSuccessEnvelope
+import com.shary.app.core.domain.types.valueobjects.FieldValueTypes
+import com.shary.app.core.domain.types.valueobjects.SENSITIVE_MASK
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -48,16 +52,18 @@ class LoopbackConnectorRouter @Inject constructor(
                 withAuthorizedScope(
                     request = request,
                     requestId = requestId,
-                    operation = "fields.read",
+                    operation = "fields.metadata.read",
                     capability = ConnectorCapability.FIELDS_READ
                 ) { _ ->
                     val fields = fieldRepository.getAllFields().first().map { field ->
+                        val sensitive = SensitiveFieldMcpPolicy.isSensitive(field)
                         mapOf(
                             "key" to field.key,
-                            "value" to field.value,
-                            "key_alias" to field.keyAlias,
+                            "key_alias" to if (sensitive) SENSITIVE_MASK else field.keyAlias,
                             "tag" to field.tag.name,
-                            "date_added" to field.dateAdded.toString()
+                            "value_type" to FieldValueTypes.wireTypeOf(field.value),
+                            "date_added" to field.dateAdded.toString(),
+                            "is_mcp_shareable" to (sensitive && field.isMcpShareable)
                         )
                     }
                     LoopbackResponse(
@@ -67,6 +73,51 @@ class LoopbackConnectorRouter @Inject constructor(
                             schemaVersion = "1.0",
                             timestamp = now,
                             data = mapOf("items" to fields)
+                        )
+                    )
+                }
+            }
+
+            request.method.equals("GET", ignoreCase = true) &&
+                request.path.startsWith("/connector/v1/fields/") -> {
+                withAuthorizedScope(
+                    request = request,
+                    requestId = requestId,
+                    operation = "fields.value.read",
+                    capability = ConnectorCapability.FIELDS_VALUE_READ
+                ) { _ ->
+                    val key = request.path.removePrefix("/connector/v1/fields/").trim()
+                    val field = fieldRepository.getAllFields().first()
+                        .firstOrNull { it.key.equals(key, ignoreCase = true) }
+                        ?: return@withAuthorizedScope errorResponse(
+                            requestId, 404, ConnectorErrorCodes.NOT_FOUND, "Field not found"
+                        )
+                    val policyFailure = runCatching {
+                        SensitiveFieldMcpPolicy.requireReadable(field)
+                    }.exceptionOrNull()
+                    if (policyFailure != null) {
+                        return@withAuthorizedScope errorResponse(
+                            requestId = requestId,
+                            statusCode = 403,
+                            code = ConnectorErrorCodes.SENSITIVE_FIELD_NOT_MCP_SHAREABLE,
+                            message = SensitiveFieldMcpPolicy.BLOCKED_REASON
+                        )
+                    }
+                    LoopbackResponse(
+                        statusCode = 200,
+                        body = ConnectorSuccessEnvelope(
+                            requestId = requestId,
+                            schemaVersion = "1.0",
+                            timestamp = now,
+                            data = mapOf(
+                                "key" to field.key,
+                                "value" to field.value,
+                                "key_alias" to field.keyAlias,
+                                "tag" to field.tag.name,
+                                "value_type" to FieldValueTypes.wireTypeOf(field.value),
+                                "date_added" to field.dateAdded.toString(),
+                                "is_mcp_shareable" to field.isMcpShareable
+                            )
                         )
                     )
                 }
@@ -118,6 +169,7 @@ class LoopbackConnectorRouter @Inject constructor(
                 ) { _ ->
                     val key = request.body["key"]?.toString().orEmpty()
                     val value = request.body["value"]?.toString().orEmpty()
+                    val valueType = request.body["value_type"]?.toString()
                     val keyAlias = request.body["key_alias"]?.toString().orEmpty()
                     val tag = parseTag(request.body["tag"]?.toString())
 
@@ -129,10 +181,29 @@ class LoopbackConnectorRouter @Inject constructor(
                             message = "key and value are required"
                         )
                     }
+                    val createPolicyFailure = runCatching {
+                        SensitiveFieldMcpPolicy.requireCreatable(valueType)
+                    }.exceptionOrNull()
+                    if (createPolicyFailure != null) {
+                        return@withAuthorizedScope errorResponse(
+                            requestId = requestId,
+                            statusCode = 403,
+                            code = ConnectorErrorCodes.SENSITIVE_FIELD_CREATION_DENIED,
+                            message = SensitiveFieldMcpPolicy.CREATE_REASON
+                        )
+                    }
+                    val storedValue = encodeFieldValue(value, valueType).getOrElse { error ->
+                        return@withAuthorizedScope errorResponse(
+                            requestId = requestId,
+                            statusCode = 400,
+                            code = ConnectorErrorCodes.VALIDATION_FAILED,
+                            message = error.message ?: "Invalid value_type"
+                        )
+                    }
                     fieldRepository.saveField(
                         FieldDomain.create(
                             key = key,
-                            value = value,
+                            value = storedValue,
                             keyAlias = keyAlias,
                             tag = tag
                         )
@@ -172,7 +243,45 @@ class LoopbackConnectorRouter @Inject constructor(
                             requestId, 400, ConnectorErrorCodes.VALIDATION_FAILED, "field key required"
                         )
                     }
-                    request.body["value"]?.toString()?.let { fieldRepository.updateValue(key, it) }
+                    val value = request.body["value"]?.toString()
+                    val valueType = request.body["value_type"]?.toString()
+                    val existingField = fieldRepository.getAllFields().first()
+                        .firstOrNull { it.key.equals(key, ignoreCase = true) }
+                        ?: return@withAuthorizedScope errorResponse(
+                            requestId, 404, ConnectorErrorCodes.NOT_FOUND, "Field not found"
+                        )
+                    val updatePolicyFailure = runCatching {
+                        SensitiveFieldMcpPolicy.requireUpdatable(existingField, valueType)
+                    }.exceptionOrNull()
+                    if (updatePolicyFailure != null) {
+                        val reason = updatePolicyFailure.message.orEmpty()
+                        val code = if (reason == SensitiveFieldMcpPolicy.BLOCKED_REASON) {
+                            ConnectorErrorCodes.SENSITIVE_FIELD_NOT_MCP_SHAREABLE
+                        } else {
+                            ConnectorErrorCodes.SENSITIVE_FIELD_TYPE_CHANGE_DENIED
+                        }
+                        return@withAuthorizedScope errorResponse(
+                            requestId = requestId,
+                            statusCode = 403,
+                            code = code,
+                            message = reason.ifBlank { SensitiveFieldMcpPolicy.TYPE_CHANGE_REASON }
+                        )
+                    }
+                    if (value == null && !valueType.isNullOrBlank()) {
+                        return@withAuthorizedScope errorResponse(
+                            requestId, 400, ConnectorErrorCodes.VALIDATION_FAILED,
+                            "value_type requires value"
+                        )
+                    }
+                    if (value != null) {
+                        val storedValue = encodeFieldValue(value, valueType).getOrElse { error ->
+                            return@withAuthorizedScope errorResponse(
+                                requestId, 400, ConnectorErrorCodes.VALIDATION_FAILED,
+                                error.message ?: "Invalid value_type"
+                            )
+                        }
+                        fieldRepository.updateValue(key, storedValue)
+                    }
                     request.body["key_alias"]?.toString()?.let { fieldRepository.updateAlias(key, it) }
                     request.body["tag"]?.toString()?.let { fieldRepository.updateTag(key, parseTag(it)) }
                     LoopbackResponse(
@@ -419,7 +528,16 @@ class LoopbackConnectorRouter @Inject constructor(
             )
         }
 
-        return block(auth)
+        val response = block(auth)
+        if (operation != "actions.commit") {
+            appendOutcomeAudit(
+                auth = auth,
+                requestId = requestId,
+                operation = operation,
+                response = response
+            )
+        }
+        return response
     }
 
     private fun errorResponse(
@@ -451,6 +569,7 @@ class LoopbackConnectorRouter @Inject constructor(
                 type = type,
                 key = map["key"]?.toString(),
                 value = map["value"]?.toString(),
+                valueType = map["value_type"]?.toString(),
                 keyAlias = map["key_alias"]?.toString(),
                 tag = map["tag"]?.toString(),
                 email = map["email"]?.toString(),
@@ -459,9 +578,13 @@ class LoopbackConnectorRouter @Inject constructor(
         }
     }
 
+    private fun encodeFieldValue(value: String, valueType: String?): Result<String> =
+        if (valueType.isNullOrBlank()) Result.success(value)
+        else FieldValueTypes.encodeForStorage(value, valueType)
+
     private fun parseTag(raw: String?): Tag =
         if (raw.isNullOrBlank()) Tag.Unknown
-        else Tag.fromString(raw, color = null)
+        else Tag.fromString(raw, color = Color.Gray.copy(alpha = 0.7f))
 
     private fun LoopbackRequest.idempotencyKey(): String? =
         headers.entries.firstOrNull { it.key.equals("Idempotency-Key", ignoreCase = true) }
@@ -481,6 +604,7 @@ class LoopbackConnectorRouter @Inject constructor(
         reasonCode: String
     ) {
         runCatching {
+            val client = connectorRepository.getClient(clientId)
             connectorRepository.appendAuditEvent(
                 ConnectorAuditEvent(
                     eventId = "evt_${UUID.randomUUID()}",
@@ -494,7 +618,43 @@ class LoopbackConnectorRouter @Inject constructor(
                     reasonCode = reasonCode,
                     metadata = mapOf(
                         "path" to operation
-                    )
+                    ),
+                    ownerUid = client?.ownerUid.orEmpty(),
+                    vaultId = client?.vaultId.orEmpty(),
+                    agentProfileId = client?.agentProfileId.orEmpty(),
+                    grantId = client?.grantId.orEmpty()
+                )
+            )
+        }
+    }
+
+    private suspend fun appendOutcomeAudit(
+        auth: ConnectorAuthContext,
+        requestId: String,
+        operation: String,
+        response: LoopbackResponse
+    ) {
+        runCatching {
+            connectorRepository.appendAuditEvent(
+                ConnectorAuditEvent(
+                    eventId = "evt_${UUID.randomUUID()}",
+                    timestamp = System.currentTimeMillis() / 1000,
+                    clientId = auth.session.clientId,
+                    requestId = requestId,
+                    operation = operation,
+                    targetType = "request",
+                    targetIds = emptyList(),
+                    decision = if (response.statusCode < 400) {
+                        ConnectorAuditDecision.ALLOWED
+                    } else {
+                        ConnectorAuditDecision.ERROR
+                    },
+                    reasonCode = if (response.statusCode < 400) "operation_success" else "operation_failed",
+                    metadata = mapOf("status_code" to response.statusCode.toString()),
+                    ownerUid = auth.session.ownerUid,
+                    vaultId = auth.session.vaultId,
+                    agentProfileId = auth.session.agentProfileId,
+                    grantId = auth.session.grantId
                 )
             )
         }

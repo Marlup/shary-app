@@ -108,6 +108,11 @@ android {
                 "FIREBASE_BASE_URL",
                 "\"https://europe-southwest1-shary-21b61.cloudfunctions.net\""
             )
+            buildConfigField(
+                "String",
+                "SHARY_MCP_BASE_URL",
+                "\"https://shary-21b61.web.app/mcp\""
+            )
         }
         release {
             buildConfigField(
@@ -115,7 +120,11 @@ android {
                 "FIREBASE_BASE_URL",
                 "\"https://europe-southwest1-shary-21b61.cloudfunctions.net\""
             )
-            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField(
+                "String",
+                "SHARY_MCP_BASE_URL",
+                "\"https://shary-21b61.web.app/mcp\""
+            )
         }
     }
     compileOptions {
@@ -179,6 +188,8 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Jetpack Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -227,6 +238,7 @@ dependencies {
     testImplementation(libs.mockk)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)

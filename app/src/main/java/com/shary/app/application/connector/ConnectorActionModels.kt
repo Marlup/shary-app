@@ -4,6 +4,7 @@ data class ConnectorMutationAction(
     val type: ConnectorMutationType,
     val key: String? = null,
     val value: String? = null,
+    val valueType: String? = null,
     val keyAlias: String? = null,
     val tag: String? = null,
     val email: String? = null,

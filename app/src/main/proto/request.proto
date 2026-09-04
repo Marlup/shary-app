@@ -6,6 +6,32 @@ option java_multiple_files = true;
 import "field.proto";
 import "user.proto";
 
+message RequestDeliveryOutcome {
+  string recipient = 1;
+  string status = 2;
+}
+
+message PersistedOutgoingRequestDraft {
+  string requestId = 1;
+  repeated Field requestedFields = 2;
+  repeated string recipientAddresses = 3;
+}
+
+message PersistedResponseDraft {
+  string requestId = 1;
+  string requesterId = 2;
+  string requesterAddress = 3;
+  repeated string matchedFieldKeys = 4;
+  bool completed = 5;
+}
+
+message PersistedRequestWorkflow {
+  string ownerAddress = 1;
+  string mode = 2;
+  PersistedOutgoingRequestDraft outgoingDraft = 3;
+  PersistedResponseDraft responseDraft = 4;
+}
+
 message Request {
   string id = 1;
   repeated Field fields = 2;
@@ -14,10 +40,15 @@ message Request {
   int64 dateAdded = 5;
   bool owned = 6;
   bool responded = 7;
+  string requesterId = 8;
+  string deliveryChannel = 9;
+  repeated RequestDeliveryOutcome deliveryOutcomes = 10;
+  int64 deliveryUpdatedAt = 11;
 }
 
 message RequestList {
   repeated Request requests = 1;
   repeated Request receivedRequests = 2;
   repeated Request sentRequests = 3;
+  repeated PersistedRequestWorkflow workflowDrafts = 4;
 }

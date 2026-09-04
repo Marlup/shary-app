@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,9 @@ fun FieldDetailDialog(
     onEditTag: () -> Unit,
     onEditAlias: () -> Unit,
     onDeleteField: () -> Unit,
+    showMcpShareable: Boolean = false,
+    isMcpShareable: Boolean = false,
+    onMcpShareableChange: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -149,6 +153,26 @@ fun FieldDetailDialog(
                         )
                     }
                     DetailTextAction(Icons.Default.EditAttributes, "Edit alias", onEditAlias)
+                }
+                if (showMcpShareable) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Allow MCP access", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "Permit authorized agents to read or update this field.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Violet500
+                            )
+                        }
+                        Switch(
+                            checked = isMcpShareable,
+                            onCheckedChange = onMcpShareableChange
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),

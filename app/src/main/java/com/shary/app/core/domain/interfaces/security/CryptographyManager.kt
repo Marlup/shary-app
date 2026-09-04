@@ -13,6 +13,9 @@ interface CryptographyManager {
      */
     fun initializeKeysWithUser(context: Context, email: String, safePassword: String)
 
+    /** Clears user-bound identity material retained for the active process session. */
+    fun clearSessionIdentity()
+
     /**
      * Persist a signature/identity file for the user. Implementation decides the format.
      */

@@ -10,6 +10,7 @@ import com.shary.app.core.domain.interfaces.persistance.CredentialsStore
 import com.shary.app.core.domain.interfaces.security.AuthenticationService
 import com.shary.app.core.domain.interfaces.security.CryptographyManager
 import com.shary.app.core.domain.interfaces.security.FieldCodec
+import com.shary.app.core.domain.models.stableLegacyRequestId
 import com.shary.app.core.domain.types.valueobjects.Purpose
 import com.shary.app.infrastructure.security.helper.SecurityUtils
 import kotlinx.coroutines.flow.first
@@ -119,7 +120,8 @@ class ChangePasswordAndRewrapDataKeyUseCase @Inject constructor(
             value = fieldCodec.decode(field.value, Purpose.Value),
             keyAlias = fieldCodec.decode(field.keyAlias, Purpose.Alias),
             tag = fieldCodec.decode(field.tag, Purpose.Tag),
-            dateAdded = field.dateAdded
+            dateAdded = field.dateAdded,
+            isMcpShareable = field.isMcpShareable
         )
 
     private fun encodeField(field: PlainField): Field =
@@ -129,13 +131,24 @@ class ChangePasswordAndRewrapDataKeyUseCase @Inject constructor(
             .setKeyAlias(fieldCodec.encode(field.keyAlias, Purpose.Alias))
             .setTag(fieldCodec.encode(field.tag, Purpose.Tag))
             .setDateAdded(field.dateAdded)
+            .setIsMcpShareable(field.isMcpShareable)
             .build()
 
     private fun decodeRequest(request: Request): PlainRequest =
         PlainRequest(
-            id = request.id,
+            id = request.id.ifBlank {
+                stableLegacyRequestId(
+                    user = request.user,
+                    requesterId = request.requesterId,
+                    dateAddedEpochMillis = request.dateAdded,
+                    owned = request.owned,
+                    recipients = request.recipientsList,
+                    fieldIdentityParts = request.fieldsList.map { it.key }
+                )
+            },
             fields = request.fieldsList.map(::decodeField),
             user = request.user,
+            requesterId = request.requesterId,
             recipients = request.recipientsList,
             dateAdded = request.dateAdded,
             owned = request.owned,
@@ -147,6 +160,7 @@ class ChangePasswordAndRewrapDataKeyUseCase @Inject constructor(
             .setId(request.id)
             .addAllFields(request.fields.map(::encodeField))
             .setUser(request.user)
+            .setRequesterId(request.requesterId)
             .addAllRecipients(request.recipients)
             .setDateAdded(request.dateAdded)
             .setOwned(request.owned)
@@ -188,13 +202,15 @@ private data class PlainField(
     val value: String,
     val keyAlias: String,
     val tag: String,
-    val dateAdded: Long
+    val dateAdded: Long,
+    val isMcpShareable: Boolean
 )
 
 private data class PlainRequest(
     val id: String,
     val fields: List<PlainField>,
     val user: String,
+    val requesterId: String,
     val recipients: List<String>,
     val dateAdded: Long,
     val owned: Boolean,

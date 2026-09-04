@@ -6,12 +6,23 @@ import com.shary.app.core.domain.types.enums.ConnectorCapability
 import com.shary.app.core.domain.types.enums.ConnectorClientStatus
 import com.shary.app.core.domain.types.enums.ConnectorPolicyMode
 
+data class ConnectorOwnerBinding(
+    val ownerUid: String,
+    val vaultId: String,
+    val agentProfileId: String,
+    val grantId: String
+)
+
 data class ConnectorClient(
     val clientId: String,
     val displayName: String,
     val createdAt: Long,
     val status: ConnectorClientStatus,
-    val lastActivityAt: Long? = null
+    val lastActivityAt: Long? = null,
+    val ownerUid: String = "",
+    val vaultId: String = "",
+    val agentProfileId: String = "",
+    val grantId: String = ""
 )
 
 data class ConnectorSession(
@@ -21,7 +32,11 @@ data class ConnectorSession(
     val refreshSecretHash: String,
     val issuedAt: Long,
     val expiresAt: Long,
-    val revokedAt: Long? = null
+    val revokedAt: Long? = null,
+    val ownerUid: String = "",
+    val vaultId: String = "",
+    val agentProfileId: String = "",
+    val grantId: String = ""
 )
 
 data class ConnectorPolicy(
@@ -29,7 +44,11 @@ data class ConnectorPolicy(
     val mode: ConnectorPolicyMode = ConnectorPolicyMode.STRICT,
     val askEveryTime: Boolean = true,
     val allowedCapabilities: Set<ConnectorCapability> = emptySet(),
-    val updatedAt: Long
+    val updatedAt: Long,
+    val ownerUid: String = "",
+    val vaultId: String = "",
+    val agentProfileId: String = "",
+    val grantId: String = ""
 )
 
 data class ConnectorAuditEvent(
@@ -42,7 +61,11 @@ data class ConnectorAuditEvent(
     val targetIds: List<String>,
     val decision: ConnectorAuditDecision,
     val reasonCode: String,
-    val metadata: Map<String, String> = emptyMap()
+    val metadata: Map<String, String> = emptyMap(),
+    val ownerUid: String = "",
+    val vaultId: String = "",
+    val agentProfileId: String = "",
+    val grantId: String = ""
 )
 
 data class ConnectorPendingAction(
@@ -52,5 +75,9 @@ data class ConnectorPendingAction(
     val proposedActions: List<ConnectorMutationAction>,
     val previewSummary: Map<String, String>,
     val status: String,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val ownerUid: String = "",
+    val vaultId: String = "",
+    val agentProfileId: String = "",
+    val grantId: String = ""
 )

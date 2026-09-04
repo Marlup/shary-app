@@ -1,5 +1,6 @@
 package com.shary.app.application.connector
 
+import androidx.compose.ui.graphics.Color
 import com.shary.app.core.domain.interfaces.repositories.ConnectorRepository
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
@@ -8,6 +9,8 @@ import com.shary.app.core.domain.models.UserDomain
 import com.shary.app.core.domain.types.enums.ConnectorAuditDecision
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.valueobjects.ConnectorAuditEvent
+import com.shary.app.core.domain.types.valueobjects.FieldValueTypes
+import com.shary.app.application.connector.policy.SensitiveFieldMcpPolicy
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
@@ -43,6 +46,14 @@ class CommitConnectorActionsUseCase @Inject constructor(
                 .firstOrNull { it.pendingId == request.pendingId }
                 ?: error("Pending action not found")
             require(pending.clientId == request.clientId) { "pending action not owned by client" }
+            val client = connectorRepository.getClient(request.clientId)
+                ?: error("Connector client not found")
+            require(
+                pending.ownerUid == client.ownerUid &&
+                    pending.vaultId == client.vaultId &&
+                    pending.agentProfileId == client.agentProfileId &&
+                    pending.grantId == client.grantId
+            ) { "pending action owner binding mismatch" }
 
             val results = mutableListOf<Map<String, String>>()
             var applied = 0
@@ -52,10 +63,11 @@ class CommitConnectorActionsUseCase @Inject constructor(
                 val result = runCatching {
                     when (action.type) {
                         ConnectorMutationType.CREATE_FIELD -> {
+                            SensitiveFieldMcpPolicy.requireCreatable(action.valueType)
                             fieldRepository.saveField(
                                 FieldDomain.create(
                                     key = action.key.orEmpty(),
-                                    value = action.value.orEmpty(),
+                                    value = encodeActionValue(action.value.orEmpty(), action.valueType),
                                     keyAlias = action.keyAlias.orEmpty(),
                                     tag = parseTag(action.tag)
                                 )
@@ -63,7 +75,13 @@ class CommitConnectorActionsUseCase @Inject constructor(
                         }
                         ConnectorMutationType.UPDATE_FIELD -> {
                             val key = action.key.orEmpty()
-                            action.value?.let { fieldRepository.updateValue(key, it) }
+                            val existing = fieldRepository.getAllFields().first()
+                                .firstOrNull { it.key.equals(key, ignoreCase = true) }
+                                ?: error("Field not found")
+                            SensitiveFieldMcpPolicy.requireUpdatable(existing, action.valueType)
+                            action.value?.let { value ->
+                                fieldRepository.updateValue(key, encodeActionValue(value, action.valueType))
+                            }
                             action.keyAlias?.let { fieldRepository.updateAlias(key, it) }
                             action.tag?.let { fieldRepository.updateTag(key, parseTag(it)) }
                         }
@@ -119,7 +137,11 @@ class CommitConnectorActionsUseCase @Inject constructor(
                     targetType = "mixed",
                     targetIds = listOf(request.pendingId),
                     decision = if (failed == 0) ConnectorAuditDecision.ALLOWED else ConnectorAuditDecision.ERROR,
-                    reasonCode = if (failed == 0) "commit_success" else "partial_failure"
+                    reasonCode = if (failed == 0) "commit_success" else "partial_failure",
+                    ownerUid = pending.ownerUid,
+                    vaultId = pending.vaultId,
+                    agentProfileId = pending.agentProfileId,
+                    grantId = pending.grantId
                 )
             )
 
@@ -132,8 +154,12 @@ class CommitConnectorActionsUseCase @Inject constructor(
             )
         }
 
+    private fun encodeActionValue(value: String, valueType: String?): String =
+        if (valueType.isNullOrBlank()) value
+        else FieldValueTypes.encodeForStorage(value, valueType).getOrThrow()
+
     private fun parseTag(raw: String?): Tag {
         if (raw.isNullOrBlank()) return Tag.Unknown
-        return Tag.fromString(raw, color = null)
+        return Tag.fromString(raw, color = Color.Gray.copy(alpha = 0.7f))
     }
 }

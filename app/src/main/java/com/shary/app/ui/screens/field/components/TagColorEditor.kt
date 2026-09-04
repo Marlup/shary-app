@@ -33,7 +33,8 @@ import com.shary.app.ui.theme.Violet600
 fun TagColorEditor(
     color: Color,
     onColorChanged: (Color) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     var hexInput by remember(color) { mutableStateOf(color.toHexRgb()) }
     var hexError by remember { mutableStateOf<String?>(null) }
@@ -57,17 +58,20 @@ fun TagColorEditor(
         ColorSlider(
             label = "R",
             value = color.red * 255f,
-            onValueChange = { onColorChanged(color.copy(red = it / 255f)) }
+            onValueChange = { onColorChanged(color.copy(red = it / 255f)) },
+            enabled = enabled
         )
         ColorSlider(
             label = "G",
             value = color.green * 255f,
-            onValueChange = { onColorChanged(color.copy(green = it / 255f)) }
+            onValueChange = { onColorChanged(color.copy(green = it / 255f)) },
+            enabled = enabled
         )
         ColorSlider(
             label = "B",
             value = color.blue * 255f,
-            onValueChange = { onColorChanged(color.copy(blue = it / 255f)) }
+            onValueChange = { onColorChanged(color.copy(blue = it / 255f)) },
+            enabled = enabled
         )
 
         OutlinedTextField(
@@ -83,6 +87,7 @@ fun TagColorEditor(
                 }
             },
             label = { Text("Hex color") },
+            enabled = enabled,
             singleLine = true,
             supportingText = {
                 Text(
@@ -114,7 +119,8 @@ private fun SurfacePreview(color: Color) {
 private fun ColorSlider(
     label: String,
     value: Float,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    enabled: Boolean
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -132,6 +138,7 @@ private fun ColorSlider(
             onValueChange = onValueChange,
             valueRange = 0f..255f,
             steps = 254,
+            enabled = enabled,
             modifier = Modifier.height(28.dp)
         )
     }

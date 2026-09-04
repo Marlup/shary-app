@@ -1,7 +1,9 @@
 package com.shary.app.application.connector
 
 import com.shary.app.core.domain.interfaces.repositories.ConnectorRepository
+import com.shary.app.core.domain.interfaces.repositories.ContactUpdateResult
 import com.shary.app.core.domain.interfaces.repositories.FieldRepository
+import com.shary.app.core.domain.interfaces.repositories.FieldLoadSnapshot
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.UserDomain
@@ -14,6 +16,7 @@ import com.shary.app.core.domain.types.valueobjects.ConnectorClient
 import com.shary.app.core.domain.types.valueobjects.ConnectorPendingAction
 import com.shary.app.core.domain.types.valueobjects.ConnectorPolicy
 import com.shary.app.core.domain.types.valueobjects.ConnectorSession
+import com.shary.app.core.domain.types.valueobjects.FieldValueContract
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -30,7 +33,7 @@ class PreviewCommitConnectorActionsUseCaseTest {
         val fieldRepository = InMemoryFieldRepositoryFake()
         val userRepository = InMemoryUserRepositoryFake()
 
-        val previewUseCase = PreviewConnectorActionsUseCase(connectorRepository)
+        val previewUseCase = PreviewConnectorActionsUseCase(connectorRepository, fieldRepository)
         val commitUseCase = CommitConnectorActionsUseCase(
             connectorRepository = connectorRepository,
             fieldRepository = fieldRepository,
@@ -44,9 +47,11 @@ class PreviewCommitConnectorActionsUseCaseTest {
                 actions = listOf(
                     ConnectorMutationAction(
                         type = ConnectorMutationType.CREATE_FIELD,
-                        key = "api-key",
-                        value = "secret",
-                        tag = "Unknown"
+                        key = "contact-email",
+                        value = "owner@example.com",
+                        valueType = "email",
+                        keyAlias = "Owner email",
+                        tag = "Work"
                     ),
                     ConnectorMutationAction(
                         type = ConnectorMutationType.CREATE_USER,
@@ -70,6 +75,10 @@ class PreviewCommitConnectorActionsUseCaseTest {
         assertEquals(2, commit.appliedCount)
         assertEquals(0, commit.failedCount)
         assertEquals(1, fieldRepository.fields.size)
+        val storedField = fieldRepository.fields.single()
+        assertEquals("Owner email", storedField.keyAlias)
+        assertEquals("Work", storedField.tag.name)
+        assertEquals("email", FieldValueContract.parse(storedField.value).envelope?.spec?.kind)
         assertEquals(1, userRepository.usersList.size)
         assertEquals(1, connectorRepository.auditEvents.first().size)
     }
@@ -80,7 +89,7 @@ class PreviewCommitConnectorActionsUseCaseTest {
         val fieldRepository = InMemoryFieldRepositoryFake()
         val userRepository = InMemoryUserRepositoryFake()
 
-        val previewUseCase = PreviewConnectorActionsUseCase(connectorRepository)
+        val previewUseCase = PreviewConnectorActionsUseCase(connectorRepository, fieldRepository)
         val commitUseCase = CommitConnectorActionsUseCase(
             connectorRepository = connectorRepository,
             fieldRepository = fieldRepository,
@@ -140,7 +149,11 @@ private class InMemoryConnectorRepositoryFake : ConnectorRepository {
         clientId = clientId,
         displayName = "test",
         createdAt = 1L,
-        status = ConnectorClientStatus.PAIRED_FULL
+        status = ConnectorClientStatus.PAIRED_FULL,
+        ownerUid = "owner-test",
+        vaultId = "vault-test",
+        agentProfileId = "agent-test",
+        grantId = "grant-test"
     )
 
     override suspend fun getSession(sessionId: String): ConnectorSession? = null
@@ -158,7 +171,11 @@ private class InMemoryConnectorRepositoryFake : ConnectorRepository {
             ConnectorCapability.ACTIONS_PREVIEW,
             ConnectorCapability.ACTIONS_COMMIT
         ),
-        updatedAt = 1L
+        updatedAt = 1L,
+        ownerUid = "owner-test",
+        vaultId = "vault-test",
+        agentProfileId = "agent-test",
+        grantId = "grant-test"
     )
 }
 
@@ -168,6 +185,16 @@ private class InMemoryFieldRepositoryFake : FieldRepository {
     override suspend fun getAllFields() = MutableStateFlow(fields.toList())
     override suspend fun getAllFieldsProgressive(firstBatchSize: Int, chunkSize: Int) =
         MutableStateFlow(fields.toList())
+    override suspend fun getFieldLoadSnapshots(firstBatchSize: Int, chunkSize: Int) =
+        MutableStateFlow(
+            FieldLoadSnapshot(
+                fields = fields.toList(),
+                attemptedCount = fields.size,
+                totalCount = fields.size,
+                failureCount = 0,
+                complete = true
+            )
+        )
     override suspend fun getFieldsByTag(tag: Tag): List<FieldDomain> =
         fields.filter { it.tag.name == tag.name }
 
@@ -202,6 +229,12 @@ private class InMemoryFieldRepositoryFake : FieldRepository {
     override suspend fun updateTag(key: String, newTag: Tag) {
         fields.replaceAll { if (it.key.equals(key, ignoreCase = true)) it.copy(tag = newTag) else it }
     }
+
+    override suspend fun updateMcpShareable(key: String, shareable: Boolean) {
+        fields.replaceAll {
+            if (it.key.equals(key, ignoreCase = true)) it.copy(isMcpShareable = shareable) else it
+        }
+    }
 }
 
 private class InMemoryUserRepositoryFake : UserRepository {
@@ -226,8 +259,30 @@ private class InMemoryUserRepositoryFake : UserRepository {
         }
     }
 
+    override suspend fun updateUser(
+        originalEmail: String,
+        updatedUser: UserDomain
+    ): ContactUpdateResult {
+        val index = usersList.indexOfFirst { it.email.equals(originalEmail, ignoreCase = true) }
+        if (index < 0) return ContactUpdateResult.NotFound
+        if (usersList.withIndex().any { (otherIndex, user) ->
+                otherIndex != index && user.email.equals(updatedUser.email, ignoreCase = true)
+            }
+        ) {
+            return ContactUpdateResult.EmailAlreadyExists
+        }
+        if (usersList[index] == updatedUser) return ContactUpdateResult.Unchanged
+        usersList[index] = updatedUser
+        return ContactUpdateResult.Updated
+    }
+
     override suspend fun deleteUser(email: String): Boolean =
         usersList.removeIf { it.email.equals(email, ignoreCase = true) }
+
+    override suspend fun updateTag(email: String, newTag: Tag) {
+        val idx = usersList.indexOfFirst { it.email.equals(email, ignoreCase = true) }
+        if (idx >= 0) usersList[idx] = usersList[idx].copy(tag = newTag)
+    }
 
     override suspend fun deleteUsers(emails: Collection<String>): Int {
         val before = usersList.size

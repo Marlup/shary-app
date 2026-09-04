@@ -125,12 +125,32 @@ class ConnectorRepositoryImpl @Inject constructor(
 
     private fun parseClients(raw: String?): List<ConnectorClient> = readArray(raw).mapNotNull { obj ->
         runCatching {
+            val ownerUid = obj.optString("owner_uid", "")
+            val vaultId = obj.optString("vault_id", "")
+            val agentProfileId = obj.optString("agent_profile_id", "")
+            val grantId = obj.optString("grant_id", "")
+            val persistedStatus = ConnectorClientStatus.valueOf(
+                obj.optString("status", ConnectorClientStatus.PAIRED_LIMITED.name)
+            )
             ConnectorClient(
                 clientId = obj.optString("client_id", ""),
                 displayName = obj.optString("display_name", ""),
                 createdAt = obj.optLong("created_at", 0L),
-                status = ConnectorClientStatus.valueOf(obj.optString("status", ConnectorClientStatus.PAIRED_LIMITED.name)),
-                lastActivityAt = if (obj.has("last_activity_at")) obj.optLong("last_activity_at") else null
+                status = if (
+                    ownerUid.isBlank() ||
+                    vaultId.isBlank() ||
+                    agentProfileId.isBlank() ||
+                    grantId.isBlank()
+                ) {
+                    ConnectorClientStatus.REVOKED
+                } else {
+                    persistedStatus
+                },
+                lastActivityAt = if (obj.has("last_activity_at")) obj.optLong("last_activity_at") else null,
+                ownerUid = ownerUid,
+                vaultId = vaultId,
+                agentProfileId = agentProfileId,
+                grantId = grantId
             )
         }.getOrNull()
     }
@@ -144,7 +164,11 @@ class ConnectorRepositoryImpl @Inject constructor(
                 refreshSecretHash = obj.optString("refresh_secret_hash", ""),
                 issuedAt = obj.optLong("issued_at", 0L),
                 expiresAt = obj.optLong("expires_at", 0L),
-                revokedAt = if (obj.has("revoked_at")) obj.optLong("revoked_at") else null
+                revokedAt = if (obj.has("revoked_at")) obj.optLong("revoked_at") else null,
+                ownerUid = obj.optString("owner_uid", ""),
+                vaultId = obj.optString("vault_id", ""),
+                agentProfileId = obj.optString("agent_profile_id", ""),
+                grantId = obj.optString("grant_id", "")
             )
         }.getOrNull()
     }
@@ -161,7 +185,11 @@ class ConnectorRepositoryImpl @Inject constructor(
                             ConnectorCapability.valueOf(capObj.optString("value"))
                         }.getOrNull()
                     }.toSet(),
-                updatedAt = obj.optLong("updated_at", 0L)
+                updatedAt = obj.optLong("updated_at", 0L),
+                ownerUid = obj.optString("owner_uid", ""),
+                vaultId = obj.optString("vault_id", ""),
+                agentProfileId = obj.optString("agent_profile_id", ""),
+                grantId = obj.optString("grant_id", "")
             )
         }.getOrNull()
     }
@@ -188,7 +216,11 @@ class ConnectorRepositoryImpl @Inject constructor(
                     obj.optString("decision", ConnectorAuditDecision.DENIED.name)
                 ),
                 reasonCode = obj.optString("reason_code", ""),
-                metadata = metadata
+                metadata = metadata,
+                ownerUid = obj.optString("owner_uid", ""),
+                vaultId = obj.optString("vault_id", ""),
+                agentProfileId = obj.optString("agent_profile_id", ""),
+                grantId = obj.optString("grant_id", "")
             )
         }.getOrNull()
     }
@@ -210,7 +242,11 @@ class ConnectorRepositoryImpl @Inject constructor(
                 proposedActions = parseActionsArray(obj.optJSONArray("proposed_actions")),
                 previewSummary = summary,
                 status = obj.optString("status", "previewed"),
-                updatedAt = obj.optLong("updated_at", 0L)
+                updatedAt = obj.optLong("updated_at", 0L),
+                ownerUid = obj.optString("owner_uid", ""),
+                vaultId = obj.optString("vault_id", ""),
+                agentProfileId = obj.optString("agent_profile_id", ""),
+                grantId = obj.optString("grant_id", "")
             )
         }.getOrNull()
     }
@@ -224,6 +260,10 @@ class ConnectorRepositoryImpl @Inject constructor(
                     .put("created_at", item.createdAt)
                     .put("status", item.status.name)
                     .put("last_activity_at", item.lastActivityAt)
+                    .put("owner_uid", item.ownerUid)
+                    .put("vault_id", item.vaultId)
+                    .put("agent_profile_id", item.agentProfileId)
+                    .put("grant_id", item.grantId)
             )
         }
     }.toString()
@@ -239,6 +279,10 @@ class ConnectorRepositoryImpl @Inject constructor(
                     .put("issued_at", item.issuedAt)
                     .put("expires_at", item.expiresAt)
                     .put("revoked_at", item.revokedAt)
+                    .put("owner_uid", item.ownerUid)
+                    .put("vault_id", item.vaultId)
+                    .put("agent_profile_id", item.agentProfileId)
+                    .put("grant_id", item.grantId)
             )
         }
     }.toString()
@@ -256,6 +300,10 @@ class ConnectorRepositoryImpl @Inject constructor(
                     .put("ask_every_time", item.askEveryTime)
                     .put("allowed_capabilities", caps)
                     .put("updated_at", item.updatedAt)
+                    .put("owner_uid", item.ownerUid)
+                    .put("vault_id", item.vaultId)
+                    .put("agent_profile_id", item.agentProfileId)
+                    .put("grant_id", item.grantId)
             )
         }
     }.toString()
@@ -276,6 +324,10 @@ class ConnectorRepositoryImpl @Inject constructor(
                     .put("decision", item.decision.name)
                     .put("reason_code", item.reasonCode)
                     .put("metadata", metadata)
+                    .put("owner_uid", item.ownerUid)
+                    .put("vault_id", item.vaultId)
+                    .put("agent_profile_id", item.agentProfileId)
+                    .put("grant_id", item.grantId)
             )
         }
     }.toString()
@@ -293,6 +345,10 @@ class ConnectorRepositoryImpl @Inject constructor(
                     .put("preview_summary", summary)
                     .put("status", item.status)
                     .put("updated_at", item.updatedAt)
+                    .put("owner_uid", item.ownerUid)
+                    .put("vault_id", item.vaultId)
+                    .put("agent_profile_id", item.agentProfileId)
+                    .put("grant_id", item.grantId)
             )
         }
     }.toString()
@@ -328,6 +384,7 @@ class ConnectorRepositoryImpl @Inject constructor(
                         type = type,
                         key = obj.optString("key").takeIf { it.isNotBlank() },
                         value = obj.optString("value").takeIf { it.isNotBlank() },
+                        valueType = obj.optString("value_type").takeIf { it.isNotBlank() },
                         keyAlias = obj.optString("key_alias").takeIf { it.isNotBlank() },
                         tag = obj.optString("tag").takeIf { it.isNotBlank() },
                         email = obj.optString("email").takeIf { it.isNotBlank() },
@@ -345,6 +402,7 @@ class ConnectorRepositoryImpl @Inject constructor(
                     .put("type", action.type.name)
                     .put("key", action.key)
                     .put("value", action.value)
+                    .put("value_type", action.valueType)
                     .put("key_alias", action.keyAlias)
                     .put("tag", action.tag)
                     .put("email", action.email)

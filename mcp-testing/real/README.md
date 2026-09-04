@@ -46,3 +46,61 @@ creating test records. Without it, the agent must initialize the run in
 
 Deprecated local ADB conformance assets are archived in
 `docs/archive/mcp-local-legacy/` and `mcp-testing/legacy-protocol/`.
+
+## Script contracts
+
+### `start-real-agent-run.ps1`
+
+- Purpose:
+  - initialize one evidence run and select the applicable scenarios.
+- Inputs:
+  - `-Mode`:
+    - `ReadOnly`
+    - `ReadWrite`
+  - `-Transport`:
+    - `RemoteOAuth`
+    - `LocalAdb`
+  - optional `-DeviceSerial`, `-McpUrl`, `-SkipProtocolPreflight`.
+- Outputs:
+  - one JSON run file under `results/`;
+  - console summary with run ID and evidence path.
+- Side effects:
+  - for `LocalAdb`, can execute the legacy protocol preflight runner;
+  - for `RemoteOAuth`, probes the MCP endpoint for the expected OAuth
+    challenge behavior.
+
+### `record-real-agent-result.ps1`
+
+- Purpose:
+  - write the result for one scenario into an existing run file.
+- Inputs:
+  - required `-RunFile`, `-ScenarioId`, `-Status`;
+  - optional `-ToolCalls`, `-SharyResult`, `-AuditResult`, `-Notes`,
+    `-GeneratedRecords`.
+- Outputs:
+  - updated run JSON with the scenario result persisted.
+- Side effects:
+  - refuses paths outside `results/` to avoid accidental arbitrary-file edits.
+
+### `test-real-agent-evidence.ps1`
+
+- Purpose:
+  - validate scenario completion, tool usage, result narratives, and skipped
+    prerequisite notes, then render the final Markdown report.
+- Inputs:
+  - required `-RunFile`.
+- Outputs:
+  - updated run JSON with `completedAtUtc`;
+  - Markdown report beside the JSON file;
+  - exit code `0` only when evidence is valid and no scenario failed.
+- Side effects:
+  - marks validation errors as a failing process exit.
+
+## Update triggers
+
+Update this README and `docs/ai/SCRIPT_CATALOG.md` when:
+
+- a script parameter changes;
+- run-file schema changes;
+- scenario evidence rules change;
+- the active transport model changes.

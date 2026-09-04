@@ -6,5 +6,6 @@ data class DockAction(
     val label: String,
     val icon: ImageVector? = null,
     val enabled: Boolean = true,
+    val contentDescription: String = label,
     val onClick: () -> Unit = {}
 )

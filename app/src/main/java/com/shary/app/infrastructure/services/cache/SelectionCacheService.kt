@@ -2,12 +2,18 @@ package com.shary.app.infrastructure.services.cache
 
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.models.UserDomain
+import com.shary.app.core.domain.interfaces.services.AccountScopedCacheState
 import com.shary.app.core.domain.interfaces.services.CacheService
 import com.shary.app.core.domain.models.RequestDomain
+import com.shary.app.core.domain.models.RequestWorkflowState
+import com.shary.app.core.domain.models.stableRequestId
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -17,11 +23,11 @@ import kotlinx.coroutines.sync.withLock
  * In-memory cache for selected fields, users, and phone numbers.
  *
  * Responsibilities:
- * - Keeps cached lists of FieldDomain and UserDomain objects.
- * - Provides reactive flows for UI components to observe cache changes.
+ * - Keeps account-scoped selections and workflow handoff state.
+ * - Publishes one immutable state so complete teardown is atomic to observers.
  * - Deduplicates entries on cache insertions (by key/email).
- * - Offers both fast (non-synchronized) and safe (Mutex-locked) cache updates.
- * - Can be reset or cleared selectively (fields, users, all).
+ * - Offers both direct and Mutex-serialized updates.
+ * - Can be reset or cleared selectively.
  *
  * This service is a singleton; it is not persisted across app restarts.
  */
@@ -32,46 +38,16 @@ class SelectionCacheService @Inject constructor(
     /** Used to serialize writes when calling safe methods */
     private val lock = Mutex()
 
-    /** Cached fields, exposed as reactive flow */
-    private val _fields = MutableStateFlow<List<FieldDomain>>(emptyList())
-
-    /** Cached requests, exposed as reactive flow */
-    private val _requests = MutableStateFlow<List<RequestDomain>>(emptyList())
-
-    /** Cached draft request, exposed as reactive flow */
-    private val _draftRequest = MutableStateFlow(RequestDomain.initialize())
-
-    /** Cached draft request, exposed as reactive flow */
-    private val _draftFields = MutableStateFlow(emptyList<FieldDomain>())
-
-    /** Cached users, exposed as reactive flow */
-    private val _users  = MutableStateFlow<List<UserDomain>>(emptyList())
-
-    /** Optional Owner as Userdomain structure as cached alongside fields/users */
-    private val _owner  = MutableStateFlow(UserDomain())
-
-    /** Optional phone number cached alongside fields/users */
-    private val _ownerPhone  = MutableStateFlow<String?>(null)
-
-    /** Optional phone number cached alongside fields/users */
-    private val _ownerEmail  = MutableStateFlow<String?>(null)    /** Optional phone number cached alongside fields/users */
-
-    /** Optional username cached alongside fields/users */
-    private val _ownerUsername  = MutableStateFlow<String?>(null)
-
-    // -------------------- Public Flows --------------------
-
-    override val fieldsFlow: StateFlow<List<FieldDomain>> get() = _fields
-    override val requestsFlow: StateFlow<List<RequestDomain>> get() = _requests
-    override val usersFlow: StateFlow<List<UserDomain>> get() = _users
+    private val _accountState = MutableStateFlow(AccountScopedCacheState())
+    override val accountState: StateFlow<AccountScopedCacheState> = _accountState.asStateFlow()
 
     // -------------------- Read-only accessors --------------------
 
-    override fun getFields(): List<FieldDomain> = _fields.value
-    override fun getRequests(): List<RequestDomain> = _requests.value
-    override fun getDraftFields(): List<FieldDomain> = _draftFields.value
-    override fun getDraftRequest(): RequestDomain = _draftRequest.value
-    override fun getUsers(): List<UserDomain> = _users.value
+    override fun getFields(): List<FieldDomain> = _accountState.value.fields
+    override fun getRequests(): List<RequestDomain> = _accountState.value.requests
+    override fun getDraftFields(): List<FieldDomain> = _accountState.value.draftFields
+    override fun getDraftRequest(): RequestDomain = _accountState.value.draftRequest
+    override fun getUsers(): List<UserDomain> = _accountState.value.users.map { it.copy() }
 
     // -------------------- Cache mutations --------------------
 
@@ -79,78 +55,113 @@ class SelectionCacheService @Inject constructor(
      * Replaces cached fields with new list, deduplicated by key (case-insensitive).
      */
     override fun cacheFields(fields: List<FieldDomain>) {
-        val unique = fields.distinctBy { it.key.trim().lowercase() }
-        _fields.value = unique
+        val unique = fields
+            .distinctBy { it.key.trim().lowercase() }
+            .immutableCopy()
+        _accountState.update { it.copy(fields = unique) }
     }
 
     override fun cacheRequests(requests: List<RequestDomain>) {
-        val unique = requests.distinctBy { it.recipients }
-        _requests.value = unique
+        val unique = requests
+            .distinctBy(RequestDomain::stableRequestId)
+            .map(RequestDomain::cacheSnapshot)
+            .immutableCopy()
+        _accountState.update { it.copy(requests = unique) }
     }
 
     override fun cacheDraftRequest(draftRequest: RequestDomain) {
-        _draftRequest.value = draftRequest
+        _accountState.update { it.copy(draftRequest = draftRequest.cacheSnapshot()) }
     }
 
 
     override fun clearCachedDraftFields() {
-        _draftFields.value = emptyList()
+        _accountState.update { it.copy(draftFields = emptyList()) }
     }
     override fun cacheDraftFields(draftFields: List<FieldDomain>) {
-        _draftFields.value = draftFields
+        _accountState.update { it.copy(draftFields = draftFields.immutableCopy()) }
     }
     override fun isAnyFieldCached(): Boolean = getFields().isNotEmpty()
     override fun isAnyRequestCached(): Boolean = getRequests().isNotEmpty()
-    override fun isAnyDraftFieldCached(): Boolean = _draftFields.value.isNotEmpty()
+    override fun isAnyDraftFieldCached(): Boolean = getDraftFields().isNotEmpty()
 
     /**
      * Replaces cached users with new list, deduplicated by normalized email.
      */
     override fun cacheUsers(users: List<UserDomain>) {
-        val unique = users.distinctBy { it.email.trim().lowercase() }
-        _users.value = unique
+        val unique = users
+            .distinctBy { it.email.trim().lowercase() }
+            .map { it.copy() }
+            .immutableCopy()
+        _accountState.update { it.copy(users = unique) }
     }
 
     override fun isAnyUserCached(): Boolean = getUsers().isNotEmpty()
 
     /** Clears fields */
-    override fun clearCachedFields() { _fields.value = emptyList() }
+    override fun clearCachedFields() {
+        _accountState.update { it.copy(fields = emptyList()) }
+    }
 
     /** Clears requests */
-    override fun clearCachedRequests() { _requests.value = emptyList() }
+    override fun clearCachedRequests() {
+        _accountState.update { it.copy(requests = emptyList()) }
+    }
 
     /** Clears draft request */
-    override fun clearCachedDraftRequest() { _draftRequest.value = RequestDomain.initialize() }
+    override fun clearCachedDraftRequest() {
+        _accountState.update { it.copy(draftRequest = RequestDomain.initialize()) }
+    }
 
     /** Clears users */
-    override fun clearCachedUsers()  { _users.value = emptyList() }
+    override fun clearCachedUsers() {
+        _accountState.update { it.copy(users = emptyList()) }
+    }
 
-    /** Clears all cached values (fields, users, phone) */
+    /** Atomically clears the complete process-local account inventory. */
     override fun clearAllCaches() {
-        _fields.value = emptyList()
-        _users.value = emptyList()
-        _ownerPhone.value = null
+        _accountState.value = AccountScopedCacheState()
     }
 
     /** Sets or clears cached phone number */
-    override fun cachePhoneNumber(number: String?) { _ownerPhone.value = number }
-    override fun getPhoneNumber(): String? = _ownerPhone.value
+    override fun cachePhoneNumber(number: String?) {
+        _accountState.update { it.copy(ownerPhone = number) }
+    }
+    override fun getPhoneNumber(): String? = _accountState.value.ownerPhone
 
-    /** Sets or clears cached email and username*/
-    override fun cacheOwner(owner: UserDomain) { _owner.value = owner }
+    override fun getRequestWorkflow(): RequestWorkflowState = _accountState.value.requestWorkflow
+
+    override fun cacheRequestWorkflow(state: RequestWorkflowState) {
+        _accountState.update { it.copy(requestWorkflow = state.cacheSnapshot()) }
+    }
+
+    override fun updateRequestWorkflow(
+        transform: (RequestWorkflowState) -> RequestWorkflowState
+    ): RequestWorkflowState {
+        var updated = getRequestWorkflow()
+        _accountState.update { state ->
+            updated = transform(state.requestWorkflow).cacheSnapshot()
+            state.copy(requestWorkflow = updated)
+        }
+        return updated
+    }
+
+    /** Replaces owner identity without retaining a caller-owned mutable object. */
+    override fun cacheOwner(owner: UserDomain) {
+        _accountState.update { it.copy(owner = owner.copy()) }
+    }
     override fun cacheOwnerUsername(username: String?) {
-        if (username != null) {
-            _owner.value.username = username
+        _accountState.update { state ->
+            state.copy(owner = state.owner.copy(username = username.orEmpty()))
         }
     }
     override fun cacheOwnerEmail(email: String?) {
-        if (email != null) {
-            _owner.value.email = email
+        _accountState.update { state ->
+            state.copy(owner = state.owner.copy(email = email.orEmpty()))
         }
     }
-    override fun getOwner(): UserDomain = _owner.value
-    override fun getOwnerUsername(): String = _owner.value.username
-    override fun getOwnerEmail(): String = _owner.value.email
+    override fun getOwner(): UserDomain = _accountState.value.owner.copy()
+    override fun getOwnerUsername(): String? = _accountState.value.owner.username.ifBlank { null }
+    override fun getOwnerEmail(): String? = _accountState.value.owner.email.ifBlank { null }
 
     // -------------------- Thread-safe variants --------------------
 
@@ -167,3 +178,22 @@ class SelectionCacheService @Inject constructor(
     suspend fun cacheUsersSafe(users: List<UserDomain>) =
         lock.withLock { cacheUsers(users) }
 }
+
+private fun RequestDomain.cacheSnapshot(): RequestDomain = copy(
+    fields = fields.immutableCopy(),
+    recipients = recipients.immutableCopy()
+)
+
+private fun RequestWorkflowState.cacheSnapshot(): RequestWorkflowState = copy(
+    activeReceivedRequest = activeReceivedRequest?.cacheSnapshot(),
+    responseDraft = responseDraft?.copy(
+        matchedFieldKeys = responseDraft.matchedFieldKeys.immutableCopy()
+    ),
+    outgoingRequestDraft = outgoingRequestDraft.copy(
+        requestedFields = outgoingRequestDraft.requestedFields.immutableCopy(),
+        recipientAddresses = outgoingRequestDraft.recipientAddresses.immutableCopy()
+    )
+)
+
+private fun <T> List<T>.immutableCopy(): List<T> =
+    Collections.unmodifiableList(ArrayList(this))

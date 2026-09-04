@@ -2,7 +2,10 @@ package com.shary.app.infrastructure.persistance.repositories
 
 import androidx.datastore.core.DataStore
 import com.shary.app.UserList
+import com.shary.app.core.domain.interfaces.repositories.ContactUpdateResult
 import com.shary.app.core.domain.interfaces.repositories.UserRepository
+import com.shary.app.core.domain.types.enums.Tag
+import com.shary.app.core.domain.types.enums.serialize
 import com.shary.app.infrastructure.mappers.toDomain
 import com.shary.app.infrastructure.mappers.toProto
 import com.shary.app.core.domain.models.UserDomain
@@ -73,6 +76,63 @@ class UserRepositoryImpl(
             }
         }
         return created
+    }
+
+    override suspend fun updateUser(
+        originalEmail: String,
+        updatedUser: UserDomain
+    ): ContactUpdateResult {
+        var result: ContactUpdateResult = ContactUpdateResult.NotFound
+        val normalizedOriginal = normalizeEmail(originalEmail)
+        val normalizedUpdated = normalizeEmail(updatedUser.email)
+        val updatedProto = updatedUser.toProto()
+
+        dataStore.updateData { current ->
+            val originalIndex = current.usersList.indexOfFirst {
+                normalizeEmail(it.email) == normalizedOriginal
+            }
+            if (originalIndex < 0) {
+                result = ContactUpdateResult.NotFound
+                return@updateData current
+            }
+
+            val collision = current.usersList.withIndex().any { (index, user) ->
+                index != originalIndex && normalizeEmail(user.email) == normalizedUpdated
+            }
+            if (collision) {
+                result = ContactUpdateResult.EmailAlreadyExists
+                return@updateData current
+            }
+
+            if (current.usersList[originalIndex] == updatedProto) {
+                result = ContactUpdateResult.Unchanged
+                current
+            } else {
+                result = ContactUpdateResult.Updated
+                current.toBuilder()
+                    .setUsers(originalIndex, updatedProto)
+                    .build()
+            }
+        }
+        return result
+    }
+
+    override suspend fun updateTag(email: String, newTag: Tag) {
+        val normalizedTarget = normalizeEmail(email)
+        val serializedTag = newTag.serialize()
+        dataStore.updateData { current ->
+            val updated = current.usersList.map { userProto ->
+                if (normalizeEmail(userProto.email) == normalizedTarget) {
+                    userProto.toBuilder().setTag(serializedTag).build()
+                } else {
+                    userProto
+                }
+            }
+            current.toBuilder()
+                .clearUsers()
+                .addAllUsers(updated)
+                .build()
+        }
     }
 
     override suspend fun deleteUser(email: String): Boolean {

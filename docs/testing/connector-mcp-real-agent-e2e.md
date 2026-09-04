@@ -95,7 +95,9 @@ credential. When several vaults are authorized, the agent must pass the target
 
 ## Tool behavior
 
-- `shary.fields.list` returns metadata only.
+- `shary.fields.list` returns metadata only, including `value_type`.
+- `shary.fields.types` immediately lists canonical writable types such as `email`.
+- Field create/update accepts optional `value_type`, `key_alias`, and `tag`.
 - `shary.fields.get` requires `fields.value.read` and reads one exact key.
 - Every device operation returns an `operation_id`.
 - The agent polls `shary.operations.get`.

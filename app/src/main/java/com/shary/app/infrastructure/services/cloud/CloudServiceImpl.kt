@@ -48,14 +48,10 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -81,10 +77,10 @@ class CloudServiceImpl @Inject constructor(
 
     private val authAdapter = FirebaseAnonymousAuthAdapter(firebaseAuth)
     override var cloudState = MutableStateFlow(CloudState())
-    private val json = Json
+    private val json = Json { ignoreUnknownKeys = true }
     private val jsonWithDefaults = Json { encodeDefaults = true }
 
-    private data class DecisionAckEnvelope(
+    internal data class DecisionAckEnvelope(
         val status: String?,
         val reasonCode: String?,
         val decisionId: String?,
@@ -92,14 +88,14 @@ class CloudServiceImpl @Inject constructor(
         val schemaVersion: Int?
     )
 
-    private data class CloudErrorEnvelope(
+    internal data class CloudErrorEnvelope(
         val errorCode: String?,
         val message: String?,
         val requestId: String?,
         val retryAfterSeconds: Long?
     )
 
-    private data class DecisionHttpResult(
+    internal data class DecisionHttpResult(
         val statusCode: Int,
         val ack: DecisionAckEnvelope?,
         val error: CloudErrorEnvelope?,
@@ -150,14 +146,9 @@ class CloudServiceImpl @Inject constructor(
         }
     }
 
-    override suspend fun signOutCloud(): Result<Unit> = runCatching {
-        authAdapter.signOut()
-        cloudState.value = cloudState.value.copy(
-            username = "",
-            token = "",
-            isOnline = false,
-            isUserValidated = false
-        )
+    override suspend fun signOutCloud(): Result<Unit> {
+        cloudState.value = cloudState.value.clearSessionState()
+        return runCatching { authAdapter.signOut() }
     }
 
     // -------------------- EXISTING FUNCTIONALITY --------------------
@@ -282,6 +273,7 @@ class CloudServiceImpl @Inject constructor(
         fields: List<FieldDomain>,
         owner: UserDomain,
         recipients: List<UserDomain>,
+        requestId: String,
         expiryDays: Int,
     ): Map<String, StatusDataSentDb> = withContext(Dispatchers.IO) {
         ensureAuth()
@@ -289,18 +281,23 @@ class CloudServiceImpl @Inject constructor(
         if (isEmptyArguments(fields, recipients)) return@withContext emptyMap()
         ensureVerifiedIdentityForEmail(normalizeUserEmail(owner.email))
 
-        doUploadRequest(fields, owner, recipients, expiryDays)
+        doUploadRequest(fields, owner, recipients, requestId, expiryDays)
     }
 
     private suspend fun doUploadRequest(
         fields: List<FieldDomain>,
         owner: UserDomain,
         recipients: List<UserDomain>,
+        requestId: String,
         expiryDays: Int
     ) =
         withContext(Dispatchers.IO) {
             val safeOwnerEmail = safeGetUser(owner.email)
-            val dataRequestJson = makeJsonStringFromRequestKeys(fields, safeOwnerEmail)
+            val dataRequestJson = makeJsonStringFromRequestKeys(
+                fields = fields,
+                user = safeOwnerEmail,
+                requestId = requestId
+            )
             val recipientsEmail = recipients.map { it.email }
 
             buildLoad(dataRequestJson, safeOwnerEmail, recipientsEmail, isRequest=true, expiryDays = expiryDays)
@@ -344,14 +341,23 @@ class CloudServiceImpl @Inject constructor(
                     aad
                 )
                 val payloadData = base64Encode(encryptedData)
-                val (signature, verification) =
-                    makeCredentials(listOf(safeOwnerHash, recipientEmailHash, hashMessageB64(data)))
+                val creationAt = getCurrentUtcTimestamp()
+                val expiresAt = getTimestampAfterExpiry(extraTime = expirySeconds)
+                val digest = CloudPayloadContract.canonicalDigest(
+                    senderHash = safeOwnerHash,
+                    recipientHash = recipientEmailHash,
+                    encryptedData = payloadData,
+                    creationAt = creationAt,
+                    expiresAt = expiresAt
+                )
+                val signature = base64Encode(cryptographyManager.signDetached(digest))
+                val verification = CloudPayloadContract.verificationBase64(digest)
 
                 val payload = DataPayload(
                     user = safeOwnerHash,
                     recipient = recipientEmailHash,
-                    creationAt = getCurrentUtcTimestamp(),
-                    expiresAt = getTimestampAfterExpiry(extraTime = expirySeconds),
+                    creationAt = creationAt,
+                    expiresAt = expiresAt,
                     data = payloadData,
                     verification = verification,
                     signature = signature
@@ -412,17 +418,6 @@ class CloudServiceImpl @Inject constructor(
             AppLogger.error("CloudServiceImpl", "event=get_pubkey_exception", e)
             ""
         }
-    }
-
-    /**
-     * Creates signature + verification pair for a canonical list of fields.
-     */
-    private fun makeCredentials(elements: List<String>): Pair<String, String> {
-        val canonical = elements.joinToString(".")
-        val rawHash = hashMessage(canonical)
-        val verificationB64 = base64Encode(rawHash)
-        val signatureB64 = base64Encode(cryptographyManager.signDetached(rawHash))
-        return signatureB64 to verificationB64
     }
 
     /** Check if backend is reachable (ping + cached state). */
@@ -570,7 +565,7 @@ class CloudServiceImpl @Inject constructor(
 
                 return@withContext payloadArray.mapNotNull { payloadElement ->
                     runCatching {
-                        val payload = Json.decodeFromJsonElement(DataPayload.serializer(), payloadElement)
+                        val payload = CloudPayloadContract.decodeInboxPayload(payloadElement)
                         RecipientPayloadEnvelope(
                             recipientHash = recipientHash,
                             payload = payload
@@ -606,13 +601,13 @@ class CloudServiceImpl @Inject constructor(
         }
 
         val recipientHash = resolveRecipientHashForPayload(email, payload)
-        val decisionBody = buildJsonObject {
-            put("recipient", JsonPrimitive(recipientHash))
-            put("verification", JsonPrimitive(payload.verification))
-            put("decision", JsonPrimitive(decision.name.lowercase()))
-            put("notify_sender", JsonPrimitive(notifySender))
-            put("schema_version", JsonPrimitive(CLOUD_SCHEMA_VERSION))
-        }.toString()
+        val decisionBody = CloudPayloadContract.requestDecisionBody(
+            recipientHash = recipientHash,
+            requestId = payload.verification,
+            decision = decision.name.lowercase(),
+            notifySender = notifySender,
+            schemaVersion = CLOUD_SCHEMA_VERSION
+        )
         val url = FIREBASE_MAIN_ENTRYPOINT + endpoint
         val request = buildPostRequest(
             url,
@@ -698,34 +693,43 @@ class CloudServiceImpl @Inject constructor(
         return ack to error
     }
 
-    private fun resolveDecisionOutcome(result: DecisionHttpResult, endpoint: String): Boolean {
+    internal fun resolveDecisionOutcome(result: DecisionHttpResult, endpoint: String): Boolean {
         if (result.isSuccessful) {
             validateAckEnvelope(result.ack, result.requestId)
             return true
         }
 
         val errorCode = result.error?.errorCode?.trim().orEmpty()
-        if (result.statusCode == 409 && errorCode.equals("decision_conflict", ignoreCase = true)) {
-            AppLogger.info(
-                "CloudServiceImpl",
-                "event=decision_conflict_final endpoint=$endpoint requestId=${AppLogger.redacted(result.requestId)}"
-            )
-            return true
-        }
-
         throw mapDecisionFailureToException(result, endpoint)
     }
 
     private fun validateAckEnvelope(ack: DecisionAckEnvelope?, fallbackRequestId: String?) {
         if (ack == null) {
-            AppLogger.warn(
-                "CloudServiceImpl",
-                "event=decision_ack_missing requestId=${AppLogger.redacted(fallbackRequestId)}"
+            throw CloudBackendApiException(
+                statusCode = 200,
+                errorCode = "invalid_ack",
+                requestId = fallbackRequestId,
+                message = "Cloud decision response did not include an acknowledgement."
             )
-            return
+        }
+        if (ack.status !in setOf("processed", "already_processed")) {
+            throw CloudBackendApiException(
+                statusCode = 200,
+                errorCode = "invalid_ack",
+                requestId = ack.requestId ?: fallbackRequestId,
+                message = "Cloud decision response contained an invalid status."
+            )
+        }
+        if (ack.decisionId.isNullOrBlank() || ack.requestId.isNullOrBlank()) {
+            throw CloudBackendApiException(
+                statusCode = 200,
+                errorCode = "invalid_ack",
+                requestId = ack.requestId ?: fallbackRequestId,
+                message = "Cloud decision response was incomplete."
+            )
         }
         val ackSchemaVersion = ack.schemaVersion
-        if (ackSchemaVersion != null && ackSchemaVersion != CLOUD_SCHEMA_VERSION) {
+        if (ackSchemaVersion != CLOUD_SCHEMA_VERSION) {
             throw CloudUnsupportedSchemaVersionException(
                 message = "Unsupported decision ACK schema_version=$ackSchemaVersion.",
                 requestId = ack.requestId ?: fallbackRequestId

@@ -7,6 +7,7 @@ import com.shary.app.core.domain.types.enums.ConnectorClientStatus
 import com.shary.app.core.domain.types.valueobjects.ConnectorAuditEvent
 import com.shary.app.core.domain.types.valueobjects.ConnectorClient
 import com.shary.app.core.domain.types.valueobjects.ConnectorPendingAction
+import com.shary.app.core.domain.types.valueobjects.ConnectorOwnerBinding
 import com.shary.app.core.domain.types.valueobjects.ConnectorPolicy
 import com.shary.app.core.domain.types.valueobjects.ConnectorSession
 import kotlinx.coroutines.flow.Flow
@@ -80,6 +81,12 @@ class PairConnectorManagementUseCaseTest {
             ConnectorCapability.FIELDS_READ,
             ConnectorCapability.USERS_READ,
             ConnectorCapability.ACTIONS_PREVIEW
+        ),
+        ownerBinding = ConnectorOwnerBinding(
+            ownerUid = "owner-test",
+            vaultId = "vault-test",
+            agentProfileId = "agent-test",
+            grantId = "grant-test"
         )
     )
 }

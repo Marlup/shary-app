@@ -2,9 +2,9 @@
 
 This repo enforces AI policy loading through:
 
-- `AGENT.md` (canonical policy)
-- `CODEX.md` (Codex adapter, references `AGENT.md`)
-- `CLAUDE.md` (Claude adapter, references `AGENT.md`)
+- `AGENTS.md` (canonical policy)
+- `CODEX.md` (Codex adapter, references `AGENTS.md`)
+- `CLAUDE.md` (Claude adapter, references `AGENTS.md`)
 - `.claude/settings.local.json` (tool-local settings)
 
 ## Startup Gate

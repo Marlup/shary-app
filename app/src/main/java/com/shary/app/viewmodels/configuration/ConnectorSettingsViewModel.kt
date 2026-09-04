@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shary.app.application.connector.ManageConnectorsUseCase
 import com.shary.app.core.domain.interfaces.repositories.ConnectorRepository
+import com.shary.app.core.domain.interfaces.repositories.SettingsRepository
 import com.shary.app.core.domain.types.enums.ConnectorClientStatus
 import com.shary.app.core.domain.types.valueobjects.ConnectorAuditEvent
 import com.shary.app.core.domain.types.valueobjects.ConnectorClient
@@ -17,12 +18,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class ConnectorSettingsViewModel @Inject constructor(
     private val connectorRepository: ConnectorRepository,
+    private val settingsRepository: SettingsRepository,
     private val manageConnectorsUseCase: ManageConnectorsUseCase,
     private val remoteMcpCoordinator: RemoteMcpCoordinator
 ) : ViewModel() {
@@ -41,6 +44,9 @@ class ConnectorSettingsViewModel @Inject constructor(
 
     val pendingOperations: StateFlow<List<PendingRemoteOperation>> = remoteMcpCoordinator.pendingOperations
     val renewalRequired: StateFlow<List<RemoteGrantCredential>> = remoteMcpCoordinator.renewalRequired
+    val mcpEnabled: StateFlow<Boolean> = settingsRepository.settings
+        .map { it.mcpEnabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _connectorMessage = MutableStateFlow<String?>(null)
     val connectorMessage: StateFlow<String?> = _connectorMessage.asStateFlow()
@@ -107,6 +113,18 @@ class ConnectorSettingsViewModel @Inject constructor(
 
     fun showConnectorMessage(message: String) {
         _connectorMessage.value = message
+    }
+
+    fun setMcpEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setMcpEnabled(enabled)
+            remoteMcpCoordinator.applyCapabilityChange(enabled)
+            _connectorMessage.value = if (enabled) {
+                "MCP capability enabled"
+            } else {
+                "MCP capability disabled"
+            }
+        }
     }
 
     private fun isRemoteClient(client: ConnectorClient?): Boolean =

@@ -16,11 +16,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,18 +34,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.shary.app.core.domain.types.enums.Tag
-import com.shary.app.ui.theme.AliasMuted
 import com.shary.app.ui.theme.SelectionCardBg
 import com.shary.app.ui.theme.SharyRadius
 import com.shary.app.ui.theme.SharySpacing
 import com.shary.app.ui.theme.SharyTextStyles
 import com.shary.app.ui.theme.SurfaceWhite
+import com.shary.app.ui.theme.TextMuted
 import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet500
 import com.shary.app.ui.theme.Violet600
+import com.shary.app.ui.theme.Violet700
+import com.shary.app.ui.theme.Violet800
 import com.shary.app.ui.theme.Violet900
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -122,40 +136,62 @@ fun FieldCard(
                 )
                 Spacer(modifier = Modifier.size(8.dp))
                 TagChip(tag = tag)
+                /*
                 if (!typedValueLabel.isNullOrBlank()) {
                     Spacer(modifier = Modifier.size(6.dp))
                     TypedValueChip(label = typedValueLabel)
                 }
+                 */
+                Spacer(Modifier.size(8.dp))
+                SelectionRing(
+                    isSelected = isSelected,
+                    onToggleSelection = onToggleSelection
+                )
             }
 
             Spacer(Modifier.height(8.dp))
 
-            Text(
-                text = fieldValue,
-                style = SharyTextStyles.fieldValue.copy(color = Violet500),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = alias.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AliasMuted,
+                    text = fieldValue,
+                    style = SharyTextStyles.fieldValueMedium.copy(color = Violet800),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(com.shary.app.ui.theme.SurfaceMid, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
-                Spacer(modifier = Modifier.size(8.dp))
+                /*
+                Spacer(Modifier.size(8.dp))
                 SelectionRing(
                     isSelected = isSelected,
                     onToggleSelection = onToggleSelection
+                )
+                 */
+            }
+
+            if (!alias.isNullOrBlank()) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 10.dp),
+                    thickness = 1.dp,
+                    color = Violet200
+                )
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(color = Violet800, fontWeight = FontWeight.Medium)) {
+                            append("alias")
+                        }
+                        append(" · ")
+                        append(alias)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -169,26 +205,38 @@ private fun SelectionRing(
 ) {
     Box(
         modifier = Modifier
-            .size(20.dp)
+            .size(48.dp)
             .clip(CircleShape)
-            .pointerInput(isSelected) {
-                detectTapGestures(onTap = { onToggleSelection() })
-            }
-            .background(if (isSelected) Violet600 else Color.Transparent, CircleShape)
-            .border(
-                width = 1.5.dp,
-                color = if (isSelected) Violet600 else Violet200,
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (isSelected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
-                tint = Color.White,
-                modifier = Modifier.size(12.dp)
+            .toggleable(
+                value = isSelected,
+                role = Role.Checkbox,
+                onValueChange = { onToggleSelection() }
             )
+            .semantics {
+                toggleableState = if (isSelected) ToggleableState.On else ToggleableState.Off
+                stateDescription = if (isSelected) "Selected" else "Not selected"
+            },
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(if (isSelected) Violet600 else Color.Transparent, CircleShape)
+                .border(
+                    width = 1.5.dp,
+                    color = if (isSelected) Violet600 else Violet200,
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
     }
 }
@@ -198,8 +246,13 @@ private fun TypedValueChip(label: String) {
     Text(
         text = label,
         style = MaterialTheme.typography.labelSmall,
-        color = Violet500,
+        color = Violet700,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         modifier = Modifier
+            .width(64.dp)
+            .height(24.dp)
             .background(Violet200, SharyRadius.chip)
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
