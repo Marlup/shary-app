@@ -70,8 +70,10 @@ flowchart TD
     AUTHZ -->|GUARDED_BY biometric or device credential| DETAIL[field.detail]
     DETAIL --> COPY[action.field.copy]
     COPY -->|SCHEDULES process-owned expiry| CLIPBOARD[ClipboardCleanupCoordinator]
-    DETAIL --> EDIT[action.field.edit]
+    DETAIL --> EDIT[action.field.edit full editor]
     DETAIL --> DUP[action.field.duplicate]
+    DETAIL --> TAGEDIT[action.field.change-tag quick editor]
+    DETAIL --> DELETE[action.field.delete confirmed then Undo]
     DETAIL --> MCP_TOGGLE[action.field.mcp-shareable]
     MCP_TOGGLE -->|WRITES| FIELD_REPO[FieldRepository.updateMcpShareable]
     EDIT --> CLAIM[field.editor Saving claim]
@@ -186,6 +188,8 @@ flowchart TD
 | `field.card.tap` | `GUARDED_BY` | `device.authentication` | Sensitive type only | `FieldsScreen` |
 | `field.card` | `MASKS` | `field.value`, `field.alias` | Sensitive and not authorized | `FieldValueTypes` |
 | `field.detail.mcp-toggle` | `WRITES` | `field.isMcpShareable` | Authenticated detail flow | `FieldViewModel` |
+| `field.detail.change-tag` | `WRITES` | `field.tag` | Quick tag editor | `FieldViewModel` |
+| `field.detail.delete` | `WRITES` | `field.repository` | Confirmed delete with immediate Undo | `FieldViewModel` |
 | `contact.editor.update` | `WRITES` | `contact.repository` | Original email exists and updated email does not collide | `UserViewModel`, `UserRepositoryImpl` |
 | `contact.tag.update` | `WRITES` | `contact.repository` | Target email exists | `UserViewModel`, `UserRepositoryImpl` |
 | `contact.tag.create` | `WRITES` | `contact.tag.repository` | Shared validation passes and case-insensitive name is unique | `ContactTagViewModel`, `ContactTagRepositoryImpl` |

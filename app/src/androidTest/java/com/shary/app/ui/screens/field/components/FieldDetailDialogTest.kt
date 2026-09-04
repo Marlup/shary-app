@@ -1,11 +1,11 @@
 package com.shary.app.ui.screens.field.components
 
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.onNodeWithTag
 import com.shary.app.core.domain.models.FieldDomain
 import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.core.domain.types.valueobjects.FieldValueContract
@@ -24,9 +24,8 @@ class FieldDetailDialogTest {
     fun actionButtonsInvokeExpectedCallbacks() {
         var copyCount = 0
         var duplicateCount = 0
-        var editValueCount = 0
         var editTagCount = 0
-        var editAliasCount = 0
+        var editCount = 0
         var deleteCount = 0
 
         composeTestRule.setContent {
@@ -36,28 +35,27 @@ class FieldDetailDialogTest {
                 alias = "main",
                 tag = Tag.Unknown,
                 typedValueLabel = "Link/URL",
+                dateAdded = Instant.parse("2026-07-19T10:15:30Z"),
                 onCopyValue = { copyCount++ },
                 onDuplicateField = { duplicateCount++ },
-                onEditValue = { editValueCount++ },
                 onEditTag = { editTagCount++ },
-                onEditAlias = { editAliasCount++ },
+                onEdit = { editCount++ },
                 onDeleteField = { deleteCount++ },
                 onDismiss = {}
             )
         }
 
-        composeTestRule.onNodeWithText("Copy value").performClick()
-        composeTestRule.onNodeWithText("Duplicate").performClick()
-        composeTestRule.onNodeWithText("Edit value").performClick()
-        composeTestRule.onNodeWithText("Edit tag").performClick()
-        composeTestRule.onNodeWithText("Edit alias").performClick()
+        composeTestRule.onNodeWithText("Copy value").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Duplicate").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Change tag").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Edit").performClick()
         composeTestRule.onNodeWithText("Delete").performClick()
+        composeTestRule.onNodeWithText("Confirm Delete").performClick()
 
         assertEquals(1, copyCount)
         assertEquals(1, duplicateCount)
-        assertEquals(1, editValueCount)
         assertEquals(1, editTagCount)
-        assertEquals(1, editAliasCount)
+        assertEquals(1, editCount)
         assertEquals(1, deleteCount)
     }
 
@@ -71,11 +69,11 @@ class FieldDetailDialogTest {
                 alias = "runtime targets",
                 tag = Tag.Unknown,
                 typedValueLabel = "List",
+                dateAdded = Instant.parse("2026-07-19T10:15:30Z"),
                 onCopyValue = {},
                 onDuplicateField = {},
-                onEditValue = {},
                 onEditTag = {},
-                onEditAlias = {},
+                onEdit = {},
                 onDeleteField = {},
                 onDismiss = {}
             )
@@ -83,6 +81,30 @@ class FieldDetailDialogTest {
 
         composeTestRule.onNodeWithText("api").assertExists()
         composeTestRule.onNodeWithText("worker").assertExists()
+    }
+
+    @Test
+    fun detailExposesTruthfulMetadataAndSubtitle() {
+        composeTestRule.setContent {
+            FieldDetailDialog(
+                keyName = "website",
+                value = "https://example.com",
+                alias = "main",
+                tag = Tag.Unknown,
+                typedValueLabel = "Link/URL",
+                dateAdded = Instant.parse("2026-07-19T10:15:30Z"),
+                onCopyValue = {},
+                onDuplicateField = {},
+                onEditTag = {},
+                onEdit = {},
+                onDeleteField = {},
+                onDismiss = {}
+            )
+        }
+
+        composeTestRule.onNodeWithText("Link/URL").assertExists()
+        composeTestRule.onNodeWithText("main").assertExists()
+        composeTestRule.onNodeWithText("Added").assertExists()
     }
 
     @Test

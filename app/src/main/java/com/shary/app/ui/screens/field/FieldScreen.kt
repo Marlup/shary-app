@@ -87,7 +87,6 @@ import com.shary.app.ui.screens.field.components.AddCopiedFieldDialog
 import com.shary.app.ui.screens.field.components.AddFieldDialog
 import com.shary.app.ui.screens.field.components.ChangePasswordDialog
 import com.shary.app.ui.screens.field.components.CloudInboxReviewDialog
-import com.shary.app.ui.screens.field.components.EditFieldAliasDialog
 import com.shary.app.ui.screens.field.components.EditFieldTagDialog
 import com.shary.app.ui.screens.field.components.EditFieldValueDialog
 import com.shary.app.ui.screens.field.components.FieldDetailDialog
@@ -174,7 +173,6 @@ fun FieldsScreen(
     var openUpdateFieldDialog by remember { mutableStateOf(false) }
     var openCloudInboxDialog by remember { mutableStateOf(false) }
     var openEditValueDialog by remember { mutableStateOf(false) }
-    var openEditAliasDialog by remember { mutableStateOf(false) }
     var openEditTagDialog by remember { mutableStateOf(false) }
     var openFieldStatsDialog by remember { mutableStateOf(false) }
     var autoInboxAttempted by rememberSaveable { mutableStateOf(false) }
@@ -321,7 +319,6 @@ fun FieldsScreen(
                     detailField = null
                     quickActionField = null
                     openEditValueDialog = false
-                    openEditAliasDialog = false
                     openEditTagDialog = false
                     openAddFieldCopyDialog = false
                 }
@@ -761,12 +758,13 @@ fun FieldsScreen(
             alias = field.keyAlias,
             tag = field.tag,
             typedValueLabel = typedValueLabel(field),
+            dateAdded = field.dateAdded,
             onCopyValue = { copyFieldValue(field) },
             onDuplicateField = {
                 editingField = field
                 openAddFieldCopyDialog = true
             },
-            onEditValue = {
+            onEdit = {
                 editingField = field
                 detailField = null
                 openUpdateFieldDialog = true
@@ -775,11 +773,6 @@ fun FieldsScreen(
                 quickActionField = field
                 detailField = null
                 openEditTagDialog = true
-            },
-            onEditAlias = {
-                quickActionField = field
-                detailField = null
-                openEditAliasDialog = true
             },
             onDeleteField = {
                 val deletedSnapshot = listOf(field)
@@ -910,25 +903,6 @@ fun FieldsScreen(
                     editValueTarget.copy(value = newValue)
                 )
                 openEditValueDialog = false
-                quickActionField = null
-            }
-        )
-    }
-
-    val editAliasTarget = quickActionField
-    if (openEditAliasDialog && editAliasTarget != null) {
-        EditFieldAliasDialog(
-            initialAlias = editAliasTarget.keyAlias,
-            onDismiss = {
-                openEditAliasDialog = false
-                quickActionField = null
-            },
-            onConfirm = { newAlias ->
-                fieldViewModel.updateField(
-                    editAliasTarget,
-                    editAliasTarget.copy(keyAlias = newAlias)
-                )
-                openEditAliasDialog = false
                 quickActionField = null
             }
         )

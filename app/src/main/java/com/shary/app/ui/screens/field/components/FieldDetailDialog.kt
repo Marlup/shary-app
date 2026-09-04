@@ -1,38 +1,33 @@
 package com.shary.app.ui.screens.field.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EditAttributes
-import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.FileCopy
-import androidx.compose.material.icons.filled.LocalOffer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shary.app.core.domain.types.enums.Tag
+import com.shary.app.ui.components.SharyModalAction
+import com.shary.app.ui.components.SharyModalComplexity
+import com.shary.app.ui.components.SharyModalDestructiveAction
+import com.shary.app.ui.components.SharyModalScaffold
 import com.shary.app.ui.components.TagChip
-import com.shary.app.ui.theme.SharyRadius
-import com.shary.app.ui.theme.Violet200
-import com.shary.app.ui.theme.Violet500
-import com.shary.app.ui.theme.Violet600
-import com.shary.app.ui.theme.Violet900
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @Composable
 fun FieldDetailDialog(
@@ -42,169 +37,164 @@ fun FieldDetailDialog(
     alias: String,
     tag: Tag,
     typedValueLabel: String?,
+    dateAdded: Instant,
     onCopyValue: () -> Unit,
     onDuplicateField: () -> Unit,
-    onEditValue: () -> Unit,
     onEditTag: () -> Unit,
-    onEditAlias: () -> Unit,
+    onEdit: () -> Unit,
     onDeleteField: () -> Unit,
     showMcpShareable: Boolean = false,
     isMcpShareable: Boolean = false,
     onMcpShareableChange: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    SharyModalScaffold(
+        title = keyName,
+        subtitle = typedValueLabel,
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        },
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = keyName,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Violet900,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    TagChip(tag = tag)
-                    DetailTextAction(Icons.Default.LocalOffer, "Edit tag", onEditTag)
-                    if (!typedValueLabel.isNullOrBlank()) {
-                        Text(
-                            text = typedValueLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Violet500,
-                            modifier = Modifier
-                                .background(Violet200, SharyRadius.chip)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-                }
-            }
-        },
-        text = {
+        complexity = SharyModalComplexity.Compact,
+        primaryAction = SharyModalAction(
+            label = "Edit",
+            onClick = onEdit
+        ),
+        destructiveAction = SharyModalDestructiveAction(
+            label = "Delete",
+            confirmationTitle = "Delete $keyName?",
+            confirmationMessage =
+                "This field will be removed from this vault. You can undo immediately afterward.",
+            onConfirm = onDeleteField
+        )
+    ) {
+        Text(
+            text = "Value",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (valueItems.isNotEmpty()) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text("Value", style = MaterialTheme.typography.labelSmall, color = Violet500)
-                        if (valueItems.isNotEmpty()) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                valueItems.forEach { item ->
-                                    Text(
-                                        text = item,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Violet900,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Violet200.copy(alpha = 0.35f), SharyRadius.chip)
-                                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-                        } else {
-                            Text(
-                                text = value,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Violet900
-                            )
-                        }
-                    }
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        DetailTextAction(Icons.Default.ContentCopy, "Copy value", onCopyValue)
-                        DetailTextAction(Icons.Default.EditNote, "Edit value", onEditValue)
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text("Alias", style = MaterialTheme.typography.labelSmall, color = Violet500)
-                        Text(
-                            text = alias.ifBlank { "-" },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Violet900
-                        )
-                    }
-                    DetailTextAction(Icons.Default.EditAttributes, "Edit alias", onEditAlias)
-                }
-                if (showMcpShareable) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Allow MCP access", style = MaterialTheme.typography.labelMedium)
-                            Text(
-                                "Permit authorized agents to read or update this field.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Violet500
-                            )
-                        }
-                        Switch(
-                            checked = isMcpShareable,
-                            onCheckedChange = onMcpShareableChange
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        DetailTextAction(Icons.Default.FileCopy, "Duplicate", onDuplicateField)
-                        DetailTextAction(Icons.Default.Delete, "Delete", onDeleteField)
-                    }
+                valueItems.forEach { item ->
+                    Text(
+                        text = item,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
             }
+        } else {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge
+            )
         }
-    )
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Alias",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = alias.ifBlank { "-" },
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Tag",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TagChip(tag = tag)
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Added",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = formatFieldDate(dateAdded),
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        if (showMcpShareable) {
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Allow MCP access",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        text = "Permit authorized agents to read or update this field.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = isMcpShareable,
+                    onCheckedChange = onMcpShareableChange
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Field actions",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Spacer(Modifier.height(8.dp))
+
+        FilledTonalButton(
+            onClick = onCopyValue,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+        ) {
+            Text("Copy value", maxLines = 2)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        FilledTonalButton(
+            onClick = onDuplicateField,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+        ) {
+            Text("Duplicate", maxLines = 2)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        FilledTonalButton(
+            onClick = onEditTag,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+        ) {
+            Text("Change tag", maxLines = 2)
+        }
+    }
 }
 
-@Composable
-private fun DetailTextAction(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    TextButton(onClick = onClick) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = Violet600
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(label, color = Violet600, style = MaterialTheme.typography.labelMedium)
-    }
+private fun formatFieldDate(instant: Instant): String {
+    if (instant == Instant.EPOCH) return "Unknown"
+    return DateTimeFormatter
+        .ofLocalizedDate(FormatStyle.MEDIUM)
+        .withLocale(Locale.getDefault())
+        .withZone(ZoneId.systemDefault())
+        .format(instant)
 }
