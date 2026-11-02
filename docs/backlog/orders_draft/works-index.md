@@ -1,8 +1,30 @@
 # Orders Draft Index
 
+## 2026-11-02
+
+1. **Raw order backup - continue zero-cost work**
+   Direct backup of the instruction to continue only with zero-cost work and keep cost-bearing infrastructure and resources deferred. Covers the read-only GCP readiness checker, reviewer RFP, trademark search record, and the verified GCP state without mutation. See [[docs/backlog/orders_draft/2026-11-02/raw-order-continue-zero-cost.md]].
+
+2. **Raw order backup - start from the top**
+   Direct backup of the instruction to start with the first zero-cost candidate: encrypted local vault export/import. See [[docs/backlog/orders_draft/2026-11-02/raw-order-start-from-top.md]].
+
+## 2026-10-31
+
+1. **Raw order backup - lines of refinement**
+   Direct backup of the instruction to split the suggested refinements into independent Lines, define validation suites that avoid mixed-up components, and generate per-Line phase plans, folders, and a cross-line register. Includes the clarification answers (Section 8 grouped into eight Lines, repo backlog, operable-at-launch bar, evidence plus tests) and the follow-up decisions (S.L., Spain-first, MCP in Plus, lean budget, single-owner project). See [[docs/backlog/orders_draft/2026-10-31/raw-order-lines-of-refinement.md]].
+
+2. **Raw order backup - proceed with Phase 1**
+   Direct backup of the instruction to execute the Phase 1 next step, including the applied decisions (S.L., Spain-first, MCP in Plus with a hard cap, deferred overage, identity Option B, Android backup recommendation, realistic SLA, no analytics SDK) and the resulting evidence-backed workbooks. See [[docs/backlog/orders_draft/2026-10-31/raw-order-proceed-phase-1.md]].
+
+3. **Raw order backup - defer infrastructure, continue our-side automation**
+   Direct backup of the instruction to keep GCP and similar infrastructure deferred, document the exact steps and costs, and continue with zero-cost repo-side automation. Includes the Android backup fail-closed change, the `BackupPolicyTest`, and the deferred-actions runbook. See [[docs/backlog/orders_draft/2026-10-31/raw-order-defer-infra-continue-our-side.md]].
+
 ## 2026-09-04
 
-1. **Raw order backup - unify Contacts/Requests with the Fields aesthetic**
+1. **Raw order backup - detail dialogs metadata + send-flow fix**
+   Refine the hand-written Added+Tag block into core SharyModalScaffold primitives, differentiate labels from values across Field/Contact/Request detail dialogs, fix the Contact-detail → Fields review CTA workflow, rename User → Contact wording, and make the review button labeled. See [[docs/backlog/orders_draft/2026-09-04/raw-order-detail-dialogs-and-send-flow.md]].
+
+2. **Raw order backup - unify Contacts/Requests with the Fields aesthetic**
    Direct backup of the instruction to bring the Fields screen's aesthetics and structure to Contacts and Requests, add a dedicated seeded Contact grouping-tag feature with Contact sort (Name/Tag/Added), and switch to full-width labeled bottom buttons. See [[docs/backlog/orders_draft/2026-09-04/raw-order-unify-contacts-requests-fields-aesthetic.md]].
 
 ## 2026-08-30

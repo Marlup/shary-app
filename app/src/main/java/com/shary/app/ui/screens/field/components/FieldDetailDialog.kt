@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +20,8 @@ import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.ui.components.SharyModalAction
 import com.shary.app.ui.components.SharyModalComplexity
 import com.shary.app.ui.components.SharyModalDestructiveAction
+import com.shary.app.ui.components.SharyModalMetaItem
+import com.shary.app.ui.components.SharyModalMetaRow
 import com.shary.app.ui.components.SharyModalScaffold
 import com.shary.app.ui.components.TagChip
 import java.time.Instant
@@ -65,62 +66,55 @@ fun FieldDetailDialog(
             onConfirm = onDeleteField
         )
     ) {
-        Text(
-            text = "Value",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (valueItems.isNotEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                valueItems.forEach { item ->
-                    Text(
-                        text = item,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+        SharyModalMetaItem(label = "Value") {
+            if (valueItems.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    valueItems.forEach { item ->
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
                 }
+            } else {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
-        } else {
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SharyModalMetaItem(label = "Alias") {
             Text(
-                text = value,
+                text = alias.ifBlank { "-" },
                 style = MaterialTheme.typography.bodyLarge
             )
         }
 
         Spacer(Modifier.height(16.dp))
 
-        Text(
-            text = "Alias",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = alias.ifBlank { "-" },
-            style = MaterialTheme.typography.bodyLarge
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Text(
-            text = "Tag",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        TagChip(tag = tag)
-
-        Spacer(Modifier.height(16.dp))
-
-        Text(
-            text = "Added",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = formatFieldDate(dateAdded),
-            style = MaterialTheme.typography.bodyLarge
-        )
+        SharyModalMetaRow {
+            SharyModalMetaItem(
+                label = "Added",
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = formatFieldDate(dateAdded),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            SharyModalMetaItem(
+                label = "Tag",
+                modifier = Modifier.weight(1f)
+            ) {
+                TagChip(tag = tag)
+            }
+        }
 
         if (showMcpShareable) {
             Spacer(Modifier.height(16.dp))

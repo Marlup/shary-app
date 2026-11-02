@@ -119,7 +119,8 @@ Settings is where the app exposes:
 - current public MCP endpoint,
 - active MCP grant list,
 - revoke actions,
-- recent MCP audit activity.
+- recent MCP audit activity,
+- encrypted vault export/import.
 
 Relevant code:
 
@@ -263,6 +264,18 @@ Supported high-level sequence:
 
 The old local loopback MCP flow has been archived as legacy material and is no
 longer the supported product entry point.
+
+### E. Encrypted vault backup
+
+1. The owner chooses Export vault in Settings and enters a passphrase twice.
+2. Shary collects fields, contacts, requests, tags, and safe preferences.
+3. The payload is serialized and encrypted with PBKDF2-HMAC-SHA256 at 600k
+   iterations plus AES-256-GCM.
+4. The owner saves one `.sharyvault` file through Android's document picker.
+5. Import decrypts and validates the format, shows counts, and merges
+   additively after confirmation.
+6. Existing keys, emails, request IDs, and tag names are kept; credentials, MCP
+   tokens/grants, connector state, and workflow drafts are never exported.
 
 ## 5. Capabilities by surface
 

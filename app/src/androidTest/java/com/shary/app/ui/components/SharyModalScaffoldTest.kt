@@ -1,6 +1,7 @@
 package com.shary.app.ui.components
 
 import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -85,6 +86,47 @@ class SharyModalScaffoldTest {
         composeTestRule.onNodeWithText("Save").assertIsNotEnabled()
         composeTestRule.onNodeWithContentDescription("Close").assertIsNotEnabled()
         assertEquals(0, dismissCount)
+    }
+
+    @Test
+    fun metaItemRendersLabelAndContainedValue() {
+        composeTestRule.setContent {
+            SharyTheme {
+                SharyModalMetaItem(label = "Alias") {
+                    Text("main")
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithText("Alias").assertExists()
+        composeTestRule.onNodeWithText("main").assertExists()
+    }
+
+    @Test
+    fun metaRowPlacesItemsSideBySide() {
+        composeTestRule.setContent {
+            SharyTheme {
+                SharyModalMetaRow {
+                    SharyModalMetaItem(
+                        label = "Added",
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Jul 19, 2026")
+                    }
+                    SharyModalMetaItem(
+                        label = "Tag",
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Friends")
+                    }
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithText("Added").assertExists()
+        composeTestRule.onNodeWithText("Jul 19, 2026").assertExists()
+        composeTestRule.onNodeWithText("Tag").assertExists()
+        composeTestRule.onNodeWithText("Friends").assertExists()
     }
 
     private fun setScaffold(

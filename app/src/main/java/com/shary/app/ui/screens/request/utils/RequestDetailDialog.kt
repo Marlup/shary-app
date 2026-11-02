@@ -22,6 +22,8 @@ import com.shary.app.core.domain.types.enums.RequestListMode
 import com.shary.app.core.domain.types.enums.StatusDataSentDb
 import com.shary.app.ui.components.SharyModalAction
 import com.shary.app.ui.components.SharyModalComplexity
+import com.shary.app.ui.components.SharyModalMetaItem
+import com.shary.app.ui.components.SharyModalMetaRow
 import com.shary.app.ui.components.SharyModalScaffold
 import java.time.Duration
 import java.time.Instant
@@ -64,8 +66,26 @@ fun RequestDetailDialog(
         primaryAction = primaryAction
     ) {
         RequestDetailSection(title = "Timing") {
-            RequestDetailValue(label = "Relative time", value = relativeTimestamp)
-            RequestDetailValue(label = "Absolute time", value = absoluteTimestamp)
+            SharyModalMetaRow {
+                SharyModalMetaItem(
+                    label = "Relative time",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = relativeTimestamp,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                SharyModalMetaItem(
+                    label = "Absolute time",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = absoluteTimestamp,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
         }
 
         RequestSectionDivider()
@@ -78,26 +98,25 @@ fun RequestDetailDialog(
 
             Spacer(Modifier.height(12.dp))
 
-            Text(
-                text = "Recipients (${request.recipients.size})",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (request.recipients.isEmpty()) {
-                Text(
-                    text = "Not recorded",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            } else {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    request.recipients.forEach { recipient ->
-                        Text(
-                            text = recipient,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+            SharyModalMetaItem(
+                label = "Recipients (${request.recipients.size})"
+            ) {
+                if (request.recipients.isEmpty()) {
+                    Text(
+                        text = "Not recorded",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        request.recipients.forEach { recipient ->
+                            Text(
+                                text = recipient,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
                     }
                 }
             }
@@ -183,37 +202,34 @@ fun RequestDetailDialog(
 
                 Spacer(Modifier.height(12.dp))
 
-                Text(
-                    text = "Per-recipient result",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (request.deliveryOutcomes.isEmpty()) {
-                    Text(
-                        text = "No per-recipient delivery result recorded",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                } else {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        request.deliveryOutcomes.forEach { outcome ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = MaterialTheme.shapes.medium,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = outcome.recipient,
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
-                                    Text(
-                                        text = outcome.status.requestDeliveryLabel(),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                SharyModalMetaItem(label = "Per-recipient result") {
+                    if (request.deliveryOutcomes.isEmpty()) {
+                        Text(
+                            text = "No per-recipient delivery result recorded",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            request.deliveryOutcomes.forEach { outcome ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = outcome.recipient,
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Text(
+                                            text = outcome.status.requestDeliveryLabel(),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -246,12 +262,7 @@ private fun RequestDetailValue(
     label: String,
     value: String
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    SharyModalMetaItem(label = label) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge

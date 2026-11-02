@@ -1,19 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Shary is zero-knowledge. Cloud backup and device-to-device transfer must not
+   copy vault data, contacts, settings, tags, credentials, or connector state.
+   These exclusions are defense-in-depth if allowBackup is ever re-enabled.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="sharedpref" path="remote_mcp_identity.xml"/>
-        <exclude domain="sharedpref" path="remote_mcp_secure.xml"/>
-        <exclude domain="sharedpref" path="remote_mcp_state.xml"/>
-        <exclude domain="file" path="datastore/connector_prefs.preferences_pb"/>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="sharedpref" path="remote_mcp_identity.xml"/>
-        <exclude domain="sharedpref" path="remote_mcp_secure.xml"/>
-        <exclude domain="sharedpref" path="remote_mcp_state.xml"/>
-        <exclude domain="file" path="datastore/connector_prefs.preferences_pb"/>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </device-transfer>
 </data-extraction-rules>

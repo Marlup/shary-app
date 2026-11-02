@@ -202,7 +202,7 @@ fun UsersScreen(
             when (event) {
                 Lifecycle.Event.ON_START -> userViewModel.refreshUsers()
                 Lifecycle.Event.ON_STOP -> {
-                    userViewModel.cacheUsers(selectedUsers)
+                    userViewModel.persistSelectedUsers()
                     searchQuery = ""
                     activeFilter = "All"
                     quickActionUser = null
@@ -382,11 +382,7 @@ fun UsersScreen(
                                 }
                             }
                         },
-                        visualStyle = if (currentSendFlowCta.destination == SendFlowDestination.FIELDS) {
-                            DockVisualStyle.FullWidth
-                        } else {
-                            DockVisualStyle.IconOnly
-                        },
+                        visualStyle = DockVisualStyle.FullWidth,
                         onPrimaryClick = {
                             userViewModel.cacheUsers(selectedUsers)
                             when (currentSendFlowCta.destination) {

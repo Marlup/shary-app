@@ -564,7 +564,7 @@ fun FieldsScreen(
                         primaryAction = DockAction(
                             label = currentSendFlowCta.label,
                             icon = when (currentSendFlowCta.destination) {
-                                SendFlowDestination.USERS -> Icons.Default.Person
+                                SendFlowDestination.CONTACTS -> Icons.Default.Person
                                 else -> Icons.AutoMirrored.Filled.ArrowForward
                             },
                             contentDescription = currentSendFlowCta.contentDescription
@@ -594,15 +594,11 @@ fun FieldsScreen(
                                 }
                             }
                         },
-                        visualStyle = if (currentSendFlowCta.destination == SendFlowDestination.USERS) {
-                            DockVisualStyle.FullWidth
-                        } else {
-                            DockVisualStyle.IconOnly
-                        },
+                        visualStyle = DockVisualStyle.FullWidth,
                         onPrimaryClick = {
                             fieldViewModel.setSelectedFields(selectedFields)
                             when (currentSendFlowCta.destination) {
-                                SendFlowDestination.USERS -> navController.navigate(Screen.Users.route)
+                                SendFlowDestination.CONTACTS -> navController.navigate(Screen.Users.route)
                                 SendFlowDestination.FIELD_REVIEW -> navController.navigate(Screen.SummaryField.route)
                                 else -> Unit
                             }

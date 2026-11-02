@@ -1,8 +1,30 @@
 # Works Index
 
+## 2026-11-02
+
+1. **Zero-cost continuation: readiness checker, reviewer RFP, trademark record**
+   Continued the repo-side zero-cost slice while keeping all GCP and external cost-bearing actions deferred. Added a read-only `tools/ops/verify-gcp-readiness.ps1` checker with a local README and script-catalog entry; it verifies the active gcloud account, Firestore location/edition, PITR, backup schedule and backups, scheduler cleanup state/target, and the seven MCP TTL policies without mutating anything. Added the independent security-review RFP for L6 and the trademark search record template for L7. The read-only check confirms location `europe-southwest1`, edition `STANDARD`, and all seven TTL policies enabled; PITR is disabled, no backup schedule exists, and the cleanup scheduler is paused. No cloud mutation, external contact, or purchase was made. See [[docs/backlog/works/2026-11-02/phase-1-continuation.md]].
+
+2. **Encrypted vault export/import**
+   Added a Settings flow to export and import a portable `.sharyvault` file for fields, contacts, requests, tags, and safe preferences. The payload is encrypted with PBKDF2-HMAC-SHA256 at 600k iterations and AES-256-GCM in a versioned authenticated container; import is additive and skips duplicate keys, emails, request IDs, and tag names. Credentials, MCP tokens/grants/devices, connector state, workflow drafts, remembered email, and cloud ciphertext are excluded. Added cipher, payload, and manager tests; the full JVM suite and lint pass. Manual SAF device verification is pending. See [[docs/backlog/works/2026-11-02/vault-export-import.md]].
+
+## 2026-10-31
+
+1. **Lines of refinement: eight independent viability workstreams**
+   Split the 13 Section 8 suggestions from the business/monetization draft into eight independently developable Lines: entity/payments, privacy/data governance, consumer contracts/store compliance, monetization/entitlements, reliability/continuity, security/identity, trust/brand/risk transfer, and support/growth/analytics. Each Line has bounded ownership, explicit exclusions, 8-13 evidence-backed validation criteria, a Line Integrity Suite sign-off, and a 3-4 phase plan to an operable launch gate. Added a cross-line register for shared components and the only forced sequencing, and applied the Phase 1 decisions: S.L. in Madrid, Spain-first, MCP included in Plus with a hard cap (overage deferred to v1.1), lean external budget, Android-only MVP, and single-owner adjustments including a named trustee and realistic SLAs. Plan source: [[docs/backlog/works/2026-08-30/business-and-monetization-draft.md#8. Other aspects I suggest you are missing]]. See [[docs/backlog/works/2026-10-31/lines-of-refinement.md]] and [[docs/backlog/works/2026-10-31/lines/README.md]].
+
+2. **Phase 1 execution: code-verified findings and eight workbooks**
+   Executed Phase 1 across all eight Lines: produced the entity/tax/merchant checklist, data map and ROPA delta, ToS/store gap review, tier/pricing/economics freeze, backup/TTL/monitoring runbook, identity ADR, trademark/insurance/disclosure/accessibility workbook, and support/SLA/analytics/growth workbook. Code review surfaced material findings: Android Auto Backup is enabled with incomplete exclusions, so vault ciphertext and plaintext contacts/settings can leave the device; there is no in-app account deletion or full vault export; cloud identity deletion still requires the lost signing key; PBKDF2 is 200k with no KDF version; ECDH uses the shared secret without HKDF; rate-limit/dedup checks are non-atomic; backups, PITR, TTL policies, and alerts are console-only; the ToS still references the closed EU ODR platform. Added SC13 and G11 for the Android backup decision. See [[docs/backlog/works/2026-10-31/phase-1-execution.md]] and the Phase 1 workbooks under [[docs/backlog/works/2026-10-31/lines/README.md]].
+
+3. **Deferred infrastructure runbook + Android backup fail-closed**
+   Documented every deferred GCP/external action with exact `gcloud` commands, costs, third parties, prerequisites, triggers, and evidence requirements in `deferred-actions.md`. Read-only checks confirmed Firestore is in `europe-southwest1`, no backups are listed, and the `cleanup-expired-payloads` scheduler is paused; no cloud mutation was run. Applied the zero-cost repo-side hardening: `allowBackup="false"`, all-domain exclusions in `backup_rules.xml` and `data_extraction_rules.xml`, and a new `BackupPolicyTest` that passes; the merged manifest reports `allowBackup="false"`. See [[docs/backlog/works/2026-10-31/deferred-actions.md]] and [[docs/backlog/orders_draft/2026-10-31/raw-order-defer-infra-continue-our-side.md]].
+
 ## 2026-09-04
 
-1. **Unify Contacts/Requests with the Fields aesthetic + Contact grouping tags**
+1. **Detail-dialog metadata refinement + send-flow workflow fix**
+   Added `SharyModalMetaItem`/`SharyModalMetaRow` core components with container + label styling, applied across Field/Contact/Request detail dialogs; fixed the Contact-detail → Fields send-flow cache clobber (`persistSelectedUsers` from the synchronous selection source), renamed the flow wording User → Contact, and turned the icon-only review button into a labeled full-width "Review & send" CTA. See [[docs/backlog/works/2026-09-04/detail-metadata-send-flow-fix.md]].
+
+2. **Unify Contacts/Requests with the Fields aesthetic + Contact grouping tags**
    Brought the Fields revised-prototype treatment to Contacts and Requests (full-width search, labeled full-width idle bottom buttons), and added a dedicated seeded Contact grouping-tag feature (Friends/Colleagues/Family/Vendor/Unknown) with Name/Tag/Added sort, tag chip on the contact card, editor tag selector, and detail quick-edit. Loading skeleton intentionally skipped for Contacts/Requests because they load synchronously from local DataStore. See [[docs/backlog/works/2026-09-04/unify-contacts-requests-fields-aesthetic.md]].
 
 ## 2026-08-30

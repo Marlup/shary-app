@@ -3,6 +3,12 @@
 > **Status:** Internal working draft (GDPR Art. 30). Must be finalized and kept
 > current once the legal entity and processors are confirmed. Placeholders `[]`
 > must be replaced. This register covers the controller's processing.
+>
+> **Phase 1 update (2026-10-31):** This draft is kept as historical input. The
+> code-verified data map, ROPA delta, retention matrix, subprocessors, and the
+> Android backup finding are in
+> [[docs/backlog/works/2026-10-31/lines/L2-privacy-and-data-governance/phase-1-data-map-and-ropa.md]].
+> Use the Phase 1 delta for current planning.
 
 **Controller:** `[Legal entity name, NIF, address]`
 **Prepared:** 2026-08-30

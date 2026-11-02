@@ -90,6 +90,26 @@ class ContactListPolicyTest {
         )
     }
 
+    @Test
+    fun resolveSelectedContactsMatchesByNormalizedEmail() {
+        val users = listOf(
+            contact("Alice", "alice@example.com"),
+            contact("Bob", "bob@example.com"),
+        )
+
+        assertEquals(
+            listOf("alice@example.com", "bob@example.com"),
+            resolveSelectedContacts(
+                users,
+                setOf("alice@example.com", "bob@example.com")
+            ).map { it.email }
+        )
+        assertEquals(
+            emptyList<UserDomain>(),
+            resolveSelectedContacts(users, emptySet())
+        )
+    }
+
     private fun contact(username: String, email: String) = UserDomain(
         username = username,
         email = email,

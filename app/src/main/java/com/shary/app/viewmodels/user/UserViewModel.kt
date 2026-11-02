@@ -97,10 +97,27 @@ class UserViewModel @Inject constructor(
     }
 
     fun cacheUsers(users: List<UserDomain>) {
-        val normalizedEmails = users.map { it.email.trim().lowercase() }.toSet()
-        _selectedEmails.value = normalizedEmails
-        val selectedByEmail = _users.value.filter { normalizedEmails.contains(it.email.trim().lowercase()) }
-        appCache.cacheUsers(selectedByEmail)
+        val normalized = users
+            .distinctBy { it.email.trim().lowercase() }
+            .map { it.copy() }
+        _selectedEmails.value = normalized
+            .map { it.email.trim().lowercase() }
+            .toSet()
+        appCache.cacheUsers(normalized)
+    }
+
+    /**
+     * Persists the current selection into the flow cache from the synchronous
+     * selection source. Unlike reading the combined [selectedUsers] flow (which
+     * lags behind [cacheUsers] writes), this never clobbers a fresh handoff.
+     */
+    fun persistSelectedUsers() {
+        val emails = _selectedEmails.value
+        if (emails.isEmpty()) {
+            appCache.clearCachedUsers()
+            return
+        }
+        appCache.cacheUsers(resolveSelectedContacts(_users.value, emails))
     }
 
     fun getCachedUsers(): List<UserDomain> = appCache.getUsers()

@@ -7,14 +7,14 @@ import org.junit.Test
 class SendFlowCtaTest {
 
     @Test
-    fun fieldsWithoutUsersGuideToUserSelection() {
+    fun fieldsWithoutUsersGuideToContactSelection() {
         val cta = fieldSendFlowCta(
             hasSelectedFields = true,
             hasSelectedUsers = false
         )
 
-        assertEquals("Select Users", cta?.label)
-        assertEquals(SendFlowDestination.USERS, cta?.destination)
+        assertEquals("Select Contacts", cta?.label)
+        assertEquals(SendFlowDestination.CONTACTS, cta?.destination)
     }
 
     @Test
@@ -24,7 +24,7 @@ class SendFlowCtaTest {
             hasSelectedUsers = true
         )
 
-        assertEquals("Review", cta?.label)
+        assertEquals("Review & send", cta?.label)
         assertEquals(SendFlowDestination.FIELD_REVIEW, cta?.destination)
     }
 
@@ -48,7 +48,7 @@ class SendFlowCtaTest {
             hasSelectedRequestFields = false
         )
 
-        assertEquals("Review", cta?.label)
+        assertEquals("Review & send", cta?.label)
         assertEquals(SendFlowDestination.FIELD_REVIEW, cta?.destination)
     }
 
@@ -60,6 +60,7 @@ class SendFlowCtaTest {
             hasSelectedRequestFields = true
         )
 
+        assertEquals("Review & send", cta?.label)
         assertEquals(SendFlowDestination.REQUEST_REVIEW, cta?.destination)
     }
 

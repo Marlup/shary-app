@@ -4,6 +4,14 @@
 > publication. Per LSSI-CE 34/2002 and TRLGDCU, a **Spanish-language version is
 > mandatory** for Spanish consumers; this English text is the working source.
 > Replace every `[PLACEHOLDER]` before use.
+>
+> **Phase 1 review (2026-10-31):** Do not publish this draft as-is. The
+> key-storage and "never leaves the device" claims need correction, Android
+> backup is enabled, and the MCP, billing, support, and rights sections are
+> incomplete. See
+> [[docs/backlog/works/2026-10-31/lines/L2-privacy-and-data-governance/phase-1-data-map-and-ropa.md]]
+> and
+> [[docs/backlog/works/2026-10-31/lines/L3-consumer-contracts-and-store-compliance/phase-1-tos-and-store-gap-review.md]].
 
 **Controller:** `[Legal entity name, NIF, registered address, contact email]`
 **Effective date:** `[date]`

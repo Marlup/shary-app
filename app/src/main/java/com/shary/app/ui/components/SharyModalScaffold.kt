@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,8 +51,10 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shary.app.ui.theme.DestructiveBg
@@ -128,6 +131,56 @@ object SharyModalPolicy {
         isDirty -> SharyModalDismissal.ConfirmDiscard
         else -> SharyModalDismissal.Dismiss
     }
+}
+
+/**
+ * Single label/value metadata block for detail modals. The label is visually
+ * distinct (small, semi-bold, muted) and the value sits inside a light rounded
+ * container so each pair stays grouped and readable.
+ */
+@Composable
+fun SharyModalMetaItem(
+    label: String,
+    modifier: Modifier = Modifier,
+    value: @Composable () -> Unit
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.4.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                value()
+            }
+        }
+    }
+}
+
+/**
+ * Two metadata items side by side to leverage horizontal space. Children
+ * should use Modifier.weight(1f) to share the row equally.
+ */
+@Composable
+fun SharyModalMetaRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top,
+        content = content
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

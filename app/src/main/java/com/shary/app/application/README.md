@@ -7,6 +7,8 @@ and lower-level domain or infrastructure services.
 
 ## Submodules
 
+- `backup/`
+  - Encrypted vault export/import, payload validation, and additive merge.
 - `cloud/`
   - Cloud inbox/import planning, terminal delivery reduction, and persisted
     outgoing-Request/received-response receipt mapping.

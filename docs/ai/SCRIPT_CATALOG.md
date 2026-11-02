@@ -85,6 +85,20 @@ Scripts in that folder:
 - `update-manifest.ps1`
   - Recomputes policy-file hashes in the session-init manifest.
 
+## `tools/ops`
+
+Use the local README for detailed instructions:
+
+- [tools/ops/README.md](../../tools/ops/README.md)
+
+Scripts in that folder:
+
+- `verify-gcp-readiness.ps1`
+  - Read-only check of the active gcloud account, Firestore location, PITR,
+    backup schedule/list, scheduler cleanup state/target, and MCP TTL policies.
+  - Exit `0` when required checks pass, `1` when any required check fails.
+  - Does not mutate cloud resources and contains no credentials.
+
 ## Update rule
 
 Whenever a script is added, removed, renamed, or its contract changes, update:

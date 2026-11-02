@@ -22,6 +22,8 @@ import com.shary.app.core.domain.types.enums.Tag
 import com.shary.app.ui.components.SharyModalAction
 import com.shary.app.ui.components.SharyModalComplexity
 import com.shary.app.ui.components.SharyModalDestructiveAction
+import com.shary.app.ui.components.SharyModalMetaItem
+import com.shary.app.ui.components.SharyModalMetaRow
 import com.shary.app.ui.components.SharyModalScaffold
 import java.time.Instant
 import java.time.ZoneId
@@ -60,39 +62,35 @@ fun UserDetailDialog(
             onConfirm = onDelete
         )
     ) {
-        Text(
-            text = "Email",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = user.email,
-            style = MaterialTheme.typography.bodyLarge
-        )
+        SharyModalMetaItem(label = "Email") {
+            Text(
+                text = user.email,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
 
-        Text(
-            text = "Added",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = addedLabel,
-            style = MaterialTheme.typography.bodyLarge
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Text(
-            text = "Group",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = if (user.tag == Tag.Unknown) "Unknown" else user.tag.toTagString(),
-            style = MaterialTheme.typography.bodyLarge
-        )
+        SharyModalMetaRow {
+            SharyModalMetaItem(
+                label = "Added",
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = addedLabel,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            SharyModalMetaItem(
+                label = "Group",
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = if (user.tag == Tag.Unknown) "Unknown" else user.tag.toTagString(),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+        }
 
         flowAction?.let { action ->
             Spacer(Modifier.height(20.dp))

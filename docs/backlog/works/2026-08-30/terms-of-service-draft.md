@@ -3,6 +3,11 @@
 > **Status:** Draft. Must be reviewed/approved by a qualified lawyer before
 > publication. A Spanish-language version is mandatory for Spanish consumers
 > (LSSI-CE 34/2002). Replace every `[PLACEHOLDER]` before use.
+>
+> **Phase 1 review (2026-10-31):** Do not publish this draft as-is. The ODR
+> clause is outdated (the EU ODR platform closed on 20 July 2025), and the
+> withdrawal, deletion, liability, and zero-knowledge clauses need revision. See
+> [[docs/backlog/works/2026-10-31/lines/L3-consumer-contracts-and-store-compliance/phase-1-tos-and-store-gap-review.md]].
 
 **Provider:** `[Legal entity name, NIF, address, email]`
 **Service:** the Shary Android application and its optional cloud relay and

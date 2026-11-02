@@ -137,6 +137,20 @@ flowchart TD
     UPDATE -->|NameAlreadyExists, NotFound, or Invalid| FAILED
 ```
 
+## Vault Backup Export and Import
+
+```mermaid
+flowchart TD
+    SETTINGS[screen.settings] -->|TRIGGERS| EXPORT[settings.vault.export]
+    EXPORT -->|GUARDED_BY passphrase at least 12 chars and confirmation| CREATE[Android create-document picker]
+    CREATE -->|WRITES encrypted file| FILE[.sharyvault]
+    SETTINGS -->|TRIGGERS| IMPORT[settings.vault.import]
+    IMPORT -->|GUARDED_BY non-empty passphrase| OPEN[Android open-document picker]
+    OPEN -->|DECRYPTS| PREVIEW[import preview counts]
+    PREVIEW -->|CONFIRMS| MERGE[additive merge]
+    MERGE -->|WRITES| REPOS[field, contact, request, tag, settings repositories]
+```
+
 ## MCP Field Policy
 
 ```mermaid
@@ -198,6 +212,11 @@ flowchart TD
 | `request.workflow.draft` | `PERSISTS` | `owner.request.workflow` | Minimal identities only; owner match and vault codec required for restore | `RequestRepositoryImpl`, `RequestViewModel` |
 | `tag.editor.create` | `WRITES` | `tag.repository` | Shared validation passes and case-insensitive name is unique | `TagViewModel`, `TagRepositoryImpl` |
 | `tag.editor.update` | `WRITES` | `tag.repository` | Original name exists and target name does not collide | `TagViewModel`, `TagRepositoryImpl` |
+| `settings.vault.export` | `GUARDED_BY` | `vault.passphrase` | At least 12 characters and confirmation matches | `SettingsViewModel` |
+| `settings.vault.export` | `WRITES` | `vault.backup.file` | User-selected SAF document; encrypted container | `VaultBackupManager`, `VaultBackupFileService` |
+| `settings.vault.import` | `GUARDED_BY` | `vault.passphrase` | Non-empty passphrase and successful decryption | `SettingsViewModel`, `VaultBackupCipher` |
+| `settings.vault.preview` | `CONFIRMS` | `vault.merge` | User reviews counts and confirms | `SettingsScreen` |
+| `settings.vault.merge` | `WRITES` | `local.repositories` | Additive; duplicate keys/emails/request IDs/tags skipped; credentials and MCP state excluded | `VaultBackupManager` |
 | `summary.fields.send` | `GUARDED_BY` | `device.authentication` | Selection contains sensitive field | `SummaryFieldScreen` |
 | `summary.recipients` | `READS` | `selected.contacts` | Every selected recipient is disclosed | `SummaryFieldScreen`, `SummaryRequestScreen` |
 | `summary.cloud.send` | `GUARDED_BY` | `cloud.delivery.claim` | Cloud ready and no active or terminal ordinary send | `CloudDeliveryController` |

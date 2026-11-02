@@ -14,7 +14,7 @@ internal data class SendFlowCta(
 )
 
 internal enum class SendFlowDestination {
-    USERS,
+    CONTACTS,
     FIELDS,
     FIELD_REVIEW,
     REQUEST_REVIEW
@@ -26,13 +26,13 @@ internal fun fieldSendFlowCta(
 ): SendFlowCta? = when {
     !hasSelectedFields -> null
     !hasSelectedUsers -> SendFlowCta(
-        label = "Select Users",
-        contentDescription = "Select users to receive the selected fields",
-        destination = SendFlowDestination.USERS
+        label = "Select Contacts",
+        contentDescription = "Select contacts to receive the selected fields",
+        destination = SendFlowDestination.CONTACTS
     )
     else -> SendFlowCta(
-        label = "Review",
-        contentDescription = "Review selected fields and users",
+        label = "Review & send",
+        contentDescription = "Review selected fields and contacts",
         destination = SendFlowDestination.FIELD_REVIEW
     )
 }
@@ -44,18 +44,18 @@ internal fun userSendFlowCta(
 ): SendFlowCta? = when {
     !hasSelectedUsers -> null
     hasSelectedRequestFields -> SendFlowCta(
-        label = "Review",
-        contentDescription = "Review selected request and users",
+        label = "Review & send",
+        contentDescription = "Review selected request and contacts",
         destination = SendFlowDestination.REQUEST_REVIEW
     )
     hasSelectedFields -> SendFlowCta(
-        label = "Review",
-        contentDescription = "Review selected fields and users",
+        label = "Review & send",
+        contentDescription = "Review selected fields and contacts",
         destination = SendFlowDestination.FIELD_REVIEW
     )
     else -> SendFlowCta(
         label = "Select Fields",
-        contentDescription = "Select fields to send to the selected users",
+        contentDescription = "Select fields to send to the selected contacts",
         destination = SendFlowDestination.FIELDS
     )
 }

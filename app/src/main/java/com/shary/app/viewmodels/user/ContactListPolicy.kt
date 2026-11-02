@@ -12,6 +12,17 @@ fun filterUsersByQuery(users: List<UserDomain>, query: String): List<UserDomain>
     }
 }
 
+/**
+ * Resolves a set of normalized emails back to the matching contacts without
+ * mutating the selection. Used by [persistSelectedUsers]-style handoffs so a
+ * lagging derived list can never clobber the cached flow selection.
+ */
+fun resolveSelectedContacts(
+    users: List<UserDomain>,
+    selectedEmails: Set<String>
+): List<UserDomain> =
+    users.filter { user -> selectedEmails.contains(user.email.trim().lowercase()) }
+
 fun filterUsersByTag(users: List<UserDomain>, activeFilter: String): List<UserDomain> {
     if (activeFilter == "All") return users
     return users.filter { user ->
